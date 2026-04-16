@@ -1924,9 +1924,6 @@ namespace FamiStudio
 
             var patternsMadeUnique = 0;
 
-            // Could map most suitable patterns and use them if they appear elsewhere in the song.
-            // For example, a pattern appears elswhere in the song, do we merge it with them,
-            // or only merge anything within the current selection like the code below does?
             for (int i = selectionMin.ChannelIndex; i <= selectionMax.ChannelIndex; i++)
             {
                 var channel = Song.Channels[i];
@@ -1966,6 +1963,9 @@ namespace FamiStudio
             var patternCrcMap  = new Dictionary<uint, Pattern>();
             var patternsMerged = 0;
 
+            // Could map most suitable patterns and use them if they appear elsewhere in the song.
+            // For example, a pattern appears elswhere in the song, do we merge it with them,
+            // or only merge anything within the current selection like the code below does?
             for (int c = selectionMin.ChannelIndex; c <= selectionMax.ChannelIndex; c++)
             {
                 var channel = Song.Channels[c];

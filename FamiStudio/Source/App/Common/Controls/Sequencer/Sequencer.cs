@@ -114,7 +114,7 @@ namespace FamiStudio
         TextureAtlasRef bmpDuplicateMove;
         TextureAtlasRef bmpShyOn;
         TextureAtlasRef bmpShyOff;
-        //TextureAtlasRef bmpMenuInstance;
+        TextureAtlasRef bmpMenuInstance;
 
         enum CaptureOperation
         {
@@ -206,6 +206,10 @@ namespace FamiStudio
         LocalizedString PatternPropertiesLabel;
         LocalizedString DeletePatternLabel;
         LocalizedString MakePatternsUniqueLabel;
+        LocalizedString MergeIdenticalPatternsLabel;
+        LocalizedString MakePatternsUniqueMessage;
+        LocalizedString MergeIdenticalPatternsMessage;
+        LocalizedString MergeIdenticalPatternsErrorMessage;
 
         // Dialogs
         LocalizedString PasteTitle;
@@ -540,7 +544,7 @@ namespace FamiStudio
 
             bmpShyOn = g.GetTextureAtlasRef("ShyOn");
             bmpShyOff = g.GetTextureAtlasRef("ShyOff");
-            //bmpMenuInstance = g.GetTextureAtlasRef("MenuInstance");
+            bmpMenuInstance = g.GetTextureAtlasRef("MenuInstance");
 
             seekGeometry = new float[]
             {
@@ -794,7 +798,8 @@ namespace FamiStudio
             }
 
             // Selection
-            if (IsSelectionValid())
+            var valid = IsSelectionValid();
+            if (valid)
             {
                 if (GetMinMaxSelectedRow(out var minSelRow, out var maxSelRow))
                 {
@@ -820,7 +825,8 @@ namespace FamiStudio
 
             // TODO : This is really bad, since all the logic is in the rendering code. Make
             // this more like any other capture op eventually.
-            if (captureOperation == CaptureOperation.DragSelection)
+            var dragCapture = captureOperation == CaptureOperation.DragSelection;
+            if (dragCapture)
             {
                 var pt = new Point(mouseLastX, mouseLastY);
                 var noteIdx = GetNoteForPixel(pt.X - channelNameSizeX);
@@ -929,9 +935,7 @@ namespace FamiStudio
                             if (isSelected)
                                 c.DrawRectangle(0, 0, sx, channelSizeY, Theme.LightGreyColor1, 3, true, true);
 
-                            /* Uncomment in major version, along with declaration and initialization of bmpMenuInstance. 
-                            // TODO: Cache bools of valid selection / drag capture operation once at beginning instead of running these every iteration of the loop.
-                            if (captureOperation != CaptureOperation.DragSelection && IsSelectionValid() && patternRefCounts.TryGetValue(pattern, out var count) && count > 1)
+                            if (!dragCapture && valid && patternRefCounts.TryGetValue(pattern, out var count) && count > 1)
                             {
                                 var iconW = bmpMenuInstance.ElementSize.Width  * bitmapScale;
                                 var iconH = bmpMenuInstance.ElementSize.Height * bitmapScale;
@@ -940,7 +944,6 @@ namespace FamiStudio
 
                                 c.DrawTextureAtlas(bmpMenuInstance, iconX, iconY, bitmapScale, Theme.WhiteColor);
                             }
-                            */
 
                             c.PopTransform();
                         }
@@ -1919,6 +1922,11 @@ namespace FamiStudio
 
             App.UndoRedoManager.BeginTransaction(TransactionScope.Song, Song.Id);
 
+            var patternsMadeUnique = 0;
+
+            // Could map most suitable patterns and use them if they appear elsewhere in the song.
+            // For example, a pattern appears elswhere in the song, do we merge it with them,
+            // or only merge anything within the current selection like the code below does?
             for (int i = selectionMin.ChannelIndex; i <= selectionMax.ChannelIndex; i++)
             {
                 var channel = Song.Channels[i];
@@ -1935,16 +1943,62 @@ namespace FamiStudio
                         channel.PatternInstances[j] = newPattern;
                         
                         patternRefCounts[pattern]--;
+                        patternsMadeUnique++;
                     }
                 }
             }
 
-            Song.RemoveUnsupportedEffects();
-            Song.RemoveUnsupportedInstruments();
-            Song.DeleteNotesPastMaxInstanceLength();
             Song.InvalidateCumulativePatternCache();
 
             App.UndoRedoManager.EndTransaction();
+            
+            var message = MakePatternsUniqueMessage.Format(patternsMadeUnique);
+            App.DisplayNotification(message, false, false, Platform.IsMobile);
+        }
+
+        private void MergeSelectedIdenticalPatterns()
+        {
+            if (!IsSelectionValid())
+                return;
+
+            App.UndoRedoManager.BeginTransaction(TransactionScope.Song, Song.Id);
+
+            var patternCrcMap  = new Dictionary<uint, Pattern>();
+            var patternsMerged = 0;
+
+            for (int c = selectionMin.ChannelIndex; c <= selectionMax.ChannelIndex; c++)
+            {
+                var channel = Song.Channels[c];
+
+                for (int p = selectionMin.PatternIndex; p <= selectionMax.PatternIndex; p++)
+                {
+                    var pattern = channel.PatternInstances[p];
+                    if (pattern == null)
+                        continue;
+
+                    var crc = pattern.ComputeCRC();
+                    if (patternCrcMap.TryGetValue(crc, out var matchingPattern))
+                    {
+                        if (pattern != matchingPattern)
+                        {
+                            channel.PatternInstances[p] = matchingPattern;
+                            patternRefCounts[matchingPattern]++;
+                            patternsMerged++;
+                        }
+                    }
+                    else
+                    {
+                        patternCrcMap[crc] = pattern;
+                    }
+                }
+            }
+
+            Song.InvalidateCumulativePatternCache();
+
+            App.UndoRedoManager.EndTransaction();
+
+            var message = patternsMerged > 0 ? MergeIdenticalPatternsMessage.Format(patternsMerged): MergeIdenticalPatternsErrorMessage.Value;
+            App.DisplayNotification(message, false, false, Platform.IsMobile);
         }
 
         private bool HandleContextMenuPatternArea(int x, int y)
@@ -1998,9 +2052,13 @@ namespace FamiStudio
                     menu.Insert(0, new ContextMenuOption("MenuDelete", DeletePatternLabel, () => { DeletePattern(location); }));
                 }
 
-                if (IsPatternSelected(location) && UpdateSelectedPatternRefCounts())
+                if (IsPatternSelected(location))
                 {
-                    menu.Insert(1, new ContextMenuOption("MenuInstance", MakePatternsUniqueLabel, () => { MakeSelectedPatternsUnique(); }));
+                    // TODO: Add the correct icon to make unique rather than the merge one.
+                    if (UpdateSelectedPatternRefCounts())
+                        menu.Insert(1, new ContextMenuOption("MenuInstance", MakePatternsUniqueLabel, () => { MakeSelectedPatternsUnique(); }));
+
+                    menu.Insert(1, new ContextMenuOption("MenuInstance", MergeIdenticalPatternsLabel, () => { MergeSelectedIdenticalPatterns(); }));
                 }
 
                 if (menu.Count > 0)

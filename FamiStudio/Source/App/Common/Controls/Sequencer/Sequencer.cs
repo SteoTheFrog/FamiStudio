@@ -1921,6 +1921,7 @@ namespace FamiStudio
 
             App.UndoRedoManager.BeginTransaction(TransactionScope.Song, Song.Id);
 
+            var patternCounts = new Dictionary<Pattern, int>(patternRefCounts); // Safety.
             var uniqueCount = 0;
 
             for (int i = selectionMin.ChannelIndex; i <= selectionMax.ChannelIndex; i++)
@@ -1929,10 +1930,11 @@ namespace FamiStudio
                 for (int j = selectionMin.PatternIndex; j <= selectionMax.PatternIndex; j++)
                 {
                     var pattern = channel.PatternInstances[j];
-                    if (pattern != null && patternRefCounts.TryGetValue(pattern, out var count) && count > 1)
+                    if (pattern != null && patternCounts.TryGetValue(pattern, out var count) && count > 1)
                     {
                         var newPattern = CreateUniquePatternClone(pattern, channel);
                         channel.PatternInstances[j] = newPattern;
+                        patternCounts[pattern]--;
                         uniqueCount++;
                     }
                 }
@@ -1957,7 +1959,7 @@ namespace FamiStudio
             // Build CRCs and find best pattern, then merge.
             // Could possibly be optimised rather than 2 loops?
             var bestPatterns  = new Dictionary<uint, Pattern>();
-            var patternCounts = new Dictionary<Pattern, int>(patternRefCounts);
+            var patternCounts = new Dictionary<Pattern, int>(patternRefCounts); // Safety + original refs needed.
             var mergeCount    = 0;
 
             // Find best pattern for merging (used most times in song for selected channels).
@@ -1972,7 +1974,7 @@ namespace FamiStudio
                         patternCounts[pattern] = patternCounts.TryGetValue(pattern, out var count) ? count + 1 : 1;
                         var crc = pattern.ComputeCRC();
 
-                        // Favour unselected patterns when merging, if counts are the same.
+                        // Favour unselected patterns when merging, if counts are the same (check original refs for non-selected).
                         if (!bestPatterns.TryGetValue(crc, out var bestPattern) || patternCounts[pattern] > patternCounts[bestPattern] || 
                             (patternCounts[pattern] == patternCounts[bestPattern] && !patternRefCounts.ContainsKey(pattern)))
                         {
@@ -1992,7 +1994,6 @@ namespace FamiStudio
                     if (pattern != null && bestPatterns.TryGetValue(pattern.ComputeCRC(), out var bestPattern) && !ReferenceEquals(pattern, bestPattern))
                     {
                         channel.PatternInstances[p] = bestPattern;
-                        patternRefCounts[bestPattern] = patternRefCounts.TryGetValue(bestPattern, out var count) ? count + 1 : 1;
                         mergeCount++;
                     }
                 }

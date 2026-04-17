@@ -1881,10 +1881,9 @@ namespace FamiStudio
             if (!IsSelectionValid())
                 return false;
 
-            var tmpPatterns = GetSelectedPatterns(out _);
             var selectedPatterns = new HashSet<Pattern>();
 
-            foreach (var pattern in tmpPatterns)
+            foreach (var pattern in GetSelectedPatterns(out _))
             {
                 if (pattern != null)
                     selectedPatterns.Add(pattern);
@@ -1922,35 +1921,30 @@ namespace FamiStudio
 
             App.UndoRedoManager.BeginTransaction(TransactionScope.Song, Song.Id);
 
-            var patternsMadeUnique = 0;
+            var uniqueCount = 0;
 
             for (int i = selectionMin.ChannelIndex; i <= selectionMax.ChannelIndex; i++)
             {
                 var channel = Song.Channels[i];
-
                 for (int j = selectionMin.PatternIndex; j <= selectionMax.PatternIndex; j++)
                 {
                     var pattern = channel.PatternInstances[j];
-                    if (pattern == null)
-                        continue;
-
-                    if (patternRefCounts.TryGetValue(pattern, out var count) && count > 1)
+                    if (pattern != null && patternRefCounts.TryGetValue(pattern, out var count) && count > 1)
                     {
                         var newPattern = CreateUniquePatternClone(pattern, channel);
                         channel.PatternInstances[j] = newPattern;
-                        
-                        patternRefCounts[pattern]--;
-                        patternsMadeUnique++;
+                        uniqueCount++;
                     }
                 }
             }
 
             Song.InvalidateCumulativePatternCache();
+            UpdateSelectedPatternRefCounts();
 
             App.UndoRedoManager.EndTransaction();
             
-            var message = MakePatternsUniqueMessage.Format(patternsMadeUnique);
-            App.DisplayNotification(message, false, false, Platform.IsMobile);
+            var message = MakePatternsUniqueMessage.Format(uniqueCount);
+            App.DisplayNotification(message, false);
         }
 
         private void MergeSelectedIdenticalPatterns()
@@ -1960,45 +1954,57 @@ namespace FamiStudio
 
             App.UndoRedoManager.BeginTransaction(TransactionScope.Song, Song.Id);
 
-            var patternCrcMap  = new Dictionary<uint, Pattern>();
-            var patternsMerged = 0;
+            // Build CRCs and find best pattern, then merge.
+            // Could possibly be optimised rather than 2 loops?
+            var bestPatterns  = new Dictionary<uint, Pattern>();
+            var patternCounts = new Dictionary<Pattern, int>(patternRefCounts);
+            var mergeCount    = 0;
 
-            // Could map most suitable patterns and use them if they appear elsewhere in the song.
-            // For example, a pattern appears elswhere in the song, do we merge it with them,
-            // or only merge anything within the current selection like the code below does?
+            // Find best pattern for merging (used most times in song for selected channels).
             for (int c = selectionMin.ChannelIndex; c <= selectionMax.ChannelIndex; c++)
             {
                 var channel = Song.Channels[c];
+                for (int p = 0; p < channel.PatternInstances.Length; p++)
+                {
+                    var pattern = channel.PatternInstances[p];
+                    if (pattern != null)
+                    {
+                        patternCounts[pattern] = patternCounts.TryGetValue(pattern, out var count) ? count + 1 : 1;
+                        var crc = pattern.ComputeCRC();
 
+                        // Favour unselected patterns when merging, if counts are the same.
+                        if (!bestPatterns.TryGetValue(crc, out var bestPattern) || patternCounts[pattern] > patternCounts[bestPattern] || 
+                            (patternCounts[pattern] == patternCounts[bestPattern] && !patternRefCounts.ContainsKey(pattern)))
+                        {
+                            bestPatterns[crc] = pattern;
+                        }
+                    }
+                }
+            }
+
+            // Merge identical patterns within selection.
+            for (int c = selectionMin.ChannelIndex; c <= selectionMax.ChannelIndex; c++)
+            {
+                var channel = Song.Channels[c];
                 for (int p = selectionMin.PatternIndex; p <= selectionMax.PatternIndex; p++)
                 {
                     var pattern = channel.PatternInstances[p];
-                    if (pattern == null)
-                        continue;
-
-                    var crc = pattern.ComputeCRC();
-                    if (patternCrcMap.TryGetValue(crc, out var matchingPattern))
+                    if (pattern != null && bestPatterns.TryGetValue(pattern.ComputeCRC(), out var bestPattern) && !ReferenceEquals(pattern, bestPattern))
                     {
-                        if (pattern != matchingPattern)
-                        {
-                            channel.PatternInstances[p] = matchingPattern;
-                            patternRefCounts[matchingPattern]++;
-                            patternsMerged++;
-                        }
-                    }
-                    else
-                    {
-                        patternCrcMap[crc] = pattern;
+                        channel.PatternInstances[p] = bestPattern;
+                        patternRefCounts[bestPattern] = patternRefCounts.TryGetValue(bestPattern, out var count) ? count + 1 : 1;
+                        mergeCount++;
                     }
                 }
             }
 
             Song.InvalidateCumulativePatternCache();
+            UpdateSelectedPatternRefCounts();
 
             App.UndoRedoManager.EndTransaction();
 
-            var message = patternsMerged > 0 ? MergeIdenticalPatternsMessage.Format(patternsMerged): MergeIdenticalPatternsErrorMessage.Value;
-            App.DisplayNotification(message, false, false, Platform.IsMobile);
+            var message = mergeCount > 0 ? MergeIdenticalPatternsMessage.Format(mergeCount): MergeIdenticalPatternsErrorMessage.Value;
+            App.DisplayNotification(message, false);
         }
 
         private bool HandleContextMenuPatternArea(int x, int y)

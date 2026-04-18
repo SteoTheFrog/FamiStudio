@@ -464,6 +464,7 @@ namespace FamiStudio
             selectionMax = max;
             timeOnlySelection = timeOnly;
             SelectionChanged?.Invoke();
+            UpdateSelectedPatternRefCounts();
         }
 
         private void EnsureSelectionInclude(PatternLocation location)
@@ -2722,11 +2723,6 @@ namespace FamiStudio
 
             UpdateCursor();
 
-            if (IsSelectionValid())
-                UpdateSelectedPatternRefCounts();
-            else
-                patternRefCounts.Clear();
-
             if (doMouseUp)
             {
                 if (HandleMouseUpChannelName(e)) goto Handled;
@@ -2735,6 +2731,10 @@ namespace FamiStudio
                 return;
                 Handled:
                     MarkDirty();
+            }
+            else if (e.Right && IsSelectionValid())
+            {
+                UpdateSelectedPatternRefCounts();
             }
         }
 
@@ -2916,7 +2916,6 @@ namespace FamiStudio
         private void UpdateSelection(int x, int y, bool timeOnly, bool first = false)
         {
             ScrollIfNearEdge(x, y, true, !timeOnly && CanScrollVertically());
-            patternRefCounts?.Clear();
 
             if (first)
             {
@@ -3203,6 +3202,8 @@ namespace FamiStudio
 
             if (middle)
                 DoScroll(e.X - mouseLastX, e.Y - mouseLastY);
+            else if (e.Right && patternRefCounts.Count > 0 && (captureOperation == CaptureOperation.SelectRectangle || captureOperation == CaptureOperation.SelectColumn))
+                patternRefCounts.Clear();
 
             UpdateHover(e);
             UpdateToolTip(e);

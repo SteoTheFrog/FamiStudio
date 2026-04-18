@@ -1904,14 +1904,14 @@ namespace FamiStudio
                 for (int j = 0; j < Song.Length; j++)
                 {
                     var pattern = channel.PatternInstances[j];
-                    if (pattern == null || !selectedPatterns.Contains(pattern))
-                        continue;
+                    if (pattern != null && selectedPatterns.Contains(pattern))
+                    {
+                        var count = counts.TryGetValue(pattern, out var c) ? c + 1 : 1;
+                        counts[pattern] = count;
 
-                    var count = counts.TryGetValue(pattern, out var c) ? c + 1 : 1;
-                    counts[pattern] = count;
-
-                    if (count > 1)
-                        duplicateFound = true;
+                        if (count > 1)
+                            duplicateFound = true;
+                    }
                 }
             }
 
@@ -1945,6 +1945,7 @@ namespace FamiStudio
                 }
             }
 
+            Song.DeleteNotesPastMaxInstanceLength();
             Song.InvalidateCumulativePatternCache();
             UpdateSelectedPatternRefCounts();
 

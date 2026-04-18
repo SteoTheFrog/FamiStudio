@@ -710,6 +710,7 @@ namespace FamiStudio
 
         protected void RenderPatternArea(Graphics g)
         {
+            var f = g.ForegroundCommandList;
             var c = g.DefaultCommandList;
             var b = g.BackgroundCommandList;
 
@@ -936,17 +937,20 @@ namespace FamiStudio
                             if (isSelected)
                                 c.DrawRectangle(0, 0, sx, channelSizeY, Theme.LightGreyColor1, 3, true, true);
 
+                            c.PopTransform();
+
                             if (!dragCapture && valid && patternRefCounts.TryGetValue(pattern, out var count) && count > 1)
                             {
-                                var iconW = bmpMenuInstance.ElementSize.Width  * bitmapScale;
-                                var iconH = bmpMenuInstance.ElementSize.Height * bitmapScale;
+                                var scale = bitmapScale * (Platform.IsMobile ? 0.25f : 1.0f);
+                                var iconW = bmpMenuInstance.ElementSize.Width  * scale;
+                                var iconH = bmpMenuInstance.ElementSize.Height * scale;
                                 var iconX = sx / 2 - iconW / 2;
                                 var iconY = patternHeaderSizeY / 2 + channelSizeY / 2 - iconH / 2;
 
-                                c.DrawTextureAtlas(bmpMenuInstance, iconX, iconY, bitmapScale, Theme.WhiteColor);
+                                f.PushTranslation(0, py);
+                                f.DrawTextureAtlas(bmpMenuInstance, iconX, iconY, scale, Theme.WhiteColor);
+                                f.PopTransform();
                             }
-
-                            c.PopTransform();
                         }
 
                         if (Platform.IsMobile && highlightLocation == location)

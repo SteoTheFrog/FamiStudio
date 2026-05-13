@@ -450,7 +450,7 @@ namespace FamiStudio
                     }, GetDefaultChannelsGridData(false, false, app.SelectedSong, out _), 7, ChannelGridTooltip); // 11
                     page.AddButton(null, ResetDefaultsLabel.Format(FormatAudioMessage.ToString().ToLowerInvariant())); // 12
                     page.SetPropertyEnabled( 3, audioSettings.Format == "MP3" || audioSettings.Format == "Ogg Vorbis");
-                    page.SetPropertyEnabled( 5, audioSettings.LoopMode == LoopNTimesOption);
+                    page.SetPropertyEnabled( 5, audioSettings.LoopMode != DurationOption);
                     page.SetPropertyEnabled( 6, audioSettings.LoopMode == DurationOption);
                     page.SetPropertyVisible( 8, Platform.IsDesktop); // No separate files on mobile.
                     page.SetPropertyVisible( 9, Platform.IsDesktop); // No separate intro on mobile.

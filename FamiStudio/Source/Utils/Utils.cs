@@ -335,7 +335,7 @@ namespace FamiStudio
             {
                 if (char.IsLetterOrDigit(c))
                     niceName += char.ToLower(c);
-                else if (char.IsWhiteSpace(c) && niceName.Last() != '_')
+                else if (char.IsWhiteSpace(c) && (string.IsNullOrEmpty(niceName) || niceName.Last() != '_'))
                     niceName += '_';
                 else if (c == '-')
                     niceName += allowDash ? '-' : '_';

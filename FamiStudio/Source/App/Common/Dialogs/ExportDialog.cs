@@ -1677,6 +1677,9 @@ namespace FamiStudio
 
                     settings.MidiInstruments = midiInstSettings;
 
+                    for (int i = 0; i < instrumentMapping.Length; i++)
+                        instrumentMapping[i] = Array.IndexOf(MidiFileReader.MidiInstrumentNames, props.GetPropertyValue<string>(5, i, 1));
+
                     new MidiFileWriter().Save(project, filename, song.Id, instrumentMode, instrumentMapping, velocity, slideNotes, pitchRange);
 
                     ShowExportResultToast(FormatMidiMessage);

@@ -438,7 +438,7 @@ namespace FamiStudio
 
         public void ReplacePianoRollSelectionArpeggio(Arpeggio arp)
         {
-            PianoRoll.ReplaceSelectionArpeggio(arp, Point.Empty, true);
+            PianoRoll.ReplaceSelectionArpeggio(arp, Point.Empty, null, true);
         }
 
         private void ProjectExplorer_InstrumentsHovered(bool showExpansions)

@@ -63,10 +63,15 @@ namespace FamiStudio
         LocalizedString SelectTooltip;
         LocalizedString SelectPatternContext;
         LocalizedString SelectAllContext;
+        LocalizedString ResizeEnvelopeTooltip;
+        LocalizedString SetLoopPointTooltip;
+        LocalizedString SetReleasePointTooltip;
+        LocalizedString MustHaveLoopPointTooltip;
 
         internal PianoRollTimeline(PianoRoll pianoRoll)
         {
             this.pianoRoll = pianoRoll;
+            supportsLongPress = true;
         }
 
         protected override void OnAddedToContainer()
@@ -89,7 +94,7 @@ namespace FamiStudio
             fontSmallCharSizeX = ParentWindow.Fonts.FontSmall.MeasureString("0", false);
 
             if (Platform.IsMobile)
-                bitmapScale = 0.5f;
+                bitmapScale = DpiScaling.ScaleForWindowFloat(0.5f);
         }
 
         internal void UpdateLayout()
@@ -261,6 +266,13 @@ namespace FamiStudio
                     return;
                 }
 
+                if (e.Left)
+                {
+                    CapturePointer();
+                    pianoRoll.StartTimelineSelection(pos.X, pos.Y);
+                    return;
+                }
+
                 if (e.Right)
                     e.DelayRightClick();
 
@@ -321,6 +333,41 @@ namespace FamiStudio
             {
                 pianoRoll.UpdateTimelinePan(p.X, p.Y);
             }
+            else if (editMode == EditMode.Envelope || editMode == EditMode.Arpeggio)
+            {
+                UpdateEnvelopeHeaderTooltip(p.X, p.Y);
+            }
+        }
+
+        private void UpdateEnvelopeHeaderTooltip(int x, int y)
+        {
+            var region = pianoRoll.GetTimelineEnvelopeHoverRegion(x, y, out var canLoop, out var canRelease, out var hasLoopPoint);
+
+            if (region == EnvelopeEditor.TimelineHoverRegion.ResizeIcon)
+            {
+                App.SetToolTip($"<MouseLeft><Drag> {ResizeEnvelopeTooltip}");
+            }
+            else if (region == EnvelopeEditor.TimelineHoverRegion.LoopRelease)
+            {
+                var s = "";
+
+                if (canLoop)
+                    s = $"<MouseLeft> {SetLoopPointTooltip}";
+
+                if (canRelease)
+                {
+                    if (s.Length > 0)
+                        s += " - ";
+
+                    s += hasLoopPoint ? $"<MouseRight> {SetReleasePointTooltip}" : $"<MouseRight> {SetReleasePointTooltip} {MustHaveLoopPointTooltip}";
+                }
+
+                App.SetToolTip(s);
+            }
+            else
+            {
+                App.SetToolTip(tooltip);
+            }
         }
 
         protected override void OnPointerDownDelayed(PointerEventArgs e)
@@ -334,6 +381,39 @@ namespace FamiStudio
                 var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
                 pianoRoll.StartTimelineSelection(p.X, p.Y);
             }
+        }
+
+        protected override void OnTouchLongPress(PointerEventArgs e)
+        {
+            base.OnTouchLongPress(e);
+
+            pianoRoll.AbortTimelineCapture(true);
+
+            var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+
+            if (editMode == EditMode.Channel)
+                ShowContextMenu(p.X, p.Y);
+            else if (editMode == EditMode.Envelope || editMode == EditMode.Arpeggio)
+                pianoRoll.HandleContextMenuEnvelope(p.X, p.Y);
+        }
+
+        protected override void OnTouchScaleBegin(PointerEventArgs e)
+        {
+            base.OnTouchScaleBegin(e);
+            var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+            pianoRoll.HandleTouchScaleBegin(p.X, p.Y, false);
+        }
+
+        protected override void OnTouchScale(PointerEventArgs e)
+        {
+            var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+            pianoRoll.HandleTouchScale(p.X, p.Y, e.TouchScale);
+        }
+
+        protected override void OnTouchScaleEnd(PointerEventArgs e)
+        {
+            var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+            pianoRoll.HandleTouchScaleEnd(p.X, p.Y);
         }
 
         protected override void OnRender(Graphics g)

@@ -159,6 +159,7 @@
     <Compile Include="Source\App\Common\Controls\Slider.cs" />
     <Compile Include="Source\App\Common\Controls\TextBox.cs" />
     <Compile Include="Source\App\Common\Controls\Toast.cs" />
+    <Compile Include="Source\App\Common\Controls\PianoRoll\EnvelopeEditor.cs" />
     <Compile Include="Source\App\Common\Controls\PianoRoll\Piano.cs" />
     <Compile Include="Source\App\Common\Controls\PianoRoll\PianoRoll.cs" />
     <Compile Include="Source\App\Common\Controls\PianoRoll\PianoRollTimeline.cs" />

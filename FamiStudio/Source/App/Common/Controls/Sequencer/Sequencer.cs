@@ -13,15 +13,14 @@ namespace FamiStudio
         const int DefaultSequencerPatternHeight    = 44;
         const int ResizeBarHeight                  = 5;
 
-        const float ScrollSpeedFactor        = Platform.IsMobile ? 2.0f : 1.0f;
-        const float DefaultZoom              = Platform.IsMobile ? 0.5f : 2.0f;
+        const float ScrollSpeedFactor  = Platform.IsMobile ? 2.0f : 1.0f;
+        const float DefaultZoom        = Platform.IsMobile ? 0.5f : 2.0f;
 
         // Height is scaled so 1 = 100%. Range is 5% to 90% (based on avaliable height below the toolbar).
-        const float MinSequencerHeight       = 0.05f;
-        const float MaxSequencerHeight       = 0.90f;
-
-        const float MinZoom = 0.25f;
-        const float MaxZoom = 16.0f;
+        const float MinSequencerHeight = 0.05f;
+        const float MaxSequencerHeight = 0.90f;
+        const float MinZoom            = 0.25f;
+        const float MaxZoom            = 16.0f;
 
         static readonly int[] SequencerPatternHeights = [21, 28, 36, 44, 52, 60, 68, 76, 84, 92];
 
@@ -1579,21 +1578,25 @@ namespace FamiStudio
 
         protected override void OnTouchFling(PointerEventArgs e)
         {
-            var x = e.X;
-            var y = e.Y;
+            HandleTouchFling(e.X, e.Y, e.FlingVelocityX, e.FlingVelocityY);
+        }
 
+        internal void HandleTouchFling(int x, int y, float velX, float velY)
+        {
             if (canFling)
             {
                 EndCaptureOperation(x, y);
-                SetFlingVelocity(e.FlingVelocityX, e.FlingVelocityY);
+                SetFlingVelocity(velX, velY);
             }
         }
 
         protected override void OnTouchScaleBegin(PointerEventArgs e)
         {
-            var x = e.X;
-            var y = e.Y;
+            HandleTouchScaleBegin(e.X, e.Y);
+        }
 
+        internal void HandleTouchScaleBegin(int x, int y)
+        {
             if (captureOperation != CaptureOperation.None)
             {
                 Debug.Assert(captureOperation != CaptureOperation.MobileZoom);
@@ -1606,10 +1609,12 @@ namespace FamiStudio
 
         protected override void OnTouchScale(PointerEventArgs e)
         {
-            var x = e.X;
-            var y = e.Y;
+            HandleTouchScale(e.X, e.Y, e.TouchScale);
+        }
 
-            UpdateCaptureOperation(x, y, e.TouchScale);
+        internal void HandleTouchScale(int x, int y, float scale)
+        {
+            UpdateCaptureOperation(x, y, scale);
             SetMouseLastPos(x, y);
         }
 

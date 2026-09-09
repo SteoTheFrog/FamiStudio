@@ -45,19 +45,19 @@ namespace FamiStudio
             set => videoHighlightKeys = value;
         }
 
-        private int   ViewScrollY          => pianoRoll.ViewScrollY;
-        private int   VirtualSizeY         => pianoRoll.VirtualSizeY;
-        private int   OctaveSizeY          => pianoRoll.OctaveSizeY;
-        private int   NoteSizeY            => pianoRoll.NoteSizeY;
-        private int   WhiteKeySizeY        => pianoRoll.WhiteKeySizeY;
-        private int   BlackKeySizeX        => pianoRoll.BlackKeySizeX;
-        private int   BlackKeySizeY        => pianoRoll.BlackKeySizeY;
-        private int   PianoSizeX           => pianoRoll.PianoSizeX;
-        private int   HeaderAndEffectSizeY => pianoRoll.HeaderAndEffectSizeY;
-        private bool  IsVideoRecording     => pianoRoll.IsEditingVideo;
-        private bool  IsMaximized          => pianoRoll.IsMaximized;
-        private bool  DrawDpcmColorKeys    => pianoRoll.DrawDpcmColorKeysOnPiano;
-        private bool  ShowQwertyLabels     => Platform.IsDesktop && App != null && (App.IsRecording || App.IsQwertyPianoEnabled);
+        private int  ViewScrollY          => pianoRoll.ViewScrollY;
+        private int  VirtualSizeY         => pianoRoll.VirtualSizeY;
+        private int  OctaveSizeY          => pianoRoll.OctaveSizeY;
+        private int  NoteSizeY            => pianoRoll.NoteSizeY;
+        private int  WhiteKeySizeY        => pianoRoll.WhiteKeySizeY;
+        private int  BlackKeySizeX        => pianoRoll.BlackKeySizeX;
+        private int  BlackKeySizeY        => pianoRoll.BlackKeySizeY;
+        private int  PianoSizeX           => pianoRoll.PianoSizeX;
+        private int  HeaderAndEffectSizeY => pianoRoll.HeaderAndEffectSizeY;
+        private bool IsVideoRecording     => pianoRoll.IsEditingVideo;
+        private bool IsMaximized          => pianoRoll.IsMaximized;
+        private bool DrawDpcmColorKeys    => pianoRoll.DrawDpcmColorKeysOnPiano;
+        private bool ShowQwertyLabels     => Platform.IsDesktop && App != null && (App.IsRecording || App.IsQwertyPianoEnabled);
 
         LocalizedString PlayPianoTooltip;
         LocalizedString PanTooltip;
@@ -68,6 +68,7 @@ namespace FamiStudio
             this.pianoRoll = pianoRoll;
             Localization.Localize(this);
             ToolTip = $"<MouseLeft> {PlayPianoTooltip} - <MouseWheel><Drag> {PanTooltip}";
+            supportsLongPress = true; // Needed so the key won't release on mobile.
         }
 
         protected override void OnAddedToContainer()
@@ -188,18 +189,28 @@ namespace FamiStudio
             base.OnTouchScaleBegin(e);
 
             var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
-            pianoRoll.StartMobileZoom(p.X, p.Y, true);
+            pianoRoll.HandleTouchScaleBegin(p.X, p.Y, true);
+        }
+
+        protected override void OnTouchScale(PointerEventArgs e)
+        {
+            var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+            pianoRoll.HandleTouchScale(p.X, p.Y, e.TouchScale);
+        }
+
+        protected override void OnTouchScaleEnd(PointerEventArgs e)
+        {
+            var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+            pianoRoll.HandleTouchScaleEnd(p.X, p.Y);
         }
 
         protected override void OnPointerMove(PointerEventArgs e)
         {
             base.OnPointerMove(e);
+            var note = GetPianoNote(Utils.Clamp(e.X, 0, Width - 1), e.Y);
 
-            var note = GetPianoNote(
-                Utils.Clamp(e.X, 0, Width - 1),
-                e.Y);
-
-            HoverNote = note;
+            if (!e.IsTouchEvent)
+                HoverNote = note;
 
             if (playing)
                 UpdatePlayPiano(note);
@@ -215,30 +226,24 @@ namespace FamiStudio
         {
             base.OnPointerDown(e);
 
-            if (e.IsTouchEvent)
-                return;
-
-            var middle =
-                e.Middle ||
-                (e.Left && ModifierKeys.IsAltDown && Settings.AltLeftForMiddle);
-
-            if (middle)
-            {
-                var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
-                pianoRoll.StartPan(p.X, p.Y);
-                return;
-            }
-
-            if (e.Left)
+            if (e.Left || e.IsTouchEvent)
             {
                 var note = GetPianoNote(e.X, e.Y);
-
                 if (note >= 0)
                 {
                     CapturePointer();
                     playing = true;
                     StartPlayPiano(note);
                 }
+
+                return;
+            }
+
+            var middle = e.Middle || (e.Left && ModifierKeys.IsAltDown && Settings.AltLeftForMiddle);
+            if (middle)
+            {
+                var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+                pianoRoll.StartPan(p.X, p.Y);
             }
         }
 
@@ -251,16 +256,6 @@ namespace FamiStudio
                 playing = false;
                 EndPlayPiano();
             }
-        }
-
-        internal void OnTouchDownInternal(int localX, int localY)
-        {
-            var note = GetPianoNote(localX, localY);
-            if (note < 0)
-                return;
-
-            playing = true;
-            StartPlayPiano(note);
         }
 
         protected override void OnRender(Graphics g)

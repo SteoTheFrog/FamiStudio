@@ -439,7 +439,31 @@ namespace FamiStudio
                 ShowContextMenu(rightClickLocation, e.X, e.Y);
             }
         }
-        
+
+        protected override void OnTouchFling(PointerEventArgs e)
+        {
+            var p = sequencer.WindowToControl(ControlToWindow(e.Position));
+            sequencer.HandleTouchFling(p.X, p.Y, e.FlingVelocityX, e.FlingVelocityY);
+        }
+
+        protected override void OnTouchScaleBegin(PointerEventArgs e)
+        {
+            var p = sequencer.WindowToControl(ControlToWindow(e.Position));
+            sequencer.HandleTouchScaleBegin(p.X, p.Y);
+        }
+
+        protected override void OnTouchScale(PointerEventArgs e)
+        {
+            var p = sequencer.WindowToControl(ControlToWindow(e.Position));
+            sequencer.HandleTouchScale(p.X, p.Y, e.TouchScale);
+        }
+
+        protected override void OnTouchScaleEnd(PointerEventArgs e)
+        {
+            var p = sequencer.WindowToControl(ControlToWindow(e.Position));
+            sequencer.EndCaptureOperation(p.X, p.Y);
+        }
+
         protected override void OnPointerDownDelayed(PointerEventArgs e)
         {
             base.OnPointerDownDelayed(e);

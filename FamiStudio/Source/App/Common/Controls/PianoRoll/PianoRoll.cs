@@ -284,6 +284,7 @@ namespace FamiStudio
         // Controls.
         Piano piano;
         PianoRollTimeline timeline;
+        EnvelopeEditor envelopeEditor;
 
         int captureNoteAbsoluteIdx = 0;
         int captureMouseAbsoluteIdx = 0;
@@ -418,7 +419,7 @@ namespace FamiStudio
             DoubleHarmonic
         };
 
-        enum GizmoAction
+        internal enum GizmoAction
         {
             ResizeNote,
             MoveRelease,
@@ -429,7 +430,7 @@ namespace FamiStudio
             MoveVolumeSlideValue,
         };
 
-        private class Gizmo
+        internal class Gizmo
         {
             public Rectangle Rect;
             public TextureAtlasRef FillImage = null;
@@ -483,6 +484,7 @@ namespace FamiStudio
 
         public bool IsMaximized                => maximized;
         public bool PianoVisible               => pianoVisible;
+        public bool LegacySelectMode           => legacySelectMode;
 
         public bool IsEditingVideo             => editMode == EditionMode.VideoRecording;
         public bool IsEditingChannel           => editMode == EditionMode.Channel; 
@@ -513,26 +515,37 @@ namespace FamiStudio
         public DPCMSample EditSample       => editSample;
 
         public Color SelectionBgVisibleColor => selectionBgVisibleColor;
+        public Color SelectionHighlightColor => selectionHighlightColor;
+        public Color SeekBarColor            => GetSeekBarColor();
 
-        public int EditEnvelopeType     => editEnvelope;
-        public int VirtualSizeY         => virtualSizeY;
-        public int OctaveSizeY          => octaveSizeY;
-        public int ViewScrollY          => scrollY;
-        public int NoteSizeY            => noteSizeY;
-        public int WhiteKeySizeY        => whiteKeySizeY;
-        public int BlackKeySizeX        => blackKeySizeX;
-        public int BlackKeySizeY        => blackKeySizeY;
-        public int PianoSizeX           => pianoSizeX;
-        public int HeaderAndEffectSizeY => headerAndEffectSizeY;
-        public int ScrollBarThickness   => scrollBarThickness;
-        public int ViewScrollX          => scrollX;
-        public int EditChannel          => editChannel;
-        public int SelectionMinX        => selectionMinX;
-        public int SelectionMaxX        => selectionMaxX;
-        public int PianoWidth           => pianoSizeX;
-        public int HeaderSizeY          => headerSizeY;
+        public int EditEnvelopeType            => editEnvelope;
+        public int VirtualSizeY                => virtualSizeY;
+        public int OctaveSizeY                 => octaveSizeY;
+        public int ViewScrollY                 => scrollY;
+        public int NoteSizeY                   => noteSizeY;
+        public int WhiteKeySizeY               => whiteKeySizeY;
+        public int BlackKeySizeX               => blackKeySizeX;
+        public int BlackKeySizeY               => blackKeySizeY;
+        public int PianoSizeX                  => pianoSizeX;
+        public int HeaderAndEffectSizeY        => headerAndEffectSizeY;
+        public int ScrollBarThickness          => scrollBarThickness;
+        public int ViewScrollX                 => scrollX;
+        public int EditChannel                 => editChannel;
+        public int SelectionMinX               => selectionMinX;
+        public int SelectionMaxX               => selectionMaxX;
+        public int PianoWidth                  => pianoSizeX;
+        public int HeaderSizeY                 => headerSizeY;
+        public int HighlightNoteAbsoluteIndex  => highlightNoteAbsIndex;
+        public int FontSmallCharSizeX          => fontSmallCharSizeX;
+        public int EffectValuePosTextOffsetY   => effectValuePosTextOffsetY;
+        public int EffectValueNegTextOffsetY   => effectValueNegTextOffsetY;
+        public int TimelineEnvelopeResizeWidth => timeline.EnvelopeResizeWidth;
+
         public float NoteSizeX          => noteSizeX;
         public float Zoom               => zoom;
+        public float EnvelopeValueZoom  => envelopeValueZoom;
+        public float EnvelopeValueSizeY => envelopeValueSizeY;
+
 
         public int HoverNoteIndex => hoverNoteIndex;
         public int HoverNoteCount => hoverNoteCount;
@@ -540,6 +553,13 @@ namespace FamiStudio
         public Envelope CurrentEditEnvelope => EditEnvelope;
 
         public LocalizedString PianoRollMoreOptionsTooltip => MoreOptionsTooltip;
+
+        public int TooltipTextPosX => tooltipTextPosX;
+        public int TooltipTextPosY => tooltipTextPosY;
+        public int BigTextPosX     => bigTextPosX;
+        public int BigTextPosY     => bigTextPosY;
+
+        public bool RelativeEffectScaling => relativeEffectScaling;
 
         public delegate void EmptyDelegate();
         public delegate void InstrumentEnvDelegate(Instrument instrument, int env);
@@ -563,24 +583,15 @@ namespace FamiStudio
         // Piano Roll
         LocalizedString EditingChannelLabel;
         LocalizedString EditingDPCMSampleLabel;
-        LocalizedString EditingArpeggioLabel;
-        LocalizedString EditingInstrumentEnvelopeLabel;
         LocalizedString EditingInstrumentDPCMLabel;
         LocalizedString DPCMSourceDataLabel;
         LocalizedString DPCMProcessedDataLabel;
         LocalizedString DPCMPreviewPlaybackLabel;
         LocalizedString DPCMInstrumentUsageLabel;
-        LocalizedString InstrumentNotSelectedLabel;
-        LocalizedString ArpeggioOverriddenLabel;
-        LocalizedString ArpeggioNotSelectedLabel;
-        LocalizedString SelectedArpeggioWillBeHeardLabel;
         LocalizedString DPCMBankUsageLabel;
         LocalizedString RelativeEffectScalingLabel;
-        LocalizedString EnvelopeRelativeLabel;
-        LocalizedString EnvelopeAbsoluteLabel;
         LocalizedString HoldFingersToDrawMessage;
         LocalizedString HoldFingersToEraseMessage;
-
 
         // DPCM mapping editor
         LocalizedString PitchLabel;
@@ -671,10 +682,7 @@ namespace FamiStudio
 
         // tooltips
         LocalizedString MoreOptionsTooltip;
-        LocalizedString ResizeEnvelopeTooltip;
-        LocalizedString SetLoopPointTooltip;
         LocalizedString SetReleasePointTooltip;
-        LocalizedString MustHaveLoopPointTooltip;
         LocalizedString PanTooltip;
         LocalizedString ToggleSnappingTooltip;
         LocalizedString ChangeSnapPrecisionTooltip;
@@ -793,7 +801,10 @@ namespace FamiStudio
             if (piano != null)
                 piano.Visible = pianoVisible;
 
-            if (piano != null && timeline != null)
+            if (envelopeEditor != null)
+                envelopeEditor.Visible = editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio;
+
+            if (piano != null && timeline != null && envelopeEditor != null)
                 UpdateChildLayouts();
         }
 
@@ -814,6 +825,13 @@ namespace FamiStudio
             else
                 StartSelection(x, y, false);
         }
+
+        public void AbortTimelineCapture(bool restore = false)
+        {
+            AbortCaptureOperation(restore);
+        }
+
+        public bool IsChangingEnvelopeValue => captureOperation == CaptureOperation.ChangeEnvelopeValue;
 
         public void UpdateTimelinePan(int x, int y)
         {
@@ -837,42 +855,93 @@ namespace FamiStudio
             EndCaptureOperation(x, y);
         }
 
-        // TODO: This is temporary during refactoring. Remove this later.
         public bool HandleTimelineEnvelopePointerDown(int x, int y, bool left, bool right)
         {
-            var env = EditEnvelope;
-            if (env == null)
+            return envelopeEditor.HandleTimelinePointerDown(x, y, left, right, timeline.Height);
+        }
+
+        public EnvelopeEditor.TimelineHoverRegion GetTimelineEnvelopeHoverRegion(int x, int y, out bool canLoop, out bool canRelease, out bool hasLoopPoint)
+        {
+            return envelopeEditor.GetTimelineHoverRegion(x, y, timeline.Height, out canLoop, out canRelease, out hasLoopPoint);
+        }
+
+        public void StartEnvelopeResize(int x, int y)
+        {
+            StartResizeEnvelope(x, y);
+        }
+
+        public void StartEnvelopeLoopRelease(int x, int y, bool left)
+        {
+            var op = left ? CaptureOperation.DragLoop : CaptureOperation.DragRelease;
+
+            StartCaptureOperation(x, y, op);
+
+            if (editMode == EditionMode.Envelope)
+                App.UndoRedoManager.BeginTransaction(TransactionScope.Instrument, editInstrument.Id);
+            else
+                App.UndoRedoManager.BeginTransaction(TransactionScope.Arpeggio, editArpeggio.Id);
+
+            ResizeEnvelope(x, y, false);
+        }
+
+        public bool StartEnvelopeDraw(int x, int y)
+        {
+            var env = CurrentEditEnvelope;
+            if (env == null || env.Length <= 0)
                 return false;
 
-            if (left && IsPointWhereCanResizeEnvelope(x, y) && env.CanResize)
+            var noteIdx = GetAbsoluteNoteIndexForPixelX(x - pianoSizeX);
+
+            if (IsEnvelopeValueSelected(noteIdx))
             {
-                StartResizeEnvelope(x, y);
-                return true;
+                SetMobileHighlightedNote(noteIdx);
+                StartChangeEnvelopeValue(x, y);
+            }
+            else
+            {
+                StartDrawEnvelope(x, y);
             }
 
-            var rep = EditRepeatEnvelope;
-            var canLoop = env.CanLoop || (rep != null && rep.CanLoop);
-            var canRelease = env.CanRelease || (rep != null && rep.CanRelease);
+            return true;
+        }
 
-            if (((left && canLoop) ||
-                (right && canRelease && env.Loop >= 0)) &&
-                IsPointInHeaderBottomPart(x, y))
+        public bool StartEnvelopeFreeDraw(int x, int y)
+        {
+            var env = CurrentEditEnvelope;
+
+            if (env == null || env.Length <= 0)
+                return false;
+
+            StartDrawEnvelope(x, y);
+            return true;
+        }
+
+        public bool HandleEnvelopeGizmoPointerDown(int x, int y)
+        {
+            return HandleTouchDownEnvelopeEffectsGizmos(x, y) || HandleTouchDownEnvelopeGizmos(x, y);
+        }
+
+        public bool StartMobilePan(int x, int y)
+        {
+            StartCaptureOperation(x, y, CaptureOperation.MobilePan);
+            return true;
+        }
+
+        public bool HandleEnvelopeTouchClick(int x, int y)
+        {
+            if (EditEnvelope == null)
+                return false;
+
+            if (HandleTouchClickEnvelope(x, y) || HandleTouchClickEnvelopeEffectPanel(x, y))
             {
-                var op = left ? CaptureOperation.DragLoop : CaptureOperation.DragRelease;
-
-                StartCaptureOperation(x, y, op, capturePointer: false);
-
-                if (editMode == EditionMode.Envelope)
-                    App.UndoRedoManager.BeginTransaction(TransactionScope.Instrument, editInstrument.Id);
-                else
-                    App.UndoRedoManager.BeginTransaction(TransactionScope.Arpeggio, editArpeggio.Id);
-
-                ResizeEnvelope(x, y, false);
+                MarkDirty();
                 return true;
             }
 
             return false;
         }
+
+        public bool IsCapturingPointer => captureOperation != CaptureOperation.None;
 
         public void StartEditChannel(int channelIdx, int patternIdx = 0)
         {
@@ -1163,7 +1232,7 @@ namespace FamiStudio
             scrollY = noteY - (Height - headerAndEffectSizeY) / 2;
         }
 
-        private int GetPixelXForAbsoluteNoteIndex(int n, bool scroll = true)
+        public int GetPixelXForAbsoluteNoteIndex(int n, bool scroll = true)
         {
             // On PC, all math noteSizeX are always integer, but on mobile, they 
             // can be float. We need to cast into double since at the maximum zoom,
@@ -1313,6 +1382,9 @@ namespace FamiStudio
             timeline = new PianoRollTimeline(this);
             AddControl(timeline);
 
+            envelopeEditor = new EnvelopeEditor(this);
+            AddControl(envelopeEditor);
+
             var g = graphics;
             fontSmallCharSizeX = ParentWindow.Fonts.FontSmall.MeasureString("0", false);
             bmpExpandedSmall = g.GetTextureAtlasRef("ExpandedSmall");
@@ -1349,6 +1421,7 @@ namespace FamiStudio
         {
             piano.UpdateLayout();
             timeline.UpdateLayout();
+            envelopeEditor.UpdateLayout();
         }
 
         private void ConditionalUpdateNoteGeometries(Graphics g)
@@ -2173,7 +2246,7 @@ namespace FamiStudio
                 var absoluteIdx = copyMin + idx;
                 var selectedNoteIdx = absoluteIdx - selectionMinX;
 
-                // Wndure we copy every effect of the selected note.
+                // Ensure we copy every effect of the selected note.
                 if (selectedNoteIndices.Contains(selectedNoteIdx))
                 {
                     notes[idx] = note.Clone();
@@ -2680,7 +2753,7 @@ namespace FamiStudio
             return selectedEffectIndices.Contains(absoluteIdx);
         }
 
-        private bool IsEnvelopeValueSelected(int idx)
+        public bool IsEnvelopeValueSelected(int idx)
         {
             if (!IsSelectionValid())
                 return false;
@@ -2804,7 +2877,7 @@ namespace FamiStudio
                 color);
         }
 
-        private bool IsGizmoHighlighted(Gizmo g, int offsetY)
+        internal bool IsGizmoHighlighted(Gizmo g, int offsetY)
         {
             if (Platform.IsMobile)
             {
@@ -3263,284 +3336,6 @@ namespace FamiStudio
             }
         }
 
-        private void RenderEnvelopeValues(RenderInfo r)
-        {
-            var env = EditEnvelope;
-            var resampled = editMode == EditionMode.Envelope && 
-                           (editInstrument.IsN163 && editEnvelope == EnvelopeType.N163Waveform && editInstrument.N163ResampleWaveData != null && editInstrument.N163WavePreset == WavePresetType.Resample ||
-                            editInstrument.IsFds  && editEnvelope == EnvelopeType.FdsWaveform  && editInstrument.FdsResampleWaveData  != null && editInstrument.FdsWavePreset  == WavePresetType.Resample);
-            var spacing = editEnvelope == EnvelopeType.DutyCycle || editEnvelope == EnvelopeType.S5BMixer ? 4 : (editEnvelope == EnvelopeType.Arpeggio ? 12 : 16);
-            var color = editMode == EditionMode.Envelope ? editInstrument.Color : editArpeggio.Color;
-            var brush = Color.FromArgb(resampled ? 100 : 255, color);
-
-            Envelope.GetMinMaxValueForType(editInstrument, editEnvelope, out int envTypeMinValue, out int envTypeMaxValue);
-
-            // Draw the envelope value backgrounds.
-            int maxValue = 128 / (int)envelopeValueZoom;
-            int midValue =  64 / (int)envelopeValueZoom;
-
-            var lastRectangleValue = int.MinValue;
-            var lastRectangleY     = -1.0f;
-            var oddRectangle       = false;
-
-            var maxX = GetPixelXForAbsoluteNoteIndex(env.Length);
-            var maxi = (Platform.IsDesktop ? maxValue : envTypeMaxValue - envTypeMinValue) + 1;
-
-            // Background rectangles + labels
-            for (int i = 0; i <= maxi; i++)
-            {
-                var value = Platform.IsMobile ? i + envTypeMinValue : i - midValue;
-                var y = (virtualSizeY - envelopeValueSizeY * i) - scrollY;
-                var drawLabel = i == maxi - 1;
-
-                if ((value % spacing) == 0 || i == 0 || i == maxi)
-                {
-                    if (lastRectangleValue >= envTypeMinValue && lastRectangleValue <= envTypeMaxValue)
-                    {
-                        r.b.FillRectangle(0, lastRectangleY, maxX, y, oddRectangle ? Theme.DarkGreyColor5 : Theme.DarkGreyColor4);
-                        oddRectangle = !oddRectangle;
-                    }
-
-                    lastRectangleValue = value;
-                    lastRectangleY = y;
-                    drawLabel |= value >= envTypeMinValue - 1 && value <= envTypeMaxValue + 1;
-                }
-
-                if (drawLabel)
-                    r.b.DrawText(value.ToString(), r.fonts.FontSmall, maxX + 4 * DpiScaling.Window, y - envelopeValueSizeY, Theme.LightGreyColor1, TextFlags.MiddleLeft, 0, envelopeValueSizeY);
-            }
-            
-            // Horizontal lines
-            for (int i = 0; i <= maxi; i++)
-            {
-                var value = Platform.IsMobile ? i + envTypeMinValue : i - midValue;
-                var y = (virtualSizeY - envelopeValueSizeY * i) - scrollY;
-
-                if (i != maxi)
-                    r.b.DrawLine(0, y, GetPixelXForAbsoluteNoteIndex(env.Length), y, Theme.DarkGreyColor1, (value % spacing) == 0 ? 3 : 1);
-            }
-
-            DrawSelectionRect(r.b, Height);
-
-            // Draw the vertical bars.
-            for (int b = 0; b < env.Length; b++)
-            {
-                int x = GetPixelXForAbsoluteNoteIndex(b);
-                if (b != 0) r.b.DrawLine(x, 0, x, Height, Theme.DarkGreyColor1, env.ChunkLength > 1 && b % env.ChunkLength == 0 ? 3 : 1);
-            }
-
-            if (env.Loop >= 0)
-                r.b.DrawLine(GetPixelXForAbsoluteNoteIndex(env.Loop), 0, GetPixelXForAbsoluteNoteIndex(env.Loop), Height, Theme.BlackColor);
-            if (env.Release >= 0)
-                r.b.DrawLine(GetPixelXForAbsoluteNoteIndex(env.Release), 0, GetPixelXForAbsoluteNoteIndex(env.Release), Height, Theme.BlackColor);
-            if (env.Length > 0)
-                r.b.DrawLine(GetPixelXForAbsoluteNoteIndex(env.Length), 0, GetPixelXForAbsoluteNoteIndex(env.Length), Height, Theme.BlackColor);
-
-            if ((editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio) && CanEnvelopeDisplayFrame())
-            {
-                var seekFrame = App.GetEnvelopeFrame(editInstrument, editArpeggio, editEnvelope, editMode == EditionMode.Arpeggio);
-                if (seekFrame >= 0)
-                {
-                    var seekX = GetPixelXForAbsoluteNoteIndex(seekFrame);
-                    r.c.DrawLine(seekX, 0, seekX, Height, GetSeekBarColor(), 3);
-                }
-            }
-
-            var highlightRect = RectangleF.Empty;
-            var center = editEnvelope == EnvelopeType.FdsWaveform ? 32 : 0;
-            var bias = Platform.IsMobile ? -envTypeMinValue : midValue;
-
-            if (editEnvelope == EnvelopeType.Arpeggio)
-            {
-                for (int i = 0; i < env.Length; i++)
-                {
-                    var selected = IsEnvelopeValueSelected(i);
-                    var highlighted = Platform.IsMobile && highlightNoteAbsIndex == i;
-
-                    float x0 = GetPixelXForAbsoluteNoteIndex(i + 0);
-                    float x1 = GetPixelXForAbsoluteNoteIndex(i + 1);
-                    float y = (virtualSizeY - envelopeValueSizeY * (env.Values[i] + bias)) - scrollY;
-
-                    r.c.FillRectangle(x0, y - envelopeValueSizeY, x1, y, brush);
-
-                    if (!highlighted)
-                        r.c.DrawRectangle(x0, y - envelopeValueSizeY, x1, y, selected ? Theme.LightGreyColor1 : Theme.BlackColor, selected ? 3 : 1, selected, selected);
-                    else
-                        highlightRect = new RectangleF(x0,y - envelopeValueSizeY, x1 - x0, envelopeValueSizeY);
-
-                    var label = Envelope.GetDisplayValue(editInstrument, editEnvelope, env.Values[i]);
-                    if (label.Length * fontSmallCharSizeX + 2 < noteSizeX)
-                        r.f.DrawText(label, r.fonts.FontSmall, x0, y - envelopeValueSizeY - effectValuePosTextOffsetY, Theme.LightGreyColor1, TextFlags.Center, noteSizeX);
-                }
-            }
-            else
-            {
-                for (int i = 0; i < env.Length; i++)
-                {
-                    int val = env.Values[i];
-
-                    float y0, y1, ty;
-                    if (val >= center)
-                    {
-                        y0 = (virtualSizeY - envelopeValueSizeY * (val + bias + 1)) - scrollY;
-                        y1 = (virtualSizeY - envelopeValueSizeY * (bias + center) - scrollY);
-                        ty = y0;
-                    }
-                    else
-                    {
-                        y1 = (virtualSizeY - envelopeValueSizeY * (val + bias)) - scrollY;
-                        y0 = (virtualSizeY - envelopeValueSizeY * (bias + center + 1) - scrollY);
-                        ty = y1;
-                    }
-
-                    var x0 = GetPixelXForAbsoluteNoteIndex(i + 0);
-                    var x1 = GetPixelXForAbsoluteNoteIndex(i + 1);
-                    var selected = IsEnvelopeValueSelected(i);
-                    var highlighted = Platform.IsMobile && highlightNoteAbsIndex == i;
-
-                    r.c.FillRectangle(x0, y0, x1, y1, brush);
-
-                    if (selected && !legacySelectMode)
-                        r.c.FillRectangle(x0, y0, x1, y1, selectionBgVisibleColor);
-
-                    if (!highlighted)
-                        r.c.DrawRectangle(x0, y0, x1, y1, selected ? Theme.LightGreyColor1 : Theme.BlackColor, selected ? 3 : 1, selected, selected);
-                    else
-                        highlightRect = new RectangleF(x0, y0, x1 - x0, y1 - y0);
-
-                    var label = Envelope.GetDisplayValue(editInstrument, editEnvelope, val);
-                    if (label.Length * fontSmallCharSizeX + 2 < noteSizeX)
-                    {
-                        var drawOutside = Math.Abs(y1 - y0) < (DefaultEnvelopeSizeY * DpiScaling.Window * 2);
-                        var textBrush = drawOutside ? Theme.LightGreyColor1 : Theme.BlackColor;
-                        var offset = drawOutside != val < center ? -effectValuePosTextOffsetY : effectValueNegTextOffsetY;
-
-                        r.f.DrawText(label, r.fonts.FontSmall, x0, ty + offset, textBrush, TextFlags.Center, noteSizeX);
-                    }
-                }
-            }
-
-            if (!highlightRect.IsEmpty)
-                r.c.DrawRectangle(highlightRect, Theme.WhiteColor, 3, true, true);
-
-            // Drawing the N163/FDS waveform on top. 
-            if (resampled)
-            {
-                var isN163     = editInstrument.IsN163;
-
-                var waveSize   = isN163 ? editInstrument.N163WaveSize : 64;
-                var wavePeriod = isN163 ? editInstrument.N163ResampleWavePeriod : editInstrument.FdsResampleWavePeriod;
-                var waveOffset = isN163 ? editInstrument.N163ResampleWaveOffset : editInstrument.FdsResampleWaveOffset;
-                var waveData   = isN163 ? editInstrument.N163ResampleWaveData   : editInstrument.FdsResampleWaveData;
-
-                var numSamplesPerEnvelopeValue  = wavePeriod / (float)waveSize;
-                var numVerticesPerColumn = (int)(noteSizeX * 0.5f);
-
-                Debug.Assert(numVerticesPerColumn >= 1);
-
-                var line = new List<float>(width);
-                var prevSampleIndex = -1;
-                var prevX = 0.0f;
-                var prevY = 0.0f;
-
-                // Start at -1 to always draw the first little bit in the first 1/2 of the first value.
-                for (var i = -1; i < env.Length; i++)
-                {
-                    var x0 = GetPixelXForAbsoluteNoteIndex(i + 0);
-                    var x1 = GetPixelXForAbsoluteNoteIndex(i + 1);
-
-                    for (var j = 0; j < numVerticesPerColumn; j++)
-                    {
-                        var sampleIndex = (int)Math.Floor(waveOffset + i * numSamplesPerEnvelopeValue + (j * numSamplesPerEnvelopeValue / numVerticesPerColumn));
-                        if (sampleIndex >= 0 && sampleIndex != prevSampleIndex)
-                        {
-                            if (sampleIndex >= waveData.Length)
-                            {
-                                i = env.Length;
-                                break;
-                            }
-
-                            var sample = waveData[sampleIndex];
-                            var val = Utils.Lerp(envTypeMinValue, envTypeMaxValue + 1, (sample + 32768.0f) / 65535.0f);
-
-                            var x = Utils.Lerp(x0, x1, j / (float)numVerticesPerColumn) + noteSizeX * 0.5f;
-                            var y = (virtualSizeY - envelopeValueSizeY * (val + bias)) - scrollY;
-
-                            // Clip line at end.
-                            if (x >= maxX)
-                            {
-                                var ratio = (maxX - prevX) / (x - prevX);
-                                x = Utils.Lerp(prevX, x, ratio);
-                                y = Utils.Lerp(prevY, y, ratio);
-                                i = env.Length;
-                            }
-
-                            line.Add(x);
-                            line.Add(y);
-
-                            prevSampleIndex = sampleIndex;
-                            prevX = x;
-                            prevY = y;
-                        }
-                    }
-                }
-
-                r.c.DrawLine(line, Theme.LightGreyColor2, 1, true);
-            }
-
-            if (editMode == EditionMode.Envelope)
-            {
-                string envelopeString = EnvelopeType.LocalizedNames[editEnvelope];
-
-                if (editEnvelope == EnvelopeType.Pitch)
-                    envelopeString = (editInstrument.Envelopes[editEnvelope].Relative ? EnvelopeRelativeLabel : EnvelopeAbsoluteLabel) + " " + envelopeString;
-
-                r.f.DrawText(EditingInstrumentEnvelopeLabel.Format(editInstrument.Name, envelopeString), r.fonts.FontVeryLarge, bigTextPosX, bigTextPosY, Theme.LightGreyColor1);
-
-                var textY = bigTextPosY + r.fonts.FontVeryLarge.LineHeight;
-
-                if (App.SelectedInstrument != null && App.SelectedInstrument != editInstrument)
-                { 
-                    r.f.DrawText(InstrumentNotSelectedLabel.Format(App.SelectedInstrument.Name), r.fonts.FontMedium, bigTextPosX, textY, Theme.LightRedColor);
-                    textY += r.fonts.FontMedium.LineHeight;
-                }
-                else if (editEnvelope == EnvelopeType.Arpeggio && App.SelectedArpeggio != null)
-                { 
-                    r.f.DrawText(ArpeggioOverriddenLabel.Format(App.SelectedArpeggio.Name), r.fonts.FontMedium, bigTextPosX, textY, Theme.LightRedColor);
-                    textY += r.fonts.FontMedium.LineHeight;
-                }
-
-                if (relativeEffectScaling && IsSelectionValid())
-                { 
-                    r.c.DrawText(RelativeEffectScalingLabel, fonts.FontMedium, bigTextPosX, textY, Theme.LightRedColor);
-                }
-            }
-            else
-            {
-                r.f.DrawText(EditingArpeggioLabel.Format(editArpeggio.Name), r.fonts.FontVeryLarge, bigTextPosX, bigTextPosY, Theme.LightGreyColor1);
-
-                if (App.SelectedArpeggio != editArpeggio)
-                {
-                    r.f.DrawText(App.SelectedArpeggio == null ?
-                        $"{ArpeggioNotSelectedLabel}" :
-                        $"{ArpeggioNotSelectedLabel} {SelectedArpeggioWillBeHeardLabel.Format(App.SelectedArpeggio.Name)}", r.fonts.FontMedium, bigTextPosX, bigTextPosY + r.fonts.FontVeryLarge.LineHeight, Theme.LightRedColor);
-                }
-            }
-
-            var gizmos = GetEnvelopeGizmos();
-            if (gizmos != null)
-            {
-                foreach (var g in gizmos)
-                {
-                    var lineColor = IsGizmoHighlighted(g, 0) ? Color.White : Color.Black;
-
-                    if (g.FillImage != null)
-                        r.f.DrawTextureAtlas(g.FillImage, g.Rect.X, g.Rect.Y, g.Rect.Width / (float)g.Image.ElementSize.Width, color);
-                    r.f.DrawTextureAtlas(g.Image, g.Rect.X, g.Rect.Y, g.Rect.Width / (float)g.Image.ElementSize.Width, lineColor);
-                }
-            }
-        }
-
         private void RenderNoteArea(RenderInfo r)
         {
             var scrollThickness = editMode != EditionMode.VideoRecording ? scrollBarThickness : 0;
@@ -3554,10 +3349,10 @@ namespace FamiStudio
             {
                 RenderNotes(r);
             }
-            else if (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio)
+/*             else if (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio)
             {
                 RenderEnvelopeValues(r);
-            }
+            } */
 
             r.c.PopTransform();
 
@@ -4148,7 +3943,6 @@ namespace FamiStudio
 
         protected override void OnRender(Graphics g)
         {
-            // Init
             var r = new RenderInfo();
 
             var minVisibleNoteIdx = Math.Max(GetAbsoluteNoteIndexForPixelX(0), 0);
@@ -4165,9 +3959,11 @@ namespace FamiStudio
 
             r.maxVisibleNote = NumNotes - Utils.Clamp((int)Math.Floor(scrollY / (float)noteSizeY), minNote, maxNote);
             r.minVisibleNote = NumNotes - Utils.Clamp((int)Math.Ceiling((scrollY + Height - headerAndEffectSizeY) / (float)noteSizeY), minNote, maxNote);
+
             r.maxVisibleOctave = (int)Math.Ceiling(r.maxVisibleNote / 12.0f);
             r.minVisibleOctave = (int)Math.Floor(r.minVisibleNote / 12.0f);
-            r.minVisiblePattern = Utils.Clamp(Song.PatternIndexFromAbsoluteNoteIndex(minVisibleNoteIdx) + 0, 0, Song.Length);
+
+            r.minVisiblePattern = Utils.Clamp(Song.PatternIndexFromAbsoluteNoteIndex(minVisibleNoteIdx), 0, Song.Length);
             r.maxVisiblePattern = Utils.Clamp(Song.PatternIndexFromAbsoluteNoteIndex(maxVisibleNoteIdx) + 1, 0, Song.Length);
 
             if (editMode == EditionMode.DPCM)
@@ -4178,19 +3974,20 @@ namespace FamiStudio
 
             ConditionalUpdateNoteGeometries(g);
 
-            //RenderLineDebug(g); return;
-            //RenderTextDebug(g); return;
-
-            // Prepare command list.
-            //RenderHeader(r);
+            // TODO: This doesn't make sense in the long run, just temporary for refactoring.
+            var envelopeMode = editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio;
 
             if (pianoVisible)
                 RenderEffectList(r);
-                
+
             RenderEffectPanel(r);
-            //RenderPiano(r);
-            RenderNoteArea(r);
-            RenderWaveform(r);
+
+            if (!envelopeMode)
+            {
+                RenderNoteArea(r);
+                RenderWaveform(r);
+            }
+
             RenderScrollBars(r);
             RenderDebug(r);
 
@@ -5090,6 +4887,19 @@ namespace FamiStudio
                         break;
                     case CaptureOperation.Select:
                         PostProcessSelection();
+                        if (Platform.IsMobile && (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio) && IsSelectionValid())
+                        {
+                            if (captureSelectionFromEffectPanel && HasRepeatEnvelope())
+                            {
+                                highlightNoteAbsIndex = selectionMaxX / EditEnvelope.ChunkLength;
+                                highlightRepeatEnvelope = true;
+                            }
+                            else
+                            {
+                                highlightNoteAbsIndex = selectionMaxX;
+                                highlightRepeatEnvelope = false;
+                            }
+                        }
                         break;
                     case CaptureOperation.DragLoop:
                     case CaptureOperation.DragRelease:
@@ -5369,6 +5179,79 @@ namespace FamiStudio
             App.UndoRedoManager.EndTransaction();
 
             MarkDirty();
+        }
+
+        private void ForEachNoteInRange(int minAbsoluteNoteIdx, int maxAbsoluteNoteIdx, Action<Note, int> function)
+        {
+            var channel     = Song.Channels[editChannel];
+            var minLocation = Song.AbsoluteNoteIndexToNoteLocation(minAbsoluteNoteIdx);
+            var maxLocation = Song.AbsoluteNoteIndexToNoteLocation(maxAbsoluteNoteIdx);
+
+            for (var p = minLocation.PatternIndex; p <= maxLocation.PatternIndex; p++)
+            {
+                var pattern = channel.PatternInstances[p];
+
+                if (pattern == null)
+                    continue;
+
+                var patternLen   = Song.GetPatternLength(p);
+                var n0           = p == minLocation.PatternIndex ? minLocation.NoteIndex : 0;
+                var n1           = p == maxLocation.PatternIndex ? maxLocation.NoteIndex : patternLen - 1;
+                var patternStart = Song.GetPatternStartAbsoluteNoteIndex(p);
+
+                for (var it = pattern.GetDenseNoteIterator(n0, n1 + 1); !it.Done; it.Next())
+                {
+                    var note = it.CurrentNote;
+                    if (note != null)
+                        function(note, patternStart + it.CurrentTime);
+                }
+            }
+        }
+
+        private void FindPreviousNotes(int beforeAbsoluteIdx, out int prevAnyIdx, out Note prevAnyNote, out int prevMusicalIdx, out Note prevMusicalNote)
+        {
+            prevAnyIdx = -1;
+            prevAnyNote = null;
+            prevMusicalIdx = -1;
+            prevMusicalNote = null;
+
+            if (beforeAbsoluteIdx <= 0)
+                return;
+
+            var channel  = Song.Channels[editChannel];
+            var location = Song.AbsoluteNoteIndexToNoteLocation(beforeAbsoluteIdx - 1);
+
+            for (var p = location.PatternIndex; p >= 0; p--)
+            {
+                var pattern = channel.PatternInstances[p];
+
+                if (pattern == null)
+                    continue;
+
+                var n1           = p == location.PatternIndex ? location.NoteIndex + 1 : Song.GetPatternLength(p);
+                var patternStart = Song.GetPatternStartAbsoluteNoteIndex(p);
+
+                for (var it = pattern.GetDenseNoteIterator(0, n1, true); !it.Done; it.Next())
+                {
+                    var note = it.CurrentNote;
+
+                    if (note == null)
+                        continue;
+
+                    if (prevAnyNote == null)
+                    {
+                        prevAnyIdx  = patternStart + it.CurrentTime;
+                        prevAnyNote = note;
+                    }
+
+                    if (note.IsMusical)
+                    {
+                        prevMusicalIdx  = patternStart + it.CurrentTime;
+                        prevMusicalNote = note;
+                        return;
+                    }
+                }
+            }
         }
 
         private void TransformNotes(int minAbsoluteNoteIdx, int maxAbsoluteNoteIdx, bool doTransaction, bool doPatternChangeEvent, bool createMissingPatterns, Func<Note, int, Note> function)
@@ -5803,7 +5686,7 @@ namespace FamiStudio
             return list;
         }
 
-        private List<Gizmo> GetEnvelopeGizmos()
+        internal List<Gizmo> GetEnvelopeGizmos()
         {
             if (Platform.IsDesktop)
                 return null;
@@ -6269,42 +6152,6 @@ namespace FamiStudio
             ResizeEnvelope(x, y, false);
         }
 
-        private bool HandleMouseDownEnvelopeResize(PointerEventArgs e)
-        {
-            if (e.Left && IsPointWhereCanResizeEnvelope(e.X, e.Y) && EditEnvelope.CanResize)
-            {
-                StartResizeEnvelope(e.X, e.Y);
-                return true;
-            }
-
-            return false;
-        }
-
-        private bool HandleMouseDownEnvelopeLoopRelease(PointerEventArgs e)
-        {
-            var env = EditEnvelope;
-            var rep = EditRepeatEnvelope;
-
-            var canLoop    = env.CanLoop    || (rep != null && rep.CanLoop);
-            var canRelease = env.CanRelease || (rep != null && rep.CanRelease);
-
-            if (((e.Left && canLoop) || (e.Right && canRelease && EditEnvelope.Loop >= 0)) && IsPointInHeaderBottomPart(e.X, e.Y))
-            {
-                CaptureOperation op = e.Left ? CaptureOperation.DragLoop : CaptureOperation.DragRelease;
-                StartCaptureOperation(e.X, e.Y, op);
-
-                if (editMode == EditionMode.Envelope)
-                    App.UndoRedoManager.BeginTransaction(TransactionScope.Instrument, editInstrument.Id);
-                else
-                    App.UndoRedoManager.BeginTransaction(TransactionScope.Arpeggio, editArpeggio.Id);
-
-                ResizeEnvelope(e.X, e.Y, false);
-                return true;
-            }
-
-            return false;
-        }
-
         private void StartDrawEnvelope(int x, int y)
         {
             StartCaptureOperation(x, y, CaptureOperation.DrawEnvelope);
@@ -6618,8 +6465,6 @@ namespace FamiStudio
             {
                 if (HandleMouseDownEnvelopeEffectPanel(e)) goto Handled;
                 if (HandleMouseDownEnvelopeSelection(e)) goto Handled;
-                if (HandleMouseDownEnvelopeResize(e)) goto Handled;
-                if (HandleMouseDownEnvelopeLoopRelease(e)) goto Handled;
                 if (HandleMouseDownDrawEnvelope(e)) goto Handled;
             }
 
@@ -7805,7 +7650,7 @@ namespace FamiStudio
             if (captureOperation != CaptureOperation.None)
             {
                 Debug.Assert(captureOperation != CaptureOperation.MobileZoomVertical && captureOperation != CaptureOperation.MobileZoom);
-                AbortCaptureOperation();
+                AbortCaptureOperation(true);
             }
 
             StartCaptureOperation(x, y, vertical ? CaptureOperation.MobileZoomVertical : CaptureOperation.MobileZoom);
@@ -7850,8 +7695,6 @@ namespace FamiStudio
         {
             var x = e.X;
             var y = e.Y;
-
-            Debug.WriteLine($"OnTouchDown {x} {y}");
 
             SetFlingVelocity(0, 0);
             SetMouseLastPos(x, y);
@@ -7905,8 +7748,6 @@ namespace FamiStudio
             var x = e.X;
             var y = e.Y;
 
-            Debug.WriteLine($"OnTouchMove {x} {y} {captureOperation}");
-
             UpdateCaptureOperation(x, y);
             SetMouseLastPos(x, y);
         }
@@ -7915,8 +7756,6 @@ namespace FamiStudio
         {
             var x = e.X;
             var y = e.Y;
-
-            Debug.WriteLine($"OnTouchUp {x} {y} {captureOperation}");
 
             // In the modern select mode, we use long press release for the context menu here.
             var context = !legacySelectMode && e.IsLongPress && captureOperation == CaptureOperation.Select && !captureThresholdMet;
@@ -7931,11 +7770,33 @@ namespace FamiStudio
 
         protected override void OnTouchFling(PointerEventArgs e)
         {
+            HandleTouchFling(e.X, e.Y, e.FlingVelocityX, e.FlingVelocityY);
+        }
+
+        public void HandleTouchFling(int x, int y, float velX, float velY)
+        {
             if (canFling)
             {
-                EndCaptureOperation(e.X, e.Y);
-                SetFlingVelocity(e.FlingVelocityX, e.FlingVelocityY);
+                EndCaptureOperation(x, y);
+                SetFlingVelocity(velX, velY);
             }
+        }
+
+        public void HandleTouchScaleBegin(int x, int y, bool vertical)
+        {
+            StartMobileZoom(x, y, vertical);
+        }
+
+        public void HandleTouchScale(int x, int y, float scale)
+        {
+            UpdateCaptureOperation(x, y, scale);
+            SetMouseLastPos(x, y);
+        }
+
+        public void HandleTouchScaleEnd(int x, int y)
+        {
+            EndCaptureOperation(x, y);
+            SetMouseLastPos(x, y);
         }
 
         protected override void OnTouchScaleBegin(PointerEventArgs e)
@@ -8004,8 +7865,6 @@ namespace FamiStudio
         {
             var x = e.X;
             var y = e.Y;
-
-            Debug.WriteLine($"OnTouchDoubleClick {x} {y}");
 
             SetMouseLastPos(x, y);
 
@@ -8316,7 +8175,8 @@ namespace FamiStudio
 
             captureSelectedNoteIndices.Clear();
 
-            if (!legacySelectMode && ModifierKeys.IsControlDown && editMode == EditionMode.Channel)
+            var keepLast = !legacySelectMode && (ModifierKeys.IsControlDown || (Platform.IsMobile && Settings.RetainPreviousSelection));
+            if (keepLast && editMode == EditionMode.Channel)
             {
                 foreach (var idx in selectedNoteIndices)
                     captureSelectedNoteIndices.Add(selectionMinX + idx);
@@ -8324,7 +8184,7 @@ namespace FamiStudio
 
             captureSelectedEffectIndices.Clear();
 
-            if (!legacySelectMode && ModifierKeys.IsControlDown && editMode == EditionMode.Channel && captureSelectionFromEffectPanel)
+            if (keepLast && editMode == EditionMode.Channel && captureSelectionFromEffectPanel)
             {
                 foreach (var idx in selectedEffectIndices)
                     captureSelectedEffectIndices.Add(idx);
@@ -8332,7 +8192,7 @@ namespace FamiStudio
 
             captureSelectedEnvelopeIndices.Clear();
 
-            if (!legacySelectMode && ModifierKeys.IsControlDown && (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio))
+            if (keepLast && (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio))
             {
                 foreach (var idx in selectedEnvelopeIndices)
                     captureSelectedEnvelopeIndices.Add(idx);
@@ -8374,11 +8234,13 @@ namespace FamiStudio
 
             captureMarqueeMinX = marqueeMinX;
             captureMarqueeMaxX = marqueeMaxX;
+
+            var keepLast = ModifierKeys.IsControlDown || (Platform.IsMobile && Settings.RetainPreviousSelection);
             
             // Envelope and arpeggio selection supports using CTRL for separate selections.
             if (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio)
             {
-                var result = ModifierKeys.IsControlDown ? new HashSet<int>(captureSelectedEnvelopeIndices) : new HashSet<int>();
+                var result = keepLast ? new HashSet<int>(captureSelectedEnvelopeIndices) : new HashSet<int>();
 
                 var min = Math.Max(marqueeMinX, 0);
                 var max = Math.Min(marqueeMaxX, EditEnvelope.Length - 1);
@@ -8422,7 +8284,7 @@ namespace FamiStudio
             {
                 selectedNoteIndices.Clear();
 
-                var result = ModifierKeys.IsControlDown ? new HashSet<int>(captureSelectedEffectIndices) : new HashSet<int>();
+                var result = keepLast ? new HashSet<int>(captureSelectedEffectIndices) : new HashSet<int>();
                 var channel = Song.Channels[editChannel];
                 var minLocation = NoteLocation.FromAbsoluteNoteIndex(Song, marqueeMinX);
                 var maxLocation = NoteLocation.FromAbsoluteNoteIndex(Song, marqueeMaxX);
@@ -8468,12 +8330,10 @@ namespace FamiStudio
 
             if (captureSelectionFromHeader)
             {
-                TransformNotes(marqueeMinX, marqueeMaxX, false, false, false, (note, idx) =>
+                ForEachNoteInRange(marqueeMinX, marqueeMaxX, (note, idx) =>
                 {
-                    if (note != null && !note.IsEmpty)
-                        notesInMarquee.Add(marqueeMinX + idx);
-
-                    return note;
+                    if (!note.IsEmpty)
+                        notesInMarquee.Add(idx);
                 });
             }
             else
@@ -8486,26 +8346,52 @@ namespace FamiStudio
                 captureMarqueeMinY = marqueeMinY;
                 captureMarqueeMaxY = marqueeMaxY;
 
-                TransformNotes(0, marqueeMaxX, false, false, false, (note, idx) =>
+                FindPreviousNotes(marqueeMinX, out var prevAnyIdx, out var prevAnyNote, out var lastMusicalIdx, out var lastMusicalNote);
+
+                if (prevAnyNote != null && prevAnyNote.IsMusical && prevAnyNote.Value >= marqueeMinY && prevAnyNote.Value <= marqueeMaxY)
                 {
-                    if (note != null && note.IsMusical && note.Value >= marqueeMinY && note.Value <= marqueeMaxY)
+                    var duration = GetVisualNoteDuration(prevAnyIdx, prevAnyNote);
+                    var noteEnd = prevAnyIdx + duration - 1;
+
+                    if (noteEnd >= marqueeMinX)
+                        notesInMarquee.Add(prevAnyIdx);
+                }
+
+                ForEachNoteInRange(marqueeMinX, marqueeMaxX, (note, idx) =>
+                {
+                    if (note.IsMusical)
                     {
-                        var noteAbsoluteIdx = idx;
-                        var duration = GetVisualNoteDuration(noteAbsoluteIdx, note);
-                        var noteEnd = noteAbsoluteIdx + duration - 1;
-
-                        // Add note to selection if any part of it is within the rectangle bounds.
-                        if (noteAbsoluteIdx <= marqueeMaxX && noteEnd >= marqueeMinX)
+                        if (note.Value >= marqueeMinY && note.Value <= marqueeMaxY)
                         {
-                            notesInMarquee.Add(noteAbsoluteIdx);
-                        }
-                    }
+                            var duration = GetVisualNoteDuration(idx, note);
+                            var noteEnd = idx + duration - 1;
 
-                    return note;
+                            if (idx <= marqueeMaxX && noteEnd >= marqueeMinX)
+                                notesInMarquee.Add(idx);
+                        }
+
+                        lastMusicalIdx = idx;
+                        lastMusicalNote = note;
+                    }
+                    else if (note.IsStop)
+                    {
+                        // A stop note will always be positioned at C4 unless it follows a musical note.
+                        var stopY = Note.MusicalNoteC4;
+
+                        if (lastMusicalNote != null)
+                        {
+                            var prevDuration = GetVisualNoteDuration(lastMusicalIdx, lastMusicalNote);
+                            if (lastMusicalIdx + prevDuration == idx)
+                                stopY = lastMusicalNote.Value;
+                        }
+
+                        if (stopY >= marqueeMinY && stopY <= marqueeMaxY && idx <= marqueeMaxX && idx >= marqueeMinX)
+                            notesInMarquee.Add(idx);
+                    }
                 });
             }
 
-            if (ModifierKeys.IsControlDown)
+            if (keepLast)
             {
                 var result = new HashSet<int>(captureSelectedNoteIndices);
 
@@ -10955,6 +10841,14 @@ namespace FamiStudio
             MarkDirty();
         }
 
+        public override void OnContainerMouseWheelNotify(Control control, PointerEventArgs e)
+        {
+            if (e.ScrollX != 0)
+                OnMouseHorizontalWheel(e);
+            else
+                OnMouseWheel(e);
+        }
+
         public void UpdateFollowMode(bool force = false)
         {
             continuouslyFollowing = false;
@@ -11093,7 +10987,7 @@ namespace FamiStudio
             return null;
         }
 
-        private bool GetEnvelopeValueForCoord(int x, int y, out int idx, out sbyte value)
+        public bool GetEnvelopeValueForCoord(int x, int y, out int idx, out sbyte value)
         {
             if (Platform.IsDesktop)
             {

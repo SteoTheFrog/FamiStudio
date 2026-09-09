@@ -91,7 +91,6 @@ namespace FamiStudio
         LocalizedString ShowRegisterViewerTooltip;
         LocalizedString DimUnsupportedChannelsTooltip;
         LocalizedString UseLegacySelectionModeTooltip;
-        LocalizedString RetainPreviousSelectionTooltip;
         LocalizedString UseOSDialogsTooltip;
         LocalizedString SystemOption;
 
@@ -175,6 +174,7 @@ namespace FamiStudio
         // Mobile tooltips
         LocalizedString AllowVibrationTooltip;
         LocalizedString ForceLandscapeTooltip;
+        LocalizedString RetainPreviousSelectionTooltip;
         LocalizedString MobilePianoSizeTooltip;
 
         // Mobile labels
@@ -302,8 +302,7 @@ namespace FamiStudio
                     page.AddCheckBox(ShowRegisterViewerLabel.Colon, Settings.ShowRegisterViewer, ShowRegisterViewerTooltip); // 10
                     page.AddCheckBox(DimUnsupportedChannelsLabel.Colon, Settings.DimUnsupportedChannels, DimUnsupportedChannelsTooltip); // 11
                     page.AddCheckBox(UseLegacySelectionModeLabel.Colon, Settings.UseLegacySelectionMode, UseLegacySelectionModeTooltip); // 12
-                    page.AddCheckBox(RetainPreviousSelectionLabel.Colon, Settings.RetainPreviousSelection, RetainPreviousSelectionTooltip); // 13
-                    page.AddCheckBox(UseOSDialogsLabel.Colon, Settings.UseOSDialogs, UseOSDialogsTooltip); // 14
+                    page.AddCheckBox(UseOSDialogsLabel.Colon, Settings.UseOSDialogs, UseOSDialogsTooltip); // 13
                         
                     page.SetPropertyEnabled(7, !Settings.AllowSequencerVerticalScroll);
                     
@@ -311,8 +310,7 @@ namespace FamiStudio
                     page.SetPropertyVisible(5, Platform.IsDesktop);
                     page.SetPropertyVisible(7, Platform.IsDesktop);
                     page.SetPropertyVisible(8, Platform.IsDesktop);
-                    page.SetPropertyVisible(13, Platform.IsMobile);
-                    page.SetPropertyVisible(14, Platform.IsDesktop);
+                    page.SetPropertyVisible(13, Platform.IsDesktop);
                     page.PropertyChanged += UserInterfacePage_PropertyChanged;
                     break;
                 }
@@ -392,7 +390,8 @@ namespace FamiStudio
                 { 
                     page.AddCheckBox(AllowVibrationLabel.Colon, Settings.AllowVibration, AllowVibrationTooltip); // 0
                     page.AddCheckBox(ForceLandscapeLabel.Colon, Settings.ForceLandscape, ForceLandscapeTooltip); // 1
-                    page.AddDropDownList(MobilePianoSizeLabel.Colon, new[] { "25%", "30%", "35%", "40%", "45%", "50%" }, $"{Settings.MobilePianoHeight}%", MobilePianoSizeTooltip); // 2
+                    page.AddCheckBox(RetainPreviousSelectionLabel.Colon, Settings.RetainPreviousSelection, RetainPreviousSelectionTooltip); // 2
+                    page.AddDropDownList(MobilePianoSizeLabel.Colon, new[] { "25%", "30%", "35%", "40%", "45%", "50%" }, $"{Settings.MobilePianoHeight}%", MobilePianoSizeTooltip); // 3
                     break;
                 }
             }
@@ -599,8 +598,7 @@ namespace FamiStudio
                     Settings.ShowRegisterViewer = pageUI.GetPropertyValue<bool>(10);
                     Settings.DimUnsupportedChannels = pageUI.GetPropertyValue<bool>(11);
                     Settings.UseLegacySelectionMode = pageUI.GetPropertyValue<bool>(12);
-                    Settings.RetainPreviousSelection = pageUI.GetPropertyValue<bool>(13);
-                    Settings.UseOSDialogs = pageUI.GetPropertyValue<bool>(14);
+                    Settings.UseOSDialogs = pageUI.GetPropertyValue<bool>(13);
 
                     // Sound
                     var newAudioApi = pageSound.GetPropertyValue<string>(0);
@@ -663,7 +661,8 @@ namespace FamiStudio
                     // Mobile
                     Settings.AllowVibration = pageMobile.GetPropertyValue<bool>(0);
                     Settings.ForceLandscape = pageMobile.GetPropertyValue<bool>(1);
-                    Settings.MobilePianoHeight = Utils.Clamp(Utils.ParseIntWithTrailingGarbage(pageMobile.GetPropertyValue<string>(2)), 25, 50);
+                    Settings.RetainPreviousSelection = pageMobile.GetPropertyValue<bool>(2);
+                    Settings.MobilePianoHeight = Utils.Clamp(Utils.ParseIntWithTrailingGarbage(pageMobile.GetPropertyValue<string>(3)), 25, 50);
 
                     Settings.Save();
                     Settings.NotifyKeyboardShortcutsChanged();

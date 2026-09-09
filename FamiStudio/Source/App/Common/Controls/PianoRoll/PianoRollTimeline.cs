@@ -11,6 +11,7 @@ namespace FamiStudio
 
         public enum EditMode
         {
+            None,
             Channel,
             Envelope,
             Arpeggio,
@@ -58,6 +59,9 @@ namespace FamiStudio
         private DPCMSample EditSample => pianoRoll.EditSample;
 
         internal int EnvelopeResizeWidth => bmpEnvResize.ElementSize.Width;
+
+        public PointerEventDelegate SeekDragRequested;
+        public PointerEventDelegate SelectionRequested;
 
         LocalizedString SeekTooltip;
         LocalizedString SelectTooltip;
@@ -205,6 +209,17 @@ namespace FamiStudio
             return (int)(x / (double)NoteSizeX);
         }
 
+        private bool IsPointOnSeekBar(int x)
+        {
+            var seekX = GetPixelXForAbsoluteNoteIndex(pianoRoll.GetSeekFrameToDraw());
+
+            // Legacy mode keeps the old uber code's generous grab zone (the whole header height),
+            // modern mode uses the tighter, more precise margin the sequencer's timeline uses.
+            var margin = pianoRoll.LegacySelectMode ? Height : DpiScaling.ScaleForWindow(12);
+
+            return Math.Abs(x - seekX) < margin;
+        }
+
         private float GetPixelForWaveTime(float time, int scroll = 0)
         {
             var viewTime = DefaultZoomWaveTime / Zoom;
@@ -252,7 +267,7 @@ namespace FamiStudio
                 CapturePointer();
 
                 var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
-                pianoRoll.StartTimelinePan(p.X, p.Y);
+                pianoRoll.StartTimelineOrEffectPan(p.X, p.Y);
                 return;
             }
 
@@ -261,10 +276,7 @@ namespace FamiStudio
             if (editMode == EditMode.Envelope || editMode == EditMode.Arpeggio)
             {
                 if (pianoRoll.HandleTimelineEnvelopePointerDown(pos.X, pos.Y, e.Left, e.Right))
-                {
-                    CapturePointer();
                     return;
-                }
 
                 if (e.Left)
                 {
@@ -281,7 +293,25 @@ namespace FamiStudio
 
             if (editMode == EditMode.Channel && e.Left)
             {
-                pianoRoll.StartTimelineSeek(pos.X, pos.Y);
+                if (!e.IsTouchEvent)
+                {
+                    pianoRoll.StartTimelineSeek(pos.X, pos.Y);
+                    return;
+                }
+
+                if (IsPointOnSeekBar(e.X))
+                {
+                    CapturePointer();
+                    SeekDragRequested?.Invoke(this, e);
+                }
+
+                return;
+            }
+
+            if (editMode == EditMode.Dpcm && e.Left)
+            {
+                CapturePointer();
+                pianoRoll.StartTimelineSelection(pos.X, pos.Y);
                 return;
             }
 
@@ -293,17 +323,25 @@ namespace FamiStudio
         {
             base.OnPointerUp(e);
 
-            if (e.Right && !pianoRoll.TimelineCaptureThresholdMet)
+            if (e.Right || e.IsLongPress)
             {
-                if (editMode == EditMode.Channel)
+                if (!pianoRoll.TimelineCaptureThresholdMet)
                 {
-                    ShowContextMenu(e.X, e.Y);
+                    if (editMode == EditMode.Channel)
+                    {
+                        ShowContextMenu(e.X, e.Y);
+                    }
+                    else if ((editMode == EditMode.Envelope || editMode == EditMode.Arpeggio) && !pianoRoll.IsTimelineEnvelopeCapture)
+                    {
+                        var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+                        pianoRoll.HandleContextMenuEnvelope(p.X, p.Y);
+                    }
                 }
-                else if ((editMode == EditMode.Envelope || editMode == EditMode.Arpeggio) && !pianoRoll.IsTimelineEnvelopeCapture)
-                {
-                    var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
-                    pianoRoll.HandleContextMenuEnvelope(p.X, p.Y);
-                }
+            }
+            else if (editMode == EditMode.Channel && e.IsTouchEvent)
+            {
+                var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+                pianoRoll.HandleTouchClickHeaderSeek(p.X, p.Y);
             }
 
             if (pianoRoll.IsTimelineSeekCapture ||
@@ -332,6 +370,10 @@ namespace FamiStudio
             else if (pianoRoll.IsTimelinePanCapture)
             {
                 pianoRoll.UpdateTimelinePan(p.X, p.Y);
+            }
+            else if (pianoRoll.IsTimelineSeekCapture)
+            {
+                pianoRoll.UpdateTimelineCapture(p.X, p.Y);
             }
             else if (editMode == EditMode.Envelope || editMode == EditMode.Arpeggio)
             {
@@ -374,6 +416,17 @@ namespace FamiStudio
         {
             base.OnPointerDownDelayed(e);
 
+            if (e.IsTouchEvent)
+            {
+                if (editMode == EditMode.Channel && pianoRoll.LegacySelectMode)
+                {
+                    CapturePointer();
+                    SelectionRequested?.Invoke(this, e);
+                }
+
+                return;
+            }
+
             if (e.Right)
             {
                 CapturePointer();
@@ -387,13 +440,30 @@ namespace FamiStudio
         {
             base.OnTouchLongPress(e);
 
+            if (e.IsDoubleTapLongPress)
+                return;
+
+            if (editMode == EditMode.Channel)
+            {
+                if (pianoRoll.LegacySelectMode)
+                {
+                    ShowContextMenu(e.X, e.Y);
+                }
+                else
+                {
+                    Platform.VibrateClick();
+                    CapturePointer();
+                    SelectionRequested?.Invoke(this, e);
+                }
+
+                return;
+            }
+
             pianoRoll.AbortTimelineCapture(true);
 
             var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
 
-            if (editMode == EditMode.Channel)
-                ShowContextMenu(p.X, p.Y);
-            else if (editMode == EditMode.Envelope || editMode == EditMode.Arpeggio)
+            if (editMode == EditMode.Envelope || editMode == EditMode.Arpeggio)
                 pianoRoll.HandleContextMenuEnvelope(p.X, p.Y);
         }
 

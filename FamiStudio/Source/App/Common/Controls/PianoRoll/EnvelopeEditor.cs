@@ -104,8 +104,12 @@ namespace FamiStudio
 
                 if (right && canRelease && env.Loop >= 0)
                 {
-                    pianoRoll.StartEnvelopeLoopRelease(x, y, false);
-                    return true;
+                    var length = Utils.RoundDown(pianoRoll.GetAbsoluteNoteIndexForPixelX(x - pianoRoll.PianoSizeX), env.ChunkLength);
+                    if (length > env.Loop)
+                    {
+                        pianoRoll.StartEnvelopeLoopRelease(x, y, false);
+                        return true;
+                    }
                 }
             }
 
@@ -169,10 +173,9 @@ namespace FamiStudio
                     pianoRoll.StartMobilePan(pos.X, pos.Y);
                     return;
                 }
-                else if (pianoRoll.StartEnvelopeDraw(pos.X, pos.Y))
-                {
-                    return;
-                }
+
+                pianoRoll.StartEnvelopeDraw(pos.X, pos.Y);
+                return;
             }
 
             if (e.Right)
@@ -190,19 +193,6 @@ namespace FamiStudio
                 var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
                 pianoRoll.StartTimelineSelection(p.X, p.Y);
             }
-        }
-
-        protected override void OnTouchLongPress(PointerEventArgs e)
-        {
-            base.OnTouchLongPress(e);
-
-            if (pianoRoll.IsChangingEnvelopeValue)
-                return;
-
-            pianoRoll.AbortTimelineCapture(true);
-
-            var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
-            pianoRoll.StartEnvelopeFreeDraw(p.X, p.Y);
         }
 
         protected override void OnTouchFling(PointerEventArgs e)

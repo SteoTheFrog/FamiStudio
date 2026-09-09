@@ -5,6 +5,14 @@ namespace FamiStudio
 {
     public class Button : Control
     {
+        public enum TextPosition
+        {
+            Right,
+            Bottom,
+            Left,
+            Top
+        }
+
         public delegate string StringDelegate(Control sender);
         public delegate string ImageDelegate(Control sender, ref Color tint);
         public delegate bool BoolDelegate(Control sender);
@@ -36,9 +44,9 @@ namespace FamiStudio
         private bool handleOnClick = true;
         private bool vibrateOnClick;
         private bool vibrateOnRightClick;
-        private bool bottomText;
         private byte dimming = 64;
         private byte margin = 4;
+        private TextPosition textPosition = TextPosition.Right;
         private Font font;
         private Size scaledImageSize;
         private TextureAtlasRef bmp;
@@ -138,10 +146,10 @@ namespace FamiStudio
             set { SetAndMarkDirty(ref whiteHighlight, value); }
         }
 
-        public bool BottomText 
+        public TextPosition TextAlign
         {
-            get { return bottomText; }
-            set { SetAndMarkDirty(ref bottomText, value); }
+            get { return textPosition; }
+            set { SetAndMarkDirtyEnum(ref textPosition, value); }
         }
 
         public int Margin 
@@ -180,7 +188,7 @@ namespace FamiStudio
         {
             if (!string.IsNullOrEmpty(text) && !string.IsNullOrEmpty(imageName))
             {
-                Debug.Assert(!bottomText);
+                Debug.Assert(textPosition == TextPosition.Right || textPosition == TextPosition.Left);
                 width = GetScaledMargin() * 3 + scaledImageSize.Width + GetFontInternal().MeasureString(text, false);
             }
             else if (!string.IsNullOrEmpty(imageName))
@@ -377,16 +385,29 @@ namespace FamiStudio
             else if (hasText && bmp != null)
             {
                 var localMargin = GetScaledMargin();
+                var clipOrNone = ellipsis ? TextFlags.Ellipsis : TextFlags.Clip;
 
-                if (bottomText)
+                switch (textPosition)
                 {
-                    c.DrawTextureAtlas(bmp, (width - scaledImageSize.Width) / 2, localMargin, imageScale, localFgColor);
-                    c.DrawText(localText, localFont, 0, scaledImageSize.Height + localMargin, localFgColor, TextFlags.TopCenter | (ellipsis ? TextFlags.Ellipsis : TextFlags.Clip), width, height - scaledImageSize.Height - localMargin);
-                }
-                else
-                {
-                    c.DrawTextureAtlas(bmp, localMargin, (height - scaledImageSize.Height) / 2, imageScale, localFgColor);
-                    c.DrawText(localText, localFont, scaledImageSize.Width + localMargin * 2, 0, localFgColor, TextFlags.MiddleLeft | (ellipsis ? TextFlags.Ellipsis : TextFlags.Clip), width - scaledImageSize.Width - localMargin * 2, height);
+                    case TextPosition.Bottom:
+                        c.DrawTextureAtlas(bmp, (width - scaledImageSize.Width) / 2, localMargin, imageScale, localFgColor);
+                        c.DrawText(localText, localFont, 0, scaledImageSize.Height + localMargin, localFgColor, TextFlags.TopCenter | clipOrNone, width, height - scaledImageSize.Height - localMargin);
+                        break;
+
+                    case TextPosition.Top:
+                        c.DrawTextureAtlas(bmp, (width - scaledImageSize.Width) / 2, height - scaledImageSize.Height - localMargin, imageScale, localFgColor);
+                        c.DrawText(localText, localFont, 0, 0, localFgColor, TextFlags.BottomCenter | clipOrNone, width, height - scaledImageSize.Height - localMargin);
+                        break;
+
+                    case TextPosition.Left:
+                        c.DrawTextureAtlas(bmp, width - scaledImageSize.Width - localMargin, (height - scaledImageSize.Height) / 2, imageScale, localFgColor);
+                        c.DrawText(localText, localFont, 0, 0, localFgColor, TextFlags.MiddleRight | clipOrNone, width - scaledImageSize.Width - localMargin * 2, height);
+                        break;
+
+                    default:
+                        c.DrawTextureAtlas(bmp, localMargin, (height - scaledImageSize.Height) / 2, imageScale, localFgColor);
+                        c.DrawText(localText, localFont, scaledImageSize.Width + localMargin * 2, 0, localFgColor, TextFlags.MiddleLeft | clipOrNone, width - scaledImageSize.Width - localMargin * 2, height);
+                        break;
                 }
             }
 

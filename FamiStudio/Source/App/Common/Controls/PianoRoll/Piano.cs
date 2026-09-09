@@ -188,6 +188,15 @@ namespace FamiStudio
         {
             base.OnTouchScaleBegin(e);
 
+            // The piano shouldn't be playing notes while we are trying to resize it.
+            if (playing)
+            {
+                playing = false;
+                App.StopInstrument();
+                lastNote = -1;
+                HighlightNote = Note.NoteInvalid;
+            }
+
             var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
             pianoRoll.HandleTouchScaleBegin(p.X, p.Y, true);
         }

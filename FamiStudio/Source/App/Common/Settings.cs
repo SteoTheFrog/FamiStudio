@@ -74,7 +74,6 @@ namespace FamiStudio
         public static bool ShowRegisterViewer = Platform.IsDesktop;
         public static bool DimUnsupportedChannels = true;
         public static bool UseLegacySelectionMode = false;
-        public static bool RetainPreviousSelection = false;
         public static bool UseOSDialogs;
 
         // Input section
@@ -240,6 +239,7 @@ namespace FamiStudio
         // Mobile section
         public static bool AllowVibration = true;
         public static bool ForceLandscape = false;
+        public static bool RetainPreviousSelection = false;
         public static int  MobilePianoHeight = 25;
 
         // Piano roll stuff
@@ -454,7 +454,6 @@ namespace FamiStudio
             ShowRegisterViewer = ini.GetBool("UI", "ShowRegisterViewer", Platform.IsDesktop);
             DimUnsupportedChannels = ini.GetBool("UI", "DimUnsupportedChannels", true);
             UseLegacySelectionMode = ini.GetBool("UI", "UseLegacySelectionMode", false);
-            RetainPreviousSelection = ini.GetBool("UI", "RetainPreviousSelection", false);
             UseOSDialogs = ini.GetBool("UI", "UseOSDialogs", true);
 
             // Input
@@ -617,6 +616,7 @@ namespace FamiStudio
             // Mobile section
             AllowVibration = ini.GetBool("Mobile", "AllowVibration", true);
             ForceLandscape = ini.GetBool("Mobile", "ForceLandscape", false);
+            RetainPreviousSelection = ini.GetBool("UI", "RetainPreviousSelection", false);
             MobilePianoHeight = ini.GetInt("Mobile", "MobilePianoHeight", 25);
 
             // Piano roll section
@@ -695,7 +695,6 @@ namespace FamiStudio
             ini.SetBool("UI", "ShowRegisterViewer", ShowRegisterViewer);
             ini.SetBool("UI", "DimUnsupportedChannels", DimUnsupportedChannels);
             ini.SetBool("UI", "UseLegacySelectionMode", UseLegacySelectionMode);
-            ini.SetBool("UI", "RetainPreviousSelection", RetainPreviousSelection);
             ini.SetBool("UI", "UseOSDialogs", UseOSDialogs);
 
             // Input
@@ -764,6 +763,7 @@ namespace FamiStudio
             // Mobile
             ini.SetBool("Mobile", "AllowVibration", AllowVibration);
             ini.SetBool("Mobile", "ForceLandscape", ForceLandscape);
+            ini.SetBool("UI", "RetainPreviousSelection", RetainPreviousSelection);
             ini.SetInt("Mobile", "MobilePianoHeight", MobilePianoHeight);
 
             // Piano roll section

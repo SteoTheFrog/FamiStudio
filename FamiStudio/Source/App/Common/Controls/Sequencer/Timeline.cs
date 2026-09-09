@@ -41,6 +41,7 @@ namespace FamiStudio
         private bool HasTimelineSelection        => sequencer.HasTimelineSelection;
         private bool LegacySelectMode            => sequencer.LegacySelectMode;
         private bool IsColumnSelectionCapture    => sequencer.IsColumnSelectionCapture;
+        private bool IsSeekDragCapture           => sequencer.IsSeekDragCapture;
         private bool ColumnSelectionThresholdMet => sequencer.ColumnSelectionThresholdMet;
 
         private int ChannelNameSizeX    => sequencer.ChannelNameSizeX;
@@ -211,6 +212,7 @@ namespace FamiStudio
         {
             base.OnPointerUp(e);
             var columnSelection = IsColumnSelectionCapture;
+            var seekDrag        = IsSeekDragCapture;
 
             if (e.Right || e.IsLongPress)
             {
@@ -227,6 +229,11 @@ namespace FamiStudio
                 var p = sequencer.WindowToControl(ControlToWindow(e.Position));
                 sequencer.EndColumnSelection(p.X, p.Y);
             }
+            else if (seekDrag)
+            {
+                var p = sequencer.WindowToControl(ControlToWindow(e.Position));
+                sequencer.EndSeekBarDrag(p.X, p.Y);
+            }
         }
 
         protected override void OnPointerMove(PointerEventArgs e)
@@ -238,6 +245,11 @@ namespace FamiStudio
             {
                 var p = sequencer.WindowToControl(ControlToWindow(e.Position));
                 sequencer.UpdateColumnSelection(p.X, p.Y);
+            }
+            else if (IsSeekDragCapture)
+            {
+                var p = sequencer.WindowToControl(ControlToWindow(e.Position));
+                sequencer.UpdateSeekBarDrag(p.X, p.Y);
             }
         }
 

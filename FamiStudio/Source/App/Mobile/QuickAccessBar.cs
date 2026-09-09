@@ -94,7 +94,7 @@ namespace FamiStudio
             button.Visible = false;
             button.ImageScale = iconScaleFloat;
             button.Transparent = true;
-            button.BottomText = true;
+            button.TextAlign = Button.TextPosition.Bottom;
             button.Ellipsis = true;
             button.Margin = 1;
             button.Font = buttonFont;

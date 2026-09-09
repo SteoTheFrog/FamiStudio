@@ -158,6 +158,7 @@ namespace FamiStudio
 
         internal bool HasSelection                => IsSelectionValid();
         internal bool IsColumnSelectionCapture    => captureOperation == CaptureOperation.SelectColumn;
+        internal bool IsSeekDragCapture           => captureOperation == CaptureOperation.DragSeekBar;
         internal bool IsDragSelectionCapture      => captureOperation == CaptureOperation.DragSelection;
         internal bool IsRectangleSelectionCapture => captureOperation == CaptureOperation.SelectRectangle;
         internal bool IsTimeOnlySelection         => timeOnlySelection;
@@ -1263,7 +1264,8 @@ namespace FamiStudio
         private void Timeline_SeekDragRequested(Control sender, PointerEventArgs e)
         {
             var p = WindowToControl(timeline.ControlToWindow(e.Position));
-            StartCaptureOperation(p.X, p.Y, CaptureOperation.DragSeekBar);
+            // Timeline already captured itself before raising this, so don't capture again.
+            StartCaptureOperation(p.X, p.Y, CaptureOperation.DragSeekBar, capturePointer: false);
             UpdateSeekDrag(p.X, p.Y, false);
         }
 
@@ -2696,6 +2698,20 @@ namespace FamiStudio
         internal void EndColumnSelection(int x, int y)
         {
             if (captureOperation != CaptureOperation.SelectColumn)
+                return;
+
+            EndCaptureOperation(x, y);
+        }
+
+        internal void UpdateSeekBarDrag(int x, int y)
+        {
+            if (IsSeekDragCapture)
+                UpdateCaptureOperation(x, y);
+        }
+
+        internal void EndSeekBarDrag(int x, int y)
+        {
+            if (!IsSeekDragCapture)
                 return;
 
             EndCaptureOperation(x, y);

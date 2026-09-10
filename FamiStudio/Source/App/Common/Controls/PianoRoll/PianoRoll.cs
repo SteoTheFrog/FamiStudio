@@ -528,6 +528,9 @@ namespace FamiStudio
         public int EditChannel                 => editChannel;
         public int SelectionMinX               => selectionMinX;
         public int SelectionMaxX               => selectionMaxX;
+        public int CaptureMarqueeMinX          => captureMarqueeMinX;
+        public int CaptureMarqueeMaxX          => captureMarqueeMaxX;
+        public bool IsSelectCapture            => captureOperation == CaptureOperation.Select;
         public int PianoWidth                  => pianoSizeX;
         public int HeaderSizeY                 => headerSizeY;
         public int HighlightNoteAbsoluteIndex  => highlightNoteAbsIndex;
@@ -711,8 +714,6 @@ namespace FamiStudio
         LocalizedString ClearEffectValueTooltip;
         LocalizedString OrTooltip;
         LocalizedString MoveVolEnvVertexTooltip;
-        LocalizedString SelectSamplesFromSourceTooltip;
-        LocalizedString DeleteSelectedSampleTooltip;
         LocalizedString ResizeNotesTooltip;
         LocalizedString MoveReleasePointTooltip;
         LocalizedString MoveNotesTooltip;
@@ -723,14 +724,10 @@ namespace FamiStudio
         LocalizedString SetNoteInstrumentTooltip;
         LocalizedString DeleteNoteTooltip;
         LocalizedString AddStopNoteTooltip;
-        LocalizedString SetEnvelopeValueTooltip;
         LocalizedString AssignDPCMSampleTooltip;
         LocalizedString SamplePropertiesTooltip;
 
         // Bottom-right tooltips
-        LocalizedString SamplesSelectedTooltip;
-        LocalizedString ValuesSelectedTooltip;
-        LocalizedString FramesSelectedTooltip;
         LocalizedString ArpeggioTooltip;
 
         #endregion
@@ -5661,16 +5658,6 @@ namespace FamiStudio
             return false;
         }
 
-        private bool HandleMouseDownDelayedEnvelopeSelection(PointerEventArgs e)
-        {
-            if (e.Right && (IsPointInHeaderTopPart(e.X, e.Y) || IsPointInEffectPanel(e.X, e.Y) || IsPointInNoteArea(e.X, e.Y)))
-            {
-                StartSelection(e.X, e.Y);
-                return true;
-            }
-
-            return false;
-        }
 
         private bool HandleMouseDownDelayedWaveSelection(PointerEventArgs e)
         {
@@ -5689,12 +5676,6 @@ namespace FamiStudio
             {
                 if (HandleMouseDownDelayedChannelNotes(e)) goto Handled;
                 //if (HandleMouseDownDelayedHeaderSelection(e)) goto Handled;
-            }
-
-            if (editMode == EditionMode.Envelope ||
-                editMode == EditionMode.Arpeggio)
-            {
-                if (HandleMouseDownDelayedEnvelopeSelection(e)) goto Handled;
             }
 
             if (editMode == EditionMode.DPCM)
@@ -8365,7 +8346,7 @@ namespace FamiStudio
 
         private bool IsPointInHeader(int x, int y)
         {
-            return x > pianoSizeX && y < headerSizeY;
+            return x >= pianoSizeX && y < headerSizeY;
         }
 
         private bool IsPointInHeaderTopPart(int x, int y)
@@ -8388,17 +8369,17 @@ namespace FamiStudio
 
         public bool IsPointInEffectList(int x, int y)
         {
-            return showEffectsPanel && editMode == EditionMode.Channel && x < pianoSizeX && y > headerSizeY && y < headerAndEffectSizeY;
+            return showEffectsPanel && editMode == EditionMode.Channel && x < pianoSizeX && y >= headerSizeY && y < headerAndEffectSizeY;
         }
 
         public bool IsPointInEffectPanel(int x, int y)
         {
-            return showEffectsPanel && (editMode == EditionMode.Channel || editMode == EditionMode.DPCM || editMode == EditionMode.Envelope && HasRepeatEnvelope()) && x > pianoSizeX && y > headerSizeY && y < headerAndEffectSizeY;
+            return showEffectsPanel && (editMode == EditionMode.Channel || editMode == EditionMode.DPCM || editMode == EditionMode.Envelope && HasRepeatEnvelope()) && x >= pianoSizeX && y >= headerSizeY && y < headerAndEffectSizeY;
         }
 
         private bool IsPointInNoteArea(int x, int y)
         {
-            return y > headerAndEffectSizeY && x > pianoSizeX;
+            return y >= headerAndEffectSizeY && x >= pianoSizeX;
         }
 
         public bool IsPointInTopLeftCorner(int x, int y)
@@ -8461,8 +8442,9 @@ namespace FamiStudio
 
         private void UpdateToolTip(PointerEventArgs e)
         {
-            // Controls will handle their own tooltips.
-            if (captureOperation != CaptureOperation.None || panning)
+            if ((captureOperation != CaptureOperation.None &&
+                 captureOperation != CaptureOperation.Select &&
+                 captureOperation != CaptureOperation.SelectWave) || panning)
                 return;
 
             // Temporary for now until refacturing is done. TODO: Remove this when it's ready.
@@ -8487,34 +8469,6 @@ namespace FamiStudio
             else if (IsPointInEffectList(e.X, e.Y))
             {
                 tooltip = $"<MouseLeft> {SelectEffectToEditTooltip}";
-            }
-            else if (IsPointInEffectPanel(e.X, e.Y))
-            {
-                if (editMode == EditionMode.Channel)
-                {
-                    tooltip = $"<MouseLeft> {SetEffectValueTooltip} - <MouseWheel> {PanTooltip}\n<Ctrl><MouseLeft> {SetEffectValueFineTooltip} - <MouseLeft><MouseLeft> {OrTooltip} <Shift><MouseLeft> {ClearEffectValueTooltip}";
-                }
-                else if (editMode == EditionMode.DPCM)
-                {
-                    if (GetWaveVolumeEnvelopeVertexIndex(e.X, e.Y) >= 0)
-                    {
-                        tooltip = $"<MouseLeft><Drag> {MoveVolEnvVertexTooltip}\n<MouseRight> {MoreOptionsTooltip}";
-                    }
-                }
-                else if (editMode == EditionMode.Envelope)
-                {
-                    tooltip = $"<MouseLeft> {SetEffectValueTooltip} - <MouseWheel> {PanTooltip}\n<MouseRight> {MoreOptionsTooltip}";
-                }
-            }
-            else if ((IsPointInNoteArea(e.X, e.Y) || IsPointInHeader(e.X, e.Y)) && editMode == EditionMode.DPCM)
-            {
-                tooltip = $"<MouseLeft><Drag> {OrTooltip} <MouseRight><Drag> {SelectSamplesFromSourceTooltip}";
-
-                if (IsSelectionValid())
-                {
-                    tooltip += $"\n{Settings.DeleteShortcut.TooltipString} {DeleteSelectedSampleTooltip}";
-                    newNoteTooltip = SamplesSelectedTooltip.Format(selectionMaxX - selectionMinX + 1);
-                }
             }
             else if (IsPointInNoteArea(e.X, e.Y))
             {
@@ -8607,37 +8561,6 @@ namespace FamiStudio
                         newNoteTooltip += $"{numSelected}{(Song.Project.UsesFamiTrackerTempo ? " note" : " frame")}" + (numSelected == 1 ? "" : "s") + " selected";
                     }
                 }
-                else if (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio)
-                {
-                    tooltip = $"<MouseLeft> {SetEnvelopeValueTooltip} - <MouseWheel> {PanTooltip}\n<MouseRight> {MoreOptionsTooltip}";
-
-                    if (GetEnvelopeValueForCoord(e.X, e.Y, out int idx, out sbyte value))
-                    {
-                        newNoteTooltip = $"{idx:D3} : {value}";
-
-                        // We don't need these outside legacy select mode.
-                        // Frame count isn't useful with sparse selection.
-                        if (legacySelectMode && IsSelectionValid())
-                        {
-                            var numValuesSelected = selectionMaxX - selectionMinX + 1;
-
-                            switch (editEnvelope)
-                            {
-                                case EnvelopeType.FdsWaveform:
-                                case EnvelopeType.N163Waveform:
-                                    newNoteTooltip += $" ({SamplesSelectedTooltip.Format(numValuesSelected)})";
-                                    break;
-                                case EnvelopeType.FdsModulation:
-                                    newNoteTooltip += $" ({ValuesSelectedTooltip.Format(numValuesSelected)})";
-                                    break;
-                                default:
-                                    newNoteTooltip += $" ({FramesSelectedTooltip.Format(numValuesSelected)})";
-                                    break;
-                            }
-                        }
-                    }
-                }
-
                 else if (editMode == EditionMode.DPCMMapping)
                 {
                     if (GetNoteValueForCoord(e.X, e.Y, out byte noteValue))
@@ -8780,17 +8703,6 @@ namespace FamiStudio
             }
 
             return -1;
-        }
-
-        private void SetSnappingFromNoteDuration(NoteLocation location, Note note)
-        {
-            var bestSnap = GetBestSnapFactorForNote(location, note);
-            
-            if (bestSnap >= SnapResolutionType.Min &&
-                bestSnap <= SnapResolutionType.Max)
-            {
-                SetAndMarkDirty(ref snapResolution, bestSnap);
-            }
         }
 
         private void StartNoteCreation(PointerEventArgs e, NoteLocation location, byte noteValue)
@@ -9619,11 +9531,19 @@ namespace FamiStudio
             if (middle)
                 DoScroll(e.X - mouseLastX, e.Y - mouseLastY);
 
-            UpdateToolTip(e);
+            //UpdateToolTip(e); // TODO: This should be OnPointerEnter when NoteArea is its own thing. It won't need to be OnPointerMove depending on how highlighting notes is handled.
             SetMouseLastPos(e.X, e.Y);
             MarkDirty(); // TODO : This is bad.
 
             App.SequencerShowExpansionIcons = false;
+        }
+
+        protected override void OnPointerEnter(EventArgs e)
+        {
+            // Otherwise the note area's tooltip stays blank/stale for a frame when the mouse enters
+            // it from a sibling control (e.g. the effect panel), until the next OnPointerMove fires.
+            var pt = ScreenToControl(CursorPosition);
+            UpdateToolTip(new PointerEventArgs(0, pt.X, pt.Y));
         }
 
         protected override void OnPointerLeave(EventArgs e)
@@ -9766,6 +9686,7 @@ namespace FamiStudio
             {
                 doMouseUp = captureOperation == CaptureOperation.None;
                 EndCaptureOperation(e.X, e.Y);
+                UpdateToolTip(e);
             }
 
             UpdateCursor();

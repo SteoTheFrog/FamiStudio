@@ -23,6 +23,18 @@ namespace FamiStudio
         private int hoverEffectIndex = -1;
 
         LocalizedString RelativeEffectScalingLabel;
+        LocalizedString SetEffectValueTooltip;
+        LocalizedString SetEffectValueFineTooltip;
+        LocalizedString ClearEffectValueTooltip;
+        LocalizedString MoveVolEnvVertexTooltip;
+        LocalizedString MoreOptionsTooltip;
+        LocalizedString OrTooltip;
+        LocalizedString PanTooltip;
+        LocalizedString SelectEffectToEditTooltip;
+        LocalizedString ToggleSnappingTooltip;
+        LocalizedString ChangeSnapPrecisionTooltip;
+        LocalizedString MaximizePianoRollTooltip;
+        LocalizedString ShowHideEffectPanelTooltip;
 
         private Song Song => App?.SelectedSong;
 
@@ -34,6 +46,47 @@ namespace FamiStudio
             SetupClipRegion(false);
         }
 
+        protected override void OnPointerEnter(EventArgs e)
+        {
+            base.OnPointerEnter(e);
+
+            var pt = ScreenToControl(CursorPosition);
+            UpdateToolTip(pt.X, pt.Y);
+        }
+
+        protected override void OnPointerMove(PointerEventArgs e)
+        {
+            base.OnPointerMove(e);
+            UpdateToolTip(e.X, e.Y);
+        }
+
+        private void UpdateToolTip(int x, int y)
+        {
+            var isChannelEffects = panelMode == PanelMode.Notes && !pianoRoll.HasRepeatEnvelope();
+
+            if (pianoRoll.IsPointInEffectList(x, y))
+            {
+                ToolTip = $"<MouseLeft> {SelectEffectToEditTooltip}";
+            }
+            else if (pianoRoll.IsPointInEffectPanel(x, y))
+            {
+                if (isChannelEffects)
+                    ToolTip = $"<MouseLeft> {SetEffectValueTooltip} - <MouseWheel> {PanTooltip}\n<Ctrl><MouseLeft> {SetEffectValueFineTooltip} - <MouseLeft><MouseLeft> {OrTooltip} <Shift><MouseLeft> {ClearEffectValueTooltip}";
+                else if (panelMode == PanelMode.Notes)
+                    ToolTip = $"<MouseLeft> {SetEffectValueTooltip} - <MouseWheel> {PanTooltip}\n<MouseRight> {MoreOptionsTooltip}";
+                else if (panelMode == PanelMode.Wave)
+                    ToolTip = $"<MouseLeft><Drag> {MoveVolEnvVertexTooltip}\n<MouseRight> {MoreOptionsTooltip}";
+                else
+                    ToolTip = "";
+            }
+            else
+            {
+                ToolTip = "";
+            }
+
+            App.SetToolTip(ToolTip);
+        }
+
         protected override void OnAddedToContainer()
         {
             base.OnAddedToContainer();
@@ -41,17 +94,22 @@ namespace FamiStudio
             fullScreenButton = new Button("Maximize") { Transparent = true };
             fullScreenButton.ImageEvent += FullScreenButton_ImageEvent;
             fullScreenButton.Click      += (s) => pianoRoll.ToggleMaximize();
+            fullScreenButton.ToolTip     = $"<MouseLeft> {MaximizePianoRollTooltip} {Settings.MaximizePianoRollShortcut.TooltipString}";
 
             showEffectPanelButton = new Button("CollapsedSmall") { Transparent = true };
             showEffectPanelButton.ImageEvent += ShowEffectPanelButton_ImageEvent;
             showEffectPanelButton.Click      += (s) => pianoRoll.ToggleEffectPanel();
+            showEffectPanelButton.ToolTip     = $"<MouseLeft> {ShowHideEffectPanelTooltip} {Settings.EffectPanelShortcut.TooltipString}";
 
             snapModeButton = new Button("Snap") { Transparent = true, Font = Fonts.FontSmall };
             snapModeButton.ImageEvent += SnapModeButton_ImageEvent;
             snapModeButton.TextEvent  += SnapModeButton_TextEvent;
             snapModeButton.Click      += (s) => pianoRoll.ToggleSnap();
+            snapModeButton.ToolTip     = $"<MouseLeft> {ToggleSnappingTooltip} {Settings.SnapToggleShortcut.TooltipString} - <MouseWheel> {ChangeSnapPrecisionTooltip}\n<MouseRight> {MoreOptionsTooltip}";
             snapModeButton.RightClick += (s) => pianoRoll.ShowSnapResolutionContextMenu();
             snapModeButton.TextAlign  = Button.TextPosition.Left;
+            snapModeButton.ClickOnMouseUp = true;
+            snapModeButton.SupportsDoubleClick = true;
 
             AddControl(fullScreenButton);
             AddControl(showEffectPanelButton);

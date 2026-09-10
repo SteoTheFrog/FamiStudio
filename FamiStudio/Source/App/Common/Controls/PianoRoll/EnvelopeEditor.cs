@@ -229,10 +229,8 @@ namespace FamiStudio
                 var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
                 pianoRoll.UpdateTimelineCapture(p.X, p.Y);
             }
-            else
-            {
-                UpdateNoteTooltip(e);
-            }
+
+            UpdateNoteTooltip(e);
         }
 
         private void UpdateNoteTooltip(PointerEventArgs e)
@@ -243,24 +241,29 @@ namespace FamiStudio
             if (pianoRoll.GetEnvelopeValueForCoord(p.X, p.Y, out int idx, out sbyte value))
             {
                 newNoteTooltip = $"{idx:D3} : {value}";
+            }
 
-                if (pianoRoll.LegacySelectMode && pianoRoll.IsSelectionValid())
+            if (pianoRoll.LegacySelectMode ? pianoRoll.IsSelectionValid() : pianoRoll.IsSelectCapture)
+            {
+                if (newNoteTooltip.Length > 0)
+                    newNoteTooltip += " ";
+
+                var numValuesSelected = pianoRoll.LegacySelectMode
+                    ? (pianoRoll.SelectionMaxX - pianoRoll.SelectionMinX + 1)
+                    : (pianoRoll.CaptureMarqueeMaxX - pianoRoll.CaptureMarqueeMinX + 1);
+
+                switch (pianoRoll.EditEnvelopeType)
                 {
-                    var numValuesSelected = pianoRoll.SelectionMaxX - pianoRoll.SelectionMinX + 1;
-
-                    switch (pianoRoll.EditEnvelopeType)
-                    {
-                        case EnvelopeType.FdsWaveform:
-                        case EnvelopeType.N163Waveform:
-                            newNoteTooltip += $" ({SamplesSelectedTooltip.Format(numValuesSelected)})";
-                            break;
-                        case EnvelopeType.FdsModulation:
-                            newNoteTooltip += $" ({ValuesSelectedTooltip.Format(numValuesSelected)})";
-                            break;
-                        default:
-                            newNoteTooltip += $" ({FramesSelectedTooltip.Format(numValuesSelected)})";
-                            break;
-                    }
+                    case EnvelopeType.FdsWaveform:
+                    case EnvelopeType.N163Waveform:
+                        newNoteTooltip += $"({SamplesSelectedTooltip.Format(numValuesSelected)})";
+                        break;
+                    case EnvelopeType.FdsModulation:
+                        newNoteTooltip += $"({ValuesSelectedTooltip.Format(numValuesSelected)})";
+                        break;
+                    default:
+                        newNoteTooltip += $"({FramesSelectedTooltip.Format(numValuesSelected)})";
+                        break;
                 }
             }
 
@@ -286,6 +289,8 @@ namespace FamiStudio
                 var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
                 pianoRoll.EndTimelineCapture(p.X, p.Y);
             }
+
+            UpdateNoteTooltip(e);
         }
 
         protected override void OnRender(Graphics g)

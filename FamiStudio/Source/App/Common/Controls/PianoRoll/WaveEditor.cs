@@ -37,6 +37,10 @@ namespace FamiStudio
         LocalizedString DPCMSourceDataLabel;
         LocalizedString DPCMProcessedDataLabel;
         LocalizedString DPCMPreviewPlaybackLabel;
+        LocalizedString OrTooltip;
+        LocalizedString SelectSamplesFromSourceTooltip;
+        LocalizedString DeleteSelectedSampleTooltip;
+        LocalizedString SamplesSelectedTooltip;
 
         public WaveEditor(PianoRoll pianoRoll)
         {
@@ -86,7 +90,8 @@ namespace FamiStudio
                     return;
                 }
 
-                pianoRoll.StartSelectWave(pos.X, pos.Y);
+                CapturePointer();
+                pianoRoll.StartSelectWave(pos.X, pos.Y, capturePointer: false);
                 return;
             }
 
@@ -141,6 +146,28 @@ namespace FamiStudio
                 var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
                 pianoRoll.UpdateTimelineCapture(p.X, p.Y);
             }
+
+            UpdateNoteTooltip();
+        }
+
+        private void UpdateNoteTooltip()
+        {
+            var tooltip = $"<MouseLeft><Drag> {OrTooltip} <MouseRight><Drag> {SelectSamplesFromSourceTooltip}";
+            var newNoteTooltip = "";
+
+            if (IsSelectionValid)
+            {
+                tooltip += $"\n{Settings.DeleteShortcut.TooltipString} {DeleteSelectedSampleTooltip}";
+                newNoteTooltip = SamplesSelectedTooltip.Format(SelectionMaxX - SelectionMinX + 1);
+            }
+
+            App.SetToolTip(tooltip);
+
+            if (noteTooltip != newNoteTooltip)
+            {
+                noteTooltip = newNoteTooltip;
+                MarkDirty();
+            }
         }
 
         protected override void OnPointerUp(PointerEventArgs e)
@@ -158,6 +185,8 @@ namespace FamiStudio
                 var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
                 pianoRoll.EndTimelineCapture(p.X, p.Y);
             }
+
+            UpdateNoteTooltip();
         }
 
         private void ForEachWaveTimecode(Graphics g, Action<float, float, int, int> function)

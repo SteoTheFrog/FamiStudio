@@ -251,6 +251,7 @@
     <Compile Include="Source\App\Common\Controls\TouchScrollContainer.cs" />
     <Compile Include="Source\App\Common\Controls\PianoRoll\EffectPanel.cs" />
     <Compile Include="Source\App\Common\Controls\PianoRoll\EnvelopeEditor.cs" />
+    <Compile Include="Source\App\Common\Controls\PianoRoll\NoteArea.cs" />
     <Compile Include="Source\App\Common\Controls\PianoRoll\Piano.cs" />
     <Compile Include="Source\App\Common\Controls\PianoRoll\PianoRoll.cs" />
     <Compile Include="Source\App\Common\Controls\PianoRoll\PianoRollTimeline.cs" />

@@ -570,7 +570,8 @@ namespace FamiStudio
 
         private Instrument GetDutyInstrument(Channel channel, int duty)
         {
-            var expansion = channel.Expansion;
+            // Use no expansion for MMC5 instruments, as they are compatible with 2A03.
+            var expansion = channel.Expansion == ExpansionType.Mmc5 ? ExpansionType.None : channel.Expansion;
             var expPrefix = expansion == ExpansionType.None || expansion == ExpansionType.Mmc5 ? "" : ExpansionType.InternalNames[expansion] + " ";
             var name = $"{expPrefix}Duty {duty}";
 

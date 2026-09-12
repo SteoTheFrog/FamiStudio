@@ -671,8 +671,8 @@ namespace FamiStudio
                 if (dragCapture && dragX >= 0 && dragX < songEndX)
                 {
                     // The destination pattern under the drag anchor.
-                    // No NEW state required for this.
-                    var patternIdx = SelectionDragAnchorPatternIdx + patternIdxDelta;
+                    // No NEW state required for this. Clamp for safety.
+                    var patternIdx = Utils.Clamp(SelectionDragAnchorPatternIdx + patternIdxDelta, 0, Song.Length - 1);
                     var instance   = ModifierKeys.IsControlDown;
                     var duplicate  = instance && ModifierKeys.IsShiftDown;
 

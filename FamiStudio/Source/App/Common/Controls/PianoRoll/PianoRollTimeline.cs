@@ -385,6 +385,8 @@ namespace FamiStudio
         {
             var region = pianoRoll.GetTimelineEnvelopeHoverRegion(x, y, out var canLoop, out var canRelease, out var hasLoopPoint);
 
+            Cursor = region == EnvelopeEditor.TimelineHoverRegion.ResizeIcon ? Cursors.SizeWE : Cursors.Default;
+
             if (region == EnvelopeEditor.TimelineHoverRegion.ResizeIcon)
             {
                 App.SetToolTip($"<MouseLeft><Drag> {ResizeEnvelopeTooltip}");

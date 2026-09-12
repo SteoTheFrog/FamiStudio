@@ -1353,6 +1353,9 @@ namespace FamiStudio
         private void StartDragSelection(int x, int y, int patternIdx, bool capturePointer = true)
         {
             selectionDragAnchorPatternIdx = patternIdx;
+            dragSelectionPatternDelta = 0;
+            dragSelectionRowDelta = 0;
+            dragSelectionX = x;
             selectionDragAnchorPatternXFraction = (
                 x - channelNameSizeX + scrollX - 
                 GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(patternIdx), false)) / 

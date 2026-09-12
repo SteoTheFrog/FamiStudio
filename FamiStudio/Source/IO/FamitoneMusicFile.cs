@@ -111,6 +111,11 @@ namespace FamiStudio
         private bool usesPhaseReset = false;
         private bool usesFdsAutoMod = false;
         static readonly int[] epsmRegOrder = new[] { 0, 1, 2, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 25, 26, 27, 28, 29, 3, 10, 17, 24, 30 };
+        static readonly byte[] fdsDacLevelMapping = 
+        {
+            0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 16, 15, 17, 18, 19, 20, 21, 22, 24, 23, 25, 26, 28, 27, 32, 29, 33,
+            30, 34, 36, 35, 31, 37, 38, 40, 41, 39, 42, 44, 43, 48, 45, 46, 49, 50, 47, 52, 51, 53, 54, 56, 57, 55, 58, 60, 59, 61, 62, 63
+        };
 
         public FamitoneMusicFile(int kernel, bool outputLog)
         {
@@ -545,6 +550,15 @@ namespace FamiStudio
                     for (int i = 0; i < subWaveforms.GetLength(0); i++)
                     {
                         var wav = subWaveforms[i];
+
+                        // Workaround FDS DAC issue that causes non-monotonic output levels.
+                        // This alters the data in the final wave to workaround a hardware quirk.
+                        if (instrument.FdsFixDac)
+                        {
+                            for (int j = 0; j < wav.Length; j++)
+                                wav[j] = fdsDacLevelMapping[wav[j]];
+                        }
+
                         var crc = CRC32.Compute(wav);
                         uniqueEnvelopes[crc] = wav;
                         waveforms[i] = crc;
@@ -710,14 +724,14 @@ namespace FamiStudio
                                 var denom = (int)instrument.FdsAutoModDenom;
                                 Utils.SimplifyFraction(ref numer, ref denom); // 2/4 is same as 1/2
                                 
-                                // Set bit 7 of numer for automod enabled
-                                lines.Add($"\t{db} {0x80 | numer}, {denom}");
+                                // Set bit 7 of numer for automod enabled, and bit 6 for hold volume.
+                                lines.Add($"\t{db} {(instrument.FdsHoldVolume ? 0xC0 : 0x80) | numer}, {denom}");
                                 usesFdsAutoMod = true;
                             }
                             else
                             {
-                                // Bit 7 of the first byte will be clear here (no automod)
-                                lines.Add($"\t{dw} {instrument.FdsModSpeed}");
+                                // Bit 7 of the first byte will be clear here (no automod). Bit 6 will be set if hold volume is enabled.
+                                lines.Add($"\t{dw} {(instrument.FdsHoldVolume ? 0x40 : 0x00) | instrument.FdsModSpeed}");
                             }
 
                             lines.Add($"\t{db} {instrument.FdsModDelay}");

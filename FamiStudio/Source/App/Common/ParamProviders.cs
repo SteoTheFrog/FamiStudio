@@ -97,6 +97,8 @@ namespace FamiStudio
 
         // FDS/N163 labels
         static LocalizedString MasterVolumeLabel;
+        static LocalizedString HoldVolumeLabel;
+        static LocalizedString FixDacLabel;
         static LocalizedString WavePresetLabel;
         static LocalizedString WaveAutoPosLabel;
         static LocalizedString WavePositionLabel;
@@ -220,6 +222,10 @@ namespace FamiStudio
                 case ExpansionType.Fds:
                     paramInfos.Add(new InstrumentParamInfo(instrument, MasterVolumeLabel, 0, 3, 0, null, true)
                         { GetValue = () => { return instrument.FdsMasterVolume; }, GetValueString = () => { return FdsMasterVolumeType.Names[instrument.FdsMasterVolume]; }, SetValue = (v) => { instrument.FdsMasterVolume = (byte)v; } });
+                    paramInfos.Add(new InstrumentParamInfo(instrument, HoldVolumeLabel, 0, 1, 0)
+                        { GetValue = () => { return instrument.FdsHoldVolume ? 1 : 0; }, SetValue = (v) => { instrument.FdsHoldVolume = v != 0; } });
+                    paramInfos.Add(new InstrumentParamInfo(instrument, FixDacLabel, 0, 1, 0)
+                        { GetValue = () => { return instrument.FdsFixDac ? 1 : 0; }, SetValue = (v) => { instrument.FdsFixDac = v != 0; } });
                     paramInfos.Add(new InstrumentParamInfo(instrument, WavePresetLabel, 0, WavePresetType.Count - 1, WavePresetType.Sine, null, true)
                         { GetValue = () => { return instrument.FdsWavePreset; }, GetValueString = () => { return WavePresetType.LocalizedNames[instrument.FdsWavePreset]; }, SetValue = (v) => { instrument.FdsWavePreset = (byte)v; } });
                     paramInfos.Add(new InstrumentParamInfo(instrument, WaveCountLabel, 1, instrument.Envelopes[EnvelopeType.FdsWaveform].Values.Length / 64, 1)

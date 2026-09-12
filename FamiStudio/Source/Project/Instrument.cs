@@ -25,6 +25,8 @@ namespace FamiStudio
         private byte    fdsModDelay;
         private byte    fdsWaveCount = 1;
         private bool    fdsAutoMod;
+        private bool    fdsHoldVolume;
+        private bool    fdsFixDac;
         private byte    fdsAutoModDenom = 1;
         private byte    fdsAutoModNumer = 1;
         private int     fdsResampleWavPeriod = 128;
@@ -407,6 +409,8 @@ namespace FamiStudio
         public byte   FdsModDelay     { get => fdsModDelay;     set => fdsModDelay = value; } 
         public byte   FdsMasterVolume { get => fdsMasterVolume; set => fdsMasterVolume = value; }
         public bool   FdsAutoMod      { get => fdsAutoMod;      set => fdsAutoMod = value; }
+        public bool   FdsHoldVolume   { get => fdsHoldVolume;   set => fdsHoldVolume = value; }
+        public bool   FdsFixDac       { get => fdsFixDac;       set => fdsFixDac = value; }
         public byte   FdsAutoModDenom { get => fdsAutoModDenom; set => fdsAutoModDenom = (byte)Utils.Clamp(value, 1, 32); }
         public byte   FdsAutoModNumer { get => fdsAutoModNumer; set => fdsAutoModNumer = (byte)Utils.Clamp(value, 1, 32); }
 
@@ -946,6 +950,12 @@ namespace FamiStudio
                             buffer.Serialize(ref fdsModSpeed);
                             buffer.Serialize(ref fdsModDepth);
                             buffer.Serialize(ref fdsModDelay);
+                            // At version 20 (FamiStudio 4.6.0), we added volume holding and a DAC workaround for FDS.
+                            if (buffer.Version >= 20)
+                            {
+                                buffer.Serialize(ref fdsHoldVolume);
+                                buffer.Serialize(ref fdsFixDac);
+                            }
                             // At version 18 (FamiStudio 4.4.0), we added FDS multi-wave.
                             if (buffer.Version >= 18)
                             {

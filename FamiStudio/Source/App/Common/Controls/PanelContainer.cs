@@ -8,6 +8,7 @@ namespace FamiStudio
     {
         private Color colorTop;
         private Color colorBottom;
+        private bool  selected;
 
         private float blinkTimer;
 
@@ -25,6 +26,19 @@ namespace FamiStudio
                 colorTop = value;
                 colorBottom = Color.FromArgb(200, value);
                 MarkDirty();
+            }
+        }
+
+        public bool Selected
+        {
+            get { return selected; }
+            set
+            {
+                if (selected != value)
+                {
+                    selected = value;
+                    MarkDirty();
+                }
             }
         }
 
@@ -49,6 +63,7 @@ namespace FamiStudio
         protected override void OnRender(Graphics g)
         {
             var actualColorBottom = colorBottom;
+            var c = g.DefaultCommandList;
 
             if (blinkTimer != 0.0f)
             {
@@ -56,7 +71,19 @@ namespace FamiStudio
                 actualColorBottom = Color.FromArgb(200, actualColorBottom);
             }
 
-            g.DefaultCommandList.FillAndDrawRectangleGradient(0, 0, width, height, colorTop, actualColorBottom, Color.Black, true, height);
+            if (selected)
+            {
+                var borderSize = DpiScaling.ScaleForWindow(5);
+                c.DrawRectangle(0, 0, width, height, Theme.BlackColor);
+                c.FillRectangleGradient(0, 0, width, borderSize, Theme.Lighten(colorTop, 75), colorTop, true, borderSize);
+                c.FillRectangleGradient(0, borderSize, width, height - borderSize - 1, colorTop, actualColorBottom, true, height - borderSize * 2);
+                c.FillRectangleGradient(0, height - borderSize - 1, width, height, actualColorBottom, Theme.Darken(actualColorBottom, 75), true, borderSize);
+            }
+            else
+            {
+                c.FillAndDrawRectangleGradient(0, 0, width, height, selected ? Theme.Lighten(colorTop) : colorTop, selected ? Theme.Darken(actualColorBottom) : actualColorBottom, Theme.BlackColor, true, height);
+            }
+
             base.OnRender(g);
         }
     }

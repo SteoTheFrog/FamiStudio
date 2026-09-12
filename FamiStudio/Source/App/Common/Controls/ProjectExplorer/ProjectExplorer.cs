@@ -725,6 +725,7 @@ namespace FamiStudio
             panel.PointerDown += (s, e) => Song_PointerDown(s, e, song);
             panel.ContainerPointerDownNotify += (s, e) => Song_PointerDown(s, e, song);
             panel.ContainerTouchClickNotify += (s, e) => Song_TouchClick(s, e, song);
+            panel.Selected = App.SelectedSong == song;
 
             var icon = CreateImageBox(panel, marginX + expandSizeX, "Music", true);
             icon.PointerDown += (s, e) => Song_PointerDown(s, e, song); 
@@ -788,6 +789,7 @@ namespace FamiStudio
             panel.PointerDown += (s, e) => Instrument_PointerDown(s, e, instrument);
             panel.ContainerPointerDownNotify += (s, e) => Instrument_PointerDown(s, e, instrument);
             panel.ContainerTouchClickNotify += (s, e) => Instrument_TouchClick(s, e, instrument);
+            panel.Selected = App.SelectedInstrument == instrument;
 
             var expand = CreateExpandButton(panel, true, expandedInstrument == instrument);
             expand.ToolTip = $"<MouseLeft> {ExpandTooltip} - <MouseRight> {MoreOptionsTooltip}";
@@ -1048,6 +1050,7 @@ namespace FamiStudio
         {
             noneArpPanel = CreateGradientPanel(Theme.LightGreyColor1);
             noneArpPanel.ToolTip = $"<MouseLeft> {SelectArpeggioTooltip}";
+            noneArpPanel.Selected = App.SelectedArpeggio == null;
             if (Platform.IsDesktop)
             {
                 noneArpPanel.ContainerPointerDownNotify += NoneArpeggio_PointerDown;
@@ -1060,7 +1063,6 @@ namespace FamiStudio
             var icon = CreateImageBox(noneArpPanel, marginX + expandSizeX, EnvelopeType.Icons[EnvelopeType.Arpeggio], true);
             var label = CreateLabel(noneArpPanel, ArpeggioNoneLabel, true, icon.Right + marginX, 0, noneArpPanel.Width - icon.Right - marginX);
             label.Font = App.SelectedArpeggio == null ? fonts.FontMediumBold : fonts.FontMedium;
-
         }
 
         private void CreateArpeggioControls(Arpeggio arp)
@@ -1072,6 +1074,7 @@ namespace FamiStudio
             panel.PointerDown += (s, e) => Arpeggio_PointerDown(s, e, arp);
             panel.ContainerPointerDownNotify += (s, e) => Arpeggio_PointerDown(s, e, arp);
             panel.ContainerTouchClickNotify += (s, e) => Arpeggio_TouchClick(s, e, arp);
+            panel.Selected = App.SelectedArpeggio == arp;
 
             var icon = CreateImageBox(panel, marginX + expandSizeX, EnvelopeType.Icons[EnvelopeType.Arpeggio], true);
             icon.PointerDown += (s, e) => Arpeggio_PointerDown(s, e, arp); 
@@ -1581,7 +1584,9 @@ namespace FamiStudio
                     {
                         if (panel.UserData != null && panel.UserData.GetType() == type)
                         {
-                            panel.FindControlOfType<Label>().Font = panel.UserData == obj ? fonts.FontMediumBold : fonts.FontMedium;
+                            var selected = panel.UserData == obj;
+                            panel.FindControlOfType<Label>().Font = selected ? fonts.FontMediumBold : fonts.FontMedium;
+                            panel.Selected = selected;
                         }
                     }
                 }

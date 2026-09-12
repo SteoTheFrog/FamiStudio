@@ -502,7 +502,7 @@ namespace FamiStudio
         public bool CanCopyAsText   => IsActiveControl && IsSelectionValid() && (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio);
         public bool CanPaste        => IsActiveControl && (editMode == EditionMode.Channel ? ClipboardUtils.ContainsNotes && (!legacySelectMode || IsSelectionValid()) : (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio) && IsSelectionValid() && ClipboardUtils.ContainsEnvelope);
         public bool CanDelete       => IsActiveControl && HasSelectionContent() && (editMode == EditionMode.Channel || editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio || editMode == EditionMode.DPCM);
-        public bool IsActiveControl => App != null && App.ActiveControl == this;
+        public bool IsActiveControl => App != null && (App.ActiveControl == this || App.ActiveControl?.IsInContainer(this) == true);
 
         public static int DefaultPianoKeyWidth => DefaultNoteSizeY;
 
@@ -6416,6 +6416,11 @@ namespace FamiStudio
 
                 marqueeMinX = Utils.Clamp(marqueeMinX, 0, songEnd);
                 marqueeMaxX = Utils.Clamp(marqueeMaxX, 0, songEnd);
+            }
+            else if (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio)
+            {
+                marqueeMinX = Utils.Clamp(marqueeMinX, 0, EditEnvelope.Length - 1);
+                marqueeMaxX = Utils.Clamp(marqueeMaxX, 0, EditEnvelope.Length - 1);
             }
 
             captureMarqueeMinX = marqueeMinX;

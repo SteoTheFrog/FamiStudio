@@ -928,7 +928,10 @@ namespace FamiStudio
 
         public void SetActiveControl(Control ctrl, bool animate = true)
         {
-            if (ctrl != null && ctrl != activeControl && (ctrl == PianoRoll || ctrl == Sequencer || ctrl == ProjectExplorer))
+            if (ctrl != null && ctrl != activeControl &&
+                (ctrl == PianoRoll || ctrl.IsInContainer(PianoRoll) ||
+                 ctrl == Sequencer || ctrl.IsInContainer(Sequencer) ||
+                 ctrl == ProjectExplorer || ctrl.IsInContainer(ProjectExplorer)))
             {
                 activeControl.MarkDirty();
                 activeControl = ctrl;

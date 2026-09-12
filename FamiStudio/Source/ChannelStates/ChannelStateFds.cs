@@ -13,6 +13,12 @@ namespace FamiStudio
         private int     masterVolume;
         private sbyte[] prevModTable = new sbyte[32];
 
+        private static readonly byte[] dacLevelMapping =
+        {
+            0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 16, 15, 17, 18, 19, 20, 21, 22, 24, 23, 25, 26, 28, 27, 32, 29, 33,
+            30, 34, 36, 35, 31, 37, 38, 40, 41, 39, 42, 44, 43, 48, 45, 46, 49, 50, 47, 52, 51, 53, 54, 56, 57, 55, 58, 60, 59, 61, 62, 63
+        };
+
         public ChannelStateFds(IPlayerInterface player, int apuIdx, int channelIdx, int tuning, bool pal) : base(player, apuIdx, channelIdx, tuning, pal)
         {
         }
@@ -68,14 +74,24 @@ namespace FamiStudio
                     SkipCycles(2); // LDY
                     for (int i = 0x3F; i >= 0; i -= 2)
                     {
+                        var s0 = wav[i];
+                        var s1 = wav[i - 1];
+
+                        // Workaround DAC issue that causes non-monotonic output levels.
+                        if (note.Instrument.FdsFixDac)
+                        {
+                            s0 = dacLevelMapping[s0];
+                            s1 = dacLevelMapping[s1];
+                        }
+
                         // Toggle write every 2 iterations. ASM does this for smooth cycling between
                         // waveforms. We write twice between write toggling and iterate half the times 
                         // to save CPU cycles. 38 skipped cycles to mimic ASM loop (37 if BPL exits loop).
                         SkipCycles(3); // Read volume.
                         WriteRegister(NesApu.FDS_VOL, 0x80 | masterVolume, 4);
-                        WriteRegister(NesApu.FDS_WAV_START + i, wav[i] & 0xff, 12);         // +7 for LDA and DEY
-                        WriteRegister(NesApu.FDS_WAV_START + i - 1, wav[i - 1] & 0xff, 10); // +5 for LDA
-                        WriteRegister(NesApu.FDS_VOL, masterVolume, i > 1 ? 9 : 8);         // +5 for DEY and BPL (4 on BPL exit)
+                        WriteRegister(NesApu.FDS_WAV_START + i,     s0 & 0xff, 12); // +7 for LDA and DEY
+                        WriteRegister(NesApu.FDS_WAV_START + i - 1, s1 & 0xff, 10); // +5 for LDA
+                        WriteRegister(NesApu.FDS_VOL, masterVolume, i > 1 ? 9 : 8);      // +5 for DEY and BPL (4 on BPL exit)
                     }
 
                     waveIndex = newWaveIndex;
@@ -122,7 +138,11 @@ namespace FamiStudio
 
             if (note.IsStop)
             {
-                WriteRegister(NesApu.FDS_VOL_ENV, 0x80); // Zero volume
+                // Keep last volume if option is checked.
+                if (note.Instrument != null && note.Instrument.FdsHoldVolume)
+                    WriteRegister(NesApu.FDS_VOL, 0x80 | masterVolume);
+                else
+                    WriteRegister(NesApu.FDS_VOL_ENV, 0x80); // Zero volume
                 ResetModulation();
             }
             else if (note.IsMusical)
@@ -139,6 +159,7 @@ namespace FamiStudio
                 WriteRegister(NesApu.FDS_FREQ_HI, periodHi);
                 WriteRegister(NesApu.FDS_FREQ_LO, (period >> 0) & 0xff);
                 WriteRegister(NesApu.FDS_VOL_ENV, 0x80 | (volume << 1));
+                WriteRegister(NesApu.FDS_VOL, masterVolume); // Ensure we clear this if the last volume was held.
 
                 if (noteTriggered)
                 {

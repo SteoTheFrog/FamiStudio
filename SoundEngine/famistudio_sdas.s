@@ -974,6 +974,7 @@ famistudio_mmc5_pulse2_prev:      .ds 1
 .endif
 
 .if FAMISTUDIO_EXP_FDS
+famistudio_fds_master_volume:     .ds 1 ; Bit 7 = hold wave and last volume rather than writing 0.
 famistudio_fds_mod_envelope:      .ds 2
 famistudio_fds_mod_speed:         .ds 2
 famistudio_fds_mod_depth:         .ds 1
@@ -1716,6 +1717,7 @@ famistudio_music_play::
 
 .if FAMISTUDIO_EXP_FDS
     lda #0
+    sta famistudio_fds_master_volume
     sta famistudio_fds_mod_envelope+0
     sta famistudio_fds_mod_envelope+1
     sta famistudio_fds_mod_speed+0
@@ -2373,6 +2375,13 @@ famistudio_update_fds_channel_sound:
     lda #0x80
     sta FAMISTUDIO_FDS_MOD_HI
     sta FAMISTUDIO_FDS_SWEEP_ENV
+    lda famistudio_fds_master_volume ; Bit 7 here means we will hold the wave and volume. This can reduce popping in some cases.
+    bpl .skip_hold
+    sta FAMISTUDIO_FDS_VOL
+    rts
+
+.skip_hold:
+    lda #0
     jmp .set_volume
 
 .nocut:
@@ -5473,10 +5482,15 @@ famistudio_set_fds_instrument:
     ; FDS Modulation
     .famistudio_set_fds_instrument_write_fds_mod:
         iny
-        lda [*.ptr],y ; Read depth / master volume, shift twice for depth and store for later
-        lsr
+        lda [*.ptr],y ; Read depth. Bits 0 and 1 are master volume.
+        tax           ; Store in x for master volume.
+        lsr           ; Shift twice for depth only, store for later.
         lsr
         sta *.tmp_mod_depth
+        txa
+        and #3
+        sta famistudio_fds_master_volume
+        sta FAMISTUDIO_FDS_VOL ; Ensure wave is not being held.
 
         ; Skip to mod envelope
         iny
@@ -5540,11 +5554,23 @@ famistudio_set_fds_instrument:
                 lda #0
                 sta famistudio_fds_automod_numer
             .endif
-            bit famistudio_fds_override_flags
-            bmi .famistudio_set_fds_instrument_mod_speed_overriden
+            lda [*.ptr],y ; Extract bit 6 to test for volume hold.
+            tax
+            and #0x40
+            beq .famistudio_set_fds_instrument_check_speed_override
+
+            .famistudio_set_fds_instrument_set_hold:
+                lda famistudio_fds_master_volume
+                ora #0x80
+                sta famistudio_fds_master_volume
+
+            .famistudio_set_fds_instrument_check_speed_override:
+                bit famistudio_fds_override_flags
+                bmi .famistudio_set_fds_instrument_mod_speed_overriden
 
             .famistudio_set_fds_instrument_load_mod_speed:
-                lda [*.ptr],y
+                txa
+                and #0x0f ; Only need bits 0-3
                 sta famistudio_fds_mod_speed+0
                 iny
                 lda [*.ptr],y

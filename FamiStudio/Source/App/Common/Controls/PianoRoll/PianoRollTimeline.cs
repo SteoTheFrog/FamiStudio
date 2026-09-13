@@ -355,15 +355,19 @@ namespace FamiStudio
             {
                 pianoRoll.EndTimelinePan();
             }
+
+            UpdateCursor();
         }
 
         protected override void OnPointerMove(PointerEventArgs e)
         {
             base.OnPointerMove(e);
 
+            UpdateCursor();
+
             var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
 
-            if (pianoRoll.IsTimelineColumnSelectionCapture || pianoRoll.IsTimelineEnvelopeCapture)
+            if (pianoRoll.IsTimelineEnvelopeCapture || pianoRoll.IsTimelineColumnSelectionCapture || pianoRoll.IsTimelineSeekCapture)
             {
                 pianoRoll.UpdateTimelineCapture(p.X, p.Y);
             }
@@ -371,13 +375,26 @@ namespace FamiStudio
             {
                 pianoRoll.UpdateTimelinePan(p.X, p.Y);
             }
-            else if (pianoRoll.IsTimelineSeekCapture)
+        }
+
+        public void UpdateCursor()
+        {
+            if (pianoRoll.IsTimelineEnvelopeCapture)
             {
-                pianoRoll.UpdateTimelineCapture(p.X, p.Y);
+                Cursor = Cursors.SizeWE;
+            }
+            else if (pianoRoll.IsTimelineColumnSelectionCapture || pianoRoll.IsTimelinePanCapture || pianoRoll.IsTimelineSeekCapture)
+            {
+                Cursor = Cursors.Default;
             }
             else if (editMode == EditMode.Envelope || editMode == EditMode.Arpeggio)
             {
-                UpdateEnvelopeHeaderTooltip(p.X, p.Y);
+                var pos = ScreenToControl(CursorPosition);
+                UpdateEnvelopeHeaderTooltip(pos.X, pos.Y);
+            }
+            else
+            {
+                Cursor = Cursors.Default;
             }
         }
 

@@ -7509,14 +7509,6 @@ namespace FamiStudio
             return (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio) && x > pianoSizeX && y >= headerSizeY / 2 && y < headerSizeY;
         }
 
-        private bool IsPointWhereCanResizeEnvelope(int x, int y)
-        {
-            var pixel0 = GetPixelXForAbsoluteNoteIndex(EditEnvelope.Length) + pianoSizeX;
-            var pixel1 = pixel0 + timeline.EnvelopeResizeWidth;
-
-            return IsPointInHeaderTopPart(x, y) && x > pixel0 && x <= pixel1;
-        }
-
         public bool IsPointInEffectList(int x, int y)
         {
             return showEffectsPanel && editMode == EditionMode.Channel && x < pianoSizeX && y >= headerSizeY && y < headerAndEffectSizeY;
@@ -7776,7 +7768,7 @@ namespace FamiStudio
             var pt = ScreenToControl(CursorPosition);
             var noteIdx = GetAbsoluteNoteIndexForPixelX(pt.X - pianoSizeX);
 
-            if (EditEnvelope != null && EditEnvelope.CanResize && IsPointWhereCanResizeEnvelope(pt.X, pt.Y) && captureOperation != CaptureOperation.Select || captureOperation == CaptureOperation.ResizeEnvelope)
+            if (captureOperation == CaptureOperation.ResizeEnvelope)
             {
                 Cursor = Cursors.SizeWE;
             }
@@ -7820,10 +7812,6 @@ namespace FamiStudio
                                 break;
                         }
                     }
-                    // The note-area case is now handled by NoteArea.UpdateCursor() instead - this method
-                    // keeps running here (via captured-pointer continuation) for as long as a PianoRoll-owned
-                    // capture (e.g. a note drag) is in progress, so re-computing it here too would immediately
-                    // stomp on the Default cursor NoteArea just set once that capture ends.
                 }
                 else
                 {
@@ -7833,6 +7821,8 @@ namespace FamiStudio
                         Cursor = Cursors.Default;
                 }
             }
+
+            timeline.UpdateCursor();
         }
 
         public override void OnContainerPointerEnterNotify(Control control, EventArgs e)
@@ -7847,14 +7837,14 @@ namespace FamiStudio
         {
             base.OnContainerPointerMoveNotify(control, e);
 
-            if (control != piano)
-                return;
-
             var p = WindowToControl(control.ControlToWindow(e.Position));
-            var middle = e.Middle || (e.Left && ModifierKeys.IsAltDown && Settings.AltLeftForMiddle);
 
-            if (middle)
-                DoScroll(p.X - mouseLastX, p.Y - mouseLastY);
+            if (control == piano)
+            {
+                var middle = e.Middle || (e.Left && ModifierKeys.IsAltDown && Settings.AltLeftForMiddle);
+                if (middle)
+                    DoScroll(p.X - mouseLastX, p.Y - mouseLastY);
+            }
 
             SetMouseLastPos(p.X, p.Y);
         }
@@ -7876,7 +7866,6 @@ namespace FamiStudio
             if (middle)
                 DoScroll(e.X - mouseLastX, e.Y - mouseLastY);
 
-            //UpdateToolTip(e); // TODO: This should be OnPointerEnter when NoteArea is its own thing. It won't need to be OnPointerMove depending on how highlighting notes is handled.
             SetMouseLastPos(e.X, e.Y);
             MarkDirty(); // TODO : This is bad.
 
@@ -8043,6 +8032,7 @@ namespace FamiStudio
 
             ClampScroll();
             MarkDirty();
+            timeline.UpdateCursor();
         }
 
         private void ZoomVerticallyAtLocation(int y, float scale)

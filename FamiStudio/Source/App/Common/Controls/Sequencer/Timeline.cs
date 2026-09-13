@@ -200,6 +200,7 @@ namespace FamiStudio
 
             if (e.Left)
             {
+                CapturePointer();
                 SeekDragRequested?.Invoke(this, e);
                 return;
             }

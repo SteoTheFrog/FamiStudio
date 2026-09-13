@@ -2386,7 +2386,7 @@ namespace FamiStudio
         {
             ScrollIfNearEdge(mouseX, mouseY);
 
-            dragSeekPosition = GetNoteForPixel(mouseX - channelNameSizeX);
+            dragSeekPosition = Utils.Clamp(GetNoteForPixel(mouseX - channelNameSizeX), 0, Song.GetPatternStartAbsoluteNoteIndex(Song.Length) - 1);
 
             if (final)
                 App.SeekSong(dragSeekPosition);

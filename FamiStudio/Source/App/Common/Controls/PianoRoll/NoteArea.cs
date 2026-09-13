@@ -1098,7 +1098,7 @@ namespace FamiStudio
             pianoRoll.SetPianoHoverNote(noteValue, newHoverNoteIndex, newHoverNoteCount);
         }
 
-        private void UpdateCursor()
+        public void UpdateCursor()
         {
             if (editMode != EditionMode.Channel)
                 return;

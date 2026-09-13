@@ -6758,6 +6758,7 @@ namespace FamiStudio
         {
             dragSeekPosition = GetAbsoluteNoteIndexForPixelX(x - pianoSizeX);
             dragSeekPosition = SnapNote(dragSeekPosition);
+            dragSeekPosition = Utils.Clamp(dragSeekPosition, 0, Song.GetPatternStartAbsoluteNoteIndex(Song.Length) - 1);
 
             if (final)
                 App.SeekSong(dragSeekPosition);
@@ -7760,10 +7761,6 @@ namespace FamiStudio
             {
                 Cursor = Cursors.SizeNS;
             }
-            else if (editMode == EditionMode.Channel && Settings.EyeDropNoteShortcut.IsKeyDown(ParentWindow))
-            {
-                Cursor = Cursors.Eyedrop;
-            }
             else
             {
                 if (editMode == EditionMode.Channel && captureOperation == CaptureOperation.None)
@@ -7790,6 +7787,7 @@ namespace FamiStudio
             }
 
             timeline.UpdateCursor();
+            noteArea.UpdateCursor();
         }
 
         public override void OnContainerPointerEnterNotify(Control control, EventArgs e)

@@ -77,7 +77,7 @@ namespace FamiStudio
             return x > resizeX && x <= resizeX + pianoRoll.TimelineEnvelopeResizeWidth;
         }
 
-        public bool HandleTimelinePointerDown(int x, int y, bool left, bool right, int timelineHeight)
+        public bool HandleTimelinePointerDown(int x, int y, bool left, bool right, int timelineHeight, bool capturePointer = true)
         {
             var env = pianoRoll.CurrentEditEnvelope;
 
@@ -86,7 +86,7 @@ namespace FamiStudio
 
             if (left && IsOverResizeIcon(x, y, timelineHeight, env))
             {
-                pianoRoll.StartEnvelopeResize(x, y);
+                pianoRoll.StartEnvelopeResize(x, y, capturePointer);
                 return true;
             }
 
@@ -98,7 +98,7 @@ namespace FamiStudio
 
                 if (left && canLoop)
                 {
-                    pianoRoll.StartEnvelopeLoopRelease(x, y, true);
+                    pianoRoll.StartEnvelopeLoopRelease(x, y, true, capturePointer);
                     return true;
                 }
 
@@ -107,7 +107,7 @@ namespace FamiStudio
                     var length = Utils.RoundDown(pianoRoll.GetAbsoluteNoteIndexForPixelX(x - pianoRoll.PianoSizeX), env.ChunkLength);
                     if (length > env.Loop)
                     {
-                        pianoRoll.StartEnvelopeLoopRelease(x, y, false);
+                        pianoRoll.StartEnvelopeLoopRelease(x, y, false, capturePointer);
                         return true;
                     }
                 }
@@ -166,7 +166,7 @@ namespace FamiStudio
             {
                 if (e.IsTouchEvent)
                 {
-                    if (pianoRoll.HandleEnvelopeGizmoPointerDown(pos.X, pos.Y))
+                    if (pianoRoll.HandleEnvelopeGizmoPointerDown(pos.X, pos.Y, false))
                         return;
 
                     pianoRoll.HandleEnvelopeTouchClick(pos.X, pos.Y);
@@ -174,12 +174,37 @@ namespace FamiStudio
                     return;
                 }
 
-                pianoRoll.StartEnvelopeDraw(pos.X, pos.Y);
+                CapturePointer();
+
+                if (!StartEnvelopeDraw(pos.X, pos.Y))
+                    ReleasePointer();
+
                 return;
             }
 
             if (e.Right)
                 e.DelayRightClick(); // Need to wait and see if its a context menu click or not.
+        }
+
+        private bool StartEnvelopeDraw(int x, int y)
+        {
+            var env = pianoRoll.CurrentEditEnvelope;
+            if (env == null || env.Length <= 0)
+                return false;
+
+            var noteIdx = pianoRoll.GetAbsoluteNoteIndexForPixelX(x - pianoRoll.PianoSizeX);
+
+            if (IsEnvelopeValueSelected(noteIdx))
+            {
+                pianoRoll.SetMobileHighlightedNote(noteIdx);
+                pianoRoll.StartChangeEnvelopeValue(x, y, false);
+            }
+            else
+            {
+                pianoRoll.StartDrawEnvelope(x, y, false);
+            }
+
+            return true;
         }
 
         protected override void OnPointerDownDelayed(PointerEventArgs e)
@@ -223,11 +248,21 @@ namespace FamiStudio
         protected override void OnPointerMove(PointerEventArgs e)
         {
             base.OnPointerMove(e);
+            var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
 
-            if (pianoRoll.IsTimelineColumnSelectionCapture)
+            if (pianoRoll.IsTimelineColumnSelectionCapture || pianoRoll.IsChangingEnvelopeValue || pianoRoll.IsDrawingEnvelope)
             {
-                var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
                 pianoRoll.UpdateTimelineCapture(p.X, p.Y);
+            }
+
+            if (pianoRoll.IsChangingEnvelopeValue ||
+                (pianoRoll.GetEnvelopeValueForCoord(p.X, p.Y, out int hoverIdx, out _) && IsEnvelopeValueSelected(hoverIdx)))
+            {
+                Cursor = Cursors.SizeNS;
+            }
+            else
+            {
+                Cursor = Cursors.Default;
             }
 
             UpdateNoteTooltip(e);
@@ -284,7 +319,7 @@ namespace FamiStudio
                 pianoRoll.HandleContextMenuEnvelope(p.X, p.Y);
             }
 
-            if (pianoRoll.IsTimelineColumnSelectionCapture)
+            if (pianoRoll.IsTimelineColumnSelectionCapture || pianoRoll.IsChangingEnvelopeValue || pianoRoll.IsDrawingEnvelope)
             {
                 var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
                 pianoRoll.EndTimelineCapture(p.X, p.Y);

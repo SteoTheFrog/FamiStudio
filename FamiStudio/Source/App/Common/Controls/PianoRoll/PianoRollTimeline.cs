@@ -275,8 +275,12 @@ namespace FamiStudio
 
             if (editMode == EditMode.Envelope || editMode == EditMode.Arpeggio)
             {
-                if (pianoRoll.HandleTimelineEnvelopePointerDown(pos.X, pos.Y, e.Left, e.Right))
+                CapturePointer();
+
+                if (pianoRoll.HandleTimelineEnvelopePointerDown(pos.X, pos.Y, e.Left, e.Right, false))
                     return;
+
+                ReleasePointer();
 
                 if (e.Left)
                 {

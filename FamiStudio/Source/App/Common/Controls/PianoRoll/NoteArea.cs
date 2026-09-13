@@ -75,6 +75,21 @@ namespace FamiStudio
         private bool captureThresholdMet                    => pianoRoll.CaptureThresholdMet;
         private CaptureOperation captureOperation            => pianoRoll.ActiveCaptureOperation;
 
+        private bool IsOwnedCapture =>
+            captureOperation == CaptureOperation.CreateNote ||
+            captureOperation == CaptureOperation.DragNote ||
+            captureOperation == CaptureOperation.DragSelection ||
+            captureOperation == CaptureOperation.ResizeNoteStart ||
+            captureOperation == CaptureOperation.ResizeSelectionNoteStart ||
+            captureOperation == CaptureOperation.ResizeNoteEnd ||
+            captureOperation == CaptureOperation.ResizeSelectionNoteEnd ||
+            captureOperation == CaptureOperation.MoveNoteRelease ||
+            captureOperation == CaptureOperation.MoveSelectionNoteRelease ||
+            pianoRoll.IsDeleteNotesCapture ||
+            captureOperation == CaptureOperation.CreateSlideNote ||
+            captureOperation == CaptureOperation.DragSlideNoteTarget ||
+            captureOperation == CaptureOperation.DragSlideNoteTargetGizmo;
+
         private int selectionMinX { get => pianoRoll.SelectionMinXField; set => pianoRoll.SelectionMinXField = value; }
         private int selectionMaxX { get => pianoRoll.SelectionMaxXField; set => pianoRoll.SelectionMaxXField = value; }
         private int selectionMinY { get => pianoRoll.SelectionMinYField; set => pianoRoll.SelectionMinYField = value; }
@@ -126,8 +141,8 @@ namespace FamiStudio
         }
 
 
-        internal void StartNoteCreation(int x, int y, NoteLocation location, byte noteValue)
-        { 
+        internal bool StartNoteCreation(int x, int y, NoteLocation location, byte noteValue, bool capturePointer = true)
+        {
             var channel = Song.Channels[editChannel];
 
             if (channel.SupportsInstrument(App.SelectedInstrument, false))
@@ -137,12 +152,14 @@ namespace FamiStudio
                     ClearSelection();
 
                 App.PlayInstrumentNote(noteValue, false, false);
-                StartCaptureOperation(x, y, CaptureOperation.CreateNote, true);
+                StartCaptureOperation(x, y, CaptureOperation.CreateNote, true, capturePointer: capturePointer);
                 UpdateNoteCreation(x, y, true, false);
+                return true;
             }
             else
             {
                 App.ShowInstrumentError(channel, true);
+                return false;
             }
         }
 
@@ -193,7 +210,7 @@ namespace FamiStudio
             }
         }
 
-        internal void StartNoteDrag(int x, int y, CaptureOperation captureOp, NoteLocation location, Note note)
+        internal void StartNoteDrag(int x, int y, CaptureOperation captureOp, NoteLocation location, Note note, bool capturePointer = true)
         {
             var dragSelection = 
                 captureOp == CaptureOperation.DragSelection || 
@@ -211,7 +228,7 @@ namespace FamiStudio
             else
                 App.UndoRedoManager.BeginTransaction(TransactionScope.Pattern, pattern.Id);
 
-            StartCaptureOperation(x, y, captureOp, true, location.ToAbsoluteNoteIndex(Song));
+            StartCaptureOperation(x, y, captureOp, true, location.ToAbsoluteNoteIndex(Song), capturePointer: capturePointer);
 
             if (dragSelection)
             {
@@ -597,7 +614,7 @@ namespace FamiStudio
             MarkDirty();
         }
 
-        internal void StartNoteResizeEnd(int x, int y, CaptureOperation captureOp, NoteLocation location, int offsetX = 0)
+        internal void StartNoteResizeEnd(int x, int y, CaptureOperation captureOp, NoteLocation location, int offsetX = 0, bool capturePointer = true)
         {
             var pattern = Song.Channels[editChannel].PatternInstances[location.PatternIndex];
             var dragSelection = captureOp == CaptureOperation.ResizeSelectionNoteEnd;
@@ -610,7 +627,7 @@ namespace FamiStudio
             else
                 App.UndoRedoManager.BeginTransaction(TransactionScope.Pattern, pattern.Id);
 
-            StartCaptureOperation(x, y, captureOp, true, location.ToAbsoluteNoteIndex(Song), offsetX);
+            StartCaptureOperation(x, y, captureOp, true, location.ToAbsoluteNoteIndex(Song), offsetX, capturePointer: capturePointer);
         }
 
         internal void UpdateNoteResizeEnd(int x, int y, bool final)
@@ -680,7 +697,7 @@ namespace FamiStudio
             }
         }
 
-        internal void StartMoveNoteRelease(int x, int y, CaptureOperation op, NoteLocation location)
+        internal void StartMoveNoteRelease(int x, int y, CaptureOperation op, NoteLocation location, bool capturePointer = true)
         {
             var minPatternIdx = Song.PatternIndexFromAbsoluteNoteIndex(selectionMinX);
             var maxPatternIdx = Song.PatternIndexFromAbsoluteNoteIndex(selectionMaxX);
@@ -695,7 +712,7 @@ namespace FamiStudio
                 App.UndoRedoManager.BeginTransaction(TransactionScope.Pattern, pattern.Id);
             }
 
-            StartCaptureOperation(x, y, op, false, location.ToAbsoluteNoteIndex(Song));
+            StartCaptureOperation(x, y, op, false, location.ToAbsoluteNoteIndex(Song), capturePointer: capturePointer);
         }
 
         internal void UpdateMoveNoteRelease(int x, int y, bool final)
@@ -839,11 +856,14 @@ namespace FamiStudio
                     {
                         if (note != null)
                             pianoRoll.DeleteSingleNote(noteLocation, mouseLocation, note);
-                        pianoRoll.StartCaptureOperation(pos.X, pos.Y, CaptureOperation.DeleteNotes);
+                        CapturePointer();
+                        StartCaptureOperation(pos.X, pos.Y, CaptureOperation.DeleteNotes, capturePointer: false);
                     }
                     else if (slide)
                     {
-                        pianoRoll.StartSlideNoteCreation(pos.X, pos.Y, noteLocation, note, noteValue);
+                        CapturePointer();
+                        if (!pianoRoll.StartSlideNoteCreation(pos.X, pos.Y, noteLocation, note, noteValue, false))
+                            ReleasePointer();
                     }
                     else if (attack && note != null)
                     {
@@ -876,23 +896,28 @@ namespace FamiStudio
                                 captureOp == CaptureOperation.ResizeNoteStart ||
                                 captureOp == CaptureOperation.ResizeSelectionNoteStart)
                             {
-                                StartNoteDrag(pos.X, pos.Y, captureOp, noteLocation, note);
+                                CapturePointer();
+                                StartNoteDrag(pos.X, pos.Y, captureOp, noteLocation, note, false);
                             }
                             else if (captureOp == CaptureOperation.ResizeNoteEnd ||
                                      captureOp == CaptureOperation.ResizeSelectionNoteEnd)
                             {
-                                StartNoteResizeEnd(pos.X, pos.Y, captureOp, noteLocation);
+                                CapturePointer();
+                                StartNoteResizeEnd(pos.X, pos.Y, captureOp, noteLocation, capturePointer: false);
                             }
                             else if (
                                 captureOp == CaptureOperation.MoveNoteRelease ||
                                 captureOp == CaptureOperation.MoveSelectionNoteRelease)
                             {
-                                StartMoveNoteRelease(pos.X, pos.Y, captureOp, noteLocation);
+                                CapturePointer();
+                                StartMoveNoteRelease(pos.X, pos.Y, captureOp, noteLocation, false);
                             }
                         }
                         else
                         {
-                            StartNoteCreation(pos.X, pos.Y, noteLocation, noteValue);
+                            CapturePointer();
+                            if (!StartNoteCreation(pos.X, pos.Y, noteLocation, noteValue, false))
+                                ReleasePointer();
                         }
                     }
                 }
@@ -923,7 +948,15 @@ namespace FamiStudio
             base.OnPointerUp(e);
 
             if (e.IsTouchEvent)
+            {
+                if (IsOwnedCapture)
+                {
+                    var touchPos = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+                    pianoRoll.EndTimelineCapture(touchPos.X, touchPos.Y);
+                }
+
                 return;
+            }
 
             if (editMode == EditionMode.DPCMMapping)
             {
@@ -947,7 +980,7 @@ namespace FamiStudio
                     MarkDirty();
             }
 
-            if (pianoRoll.IsTimelineColumnSelectionCapture)
+            if (pianoRoll.IsTimelineColumnSelectionCapture || IsOwnedCapture)
             {
                 var pos = pianoRoll.WindowToControl(ControlToWindow(e.Position));
                 pianoRoll.EndTimelineCapture(pos.X, pos.Y);
@@ -1007,7 +1040,8 @@ namespace FamiStudio
                 {
                     pianoRoll.AbortCaptureOperation();
                     pianoRoll.DeleteSingleNote(noteLocation, mouseLocation, note);
-                    pianoRoll.StartCaptureOperation(pos.X, pos.Y, CaptureOperation.DeleteNotes);
+                    CapturePointer();
+                    StartCaptureOperation(pos.X, pos.Y, CaptureOperation.DeleteNotes, capturePointer: false);
                 }
 
                 MarkDirty();
@@ -1021,7 +1055,7 @@ namespace FamiStudio
             UpdateCursor();
             UpdateHoverNote(e);
 
-            if (pianoRoll.IsTimelineColumnSelectionCapture)
+            if (pianoRoll.IsTimelineColumnSelectionCapture || IsOwnedCapture)
             {
                 var pos = pianoRoll.WindowToControl(ControlToWindow(e.Position));
                 pianoRoll.UpdateTimelineCapture(pos.X, pos.Y);
@@ -1286,16 +1320,19 @@ namespace FamiStudio
                 {
                     if (g.Rect.Contains(x - pianoSizeX, y - headerAndEffectSizeY))
                     {
+                        CapturePointer();
+
                         switch (g.Action)
                         {
                             case GizmoAction.ResizeNote:
-                                StartNoteResizeEnd(x, y, IsNoteSelected(absNoteLocation) ? CaptureOperation.ResizeSelectionNoteEnd : CaptureOperation.ResizeNoteEnd, gizmoNoteLocation, g.OffsetX);
+                                StartNoteResizeEnd(x, y, IsNoteSelected(absNoteLocation) ? CaptureOperation.ResizeSelectionNoteEnd : CaptureOperation.ResizeNoteEnd, gizmoNoteLocation, g.OffsetX, false);
                                 break;
                             case GizmoAction.MoveRelease:
-                                StartMoveNoteRelease(x, y, IsNoteSelected(absNoteLocation) ? CaptureOperation.MoveSelectionNoteRelease : CaptureOperation.MoveNoteRelease, gizmoNoteLocation);
+                                StartMoveNoteRelease(x, y, IsNoteSelected(absNoteLocation) ? CaptureOperation.MoveSelectionNoteRelease : CaptureOperation.MoveNoteRelease, gizmoNoteLocation, false);
                                 break;
                             case GizmoAction.MoveSlide:
-                                pianoRoll.StartDragSlideNoteGizmo(x, y, gizmoNoteLocation, gizmoNote);
+                                if (!pianoRoll.StartDragSlideNoteGizmo(x, y, gizmoNoteLocation, gizmoNote, false))
+                                    ReleasePointer();
                                 break;
                         }
 

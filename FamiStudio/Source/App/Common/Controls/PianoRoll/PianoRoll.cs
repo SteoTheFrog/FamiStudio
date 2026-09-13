@@ -903,6 +903,7 @@ namespace FamiStudio
         }
 
         public bool IsChangingEnvelopeValue => captureOperation == CaptureOperation.ChangeEnvelopeValue;
+        public bool IsDrawingEnvelope       => captureOperation == CaptureOperation.DrawEnvelope;
 
         public void UpdateTimelinePan(int x, int y)
         {
@@ -926,9 +927,9 @@ namespace FamiStudio
             EndCaptureOperation(x, y);
         }
 
-        public bool HandleTimelineEnvelopePointerDown(int x, int y, bool left, bool right)
+        public bool HandleTimelineEnvelopePointerDown(int x, int y, bool left, bool right, bool capturePointer = true)
         {
-            return envelopeEditor.HandleTimelinePointerDown(x, y, left, right, timeline.Height);
+            return envelopeEditor.HandleTimelinePointerDown(x, y, left, right, timeline.Height, capturePointer);
         }
 
         public EnvelopeEditor.TimelineHoverRegion GetTimelineEnvelopeHoverRegion(int x, int y, out bool canLoop, out bool canRelease, out bool hasLoopPoint)
@@ -936,16 +937,16 @@ namespace FamiStudio
             return envelopeEditor.GetTimelineHoverRegion(x, y, timeline.Height, out canLoop, out canRelease, out hasLoopPoint);
         }
 
-        public void StartEnvelopeResize(int x, int y)
+        public void StartEnvelopeResize(int x, int y, bool capturePointer = true)
         {
-            StartResizeEnvelope(x, y);
+            StartResizeEnvelope(x, y, capturePointer);
         }
 
-        public void StartEnvelopeLoopRelease(int x, int y, bool left)
+        public void StartEnvelopeLoopRelease(int x, int y, bool left, bool capturePointer = true)
         {
             var op = left ? CaptureOperation.DragLoop : CaptureOperation.DragRelease;
 
-            StartCaptureOperation(x, y, op);
+            StartCaptureOperation(x, y, op, capturePointer: capturePointer);
 
             if (editMode == EditionMode.Envelope)
                 App.UndoRedoManager.BeginTransaction(TransactionScope.Instrument, editInstrument.Id);
@@ -955,41 +956,20 @@ namespace FamiStudio
             ResizeEnvelope(x, y, false);
         }
 
-        public bool StartEnvelopeDraw(int x, int y)
-        {
-            var env = CurrentEditEnvelope;
-            if (env == null || env.Length <= 0)
-                return false;
-
-            var noteIdx = GetAbsoluteNoteIndexForPixelX(x - pianoSizeX);
-
-            if (IsEnvelopeValueSelected(noteIdx))
-            {
-                SetMobileHighlightedNote(noteIdx);
-                StartChangeEnvelopeValue(x, y);
-            }
-            else
-            {
-                StartDrawEnvelope(x, y);
-            }
-
-            return true;
-        }
-
-        public bool StartEnvelopeFreeDraw(int x, int y)
+        public bool StartEnvelopeFreeDraw(int x, int y, bool capturePointer = true)
         {
             var env = CurrentEditEnvelope;
 
             if (env == null || env.Length <= 0)
                 return false;
 
-            StartDrawEnvelope(x, y);
+            StartDrawEnvelope(x, y, capturePointer);
             return true;
         }
 
-        public bool HandleEnvelopeGizmoPointerDown(int x, int y)
+        public bool HandleEnvelopeGizmoPointerDown(int x, int y, bool capturePointer = true)
         {
-            return HandleTouchDownEnvelopeGizmos(x, y);
+            return HandleTouchDownEnvelopeGizmos(x, y, capturePointer);
         }
 
         public bool StartMobilePan(int x, int y)
@@ -4717,9 +4697,9 @@ namespace FamiStudio
             return false;
         }
 
-        private void StartResizeEnvelope(int x, int y)
+        private void StartResizeEnvelope(int x, int y, bool capturePointer = true)
         {
-            StartCaptureOperation(x, y, CaptureOperation.ResizeEnvelope);
+            StartCaptureOperation(x, y, CaptureOperation.ResizeEnvelope, capturePointer: capturePointer);
 
             if (editMode == EditionMode.Envelope)
                 App.UndoRedoManager.BeginTransaction(TransactionScope.Instrument, editInstrument.Id);
@@ -4729,9 +4709,9 @@ namespace FamiStudio
             ResizeEnvelope(x, y, false);
         }
 
-        private void StartDrawEnvelope(int x, int y)
+        internal void StartDrawEnvelope(int x, int y, bool capturePointer = true)
         {
-            StartCaptureOperation(x, y, CaptureOperation.DrawEnvelope);
+            StartCaptureOperation(x, y, CaptureOperation.DrawEnvelope, capturePointer: capturePointer);
 
             if (editMode == EditionMode.Envelope)
                 App.UndoRedoManager.BeginTransaction(TransactionScope.Instrument, editInstrument.Id);
@@ -5090,9 +5070,9 @@ namespace FamiStudio
             MarkDirty();
         }
 
-        private void StartChangeEnvelopeValue(int x, int y)
+        internal void StartChangeEnvelopeValue(int x, int y, bool capturePointer = true)
         {
-            StartCaptureOperation(x, y, CaptureOperation.ChangeEnvelopeValue);
+            StartCaptureOperation(x, y, CaptureOperation.ChangeEnvelopeValue, capturePointer: capturePointer);
 
             if (editMode == EditionMode.Envelope)
                 App.UndoRedoManager.BeginTransaction(TransactionScope.Instrument, editInstrument.Id);
@@ -5129,7 +5109,7 @@ namespace FamiStudio
             return false;
         }
 
-        private bool HandleTouchDownEnvelopeGizmos(int x, int y)
+        private bool HandleTouchDownEnvelopeGizmos(int x, int y, bool capturePointer = true)
         {
             if (HasHighlightedNote() && !highlightRepeatEnvelope && IsPointInNoteArea(x, y))
             {
@@ -5143,7 +5123,7 @@ namespace FamiStudio
                             switch (g.Action)
                             {
                                 case GizmoAction.ChangeEnvValue:
-                                    StartChangeEnvelopeValue(x, y);
+                                    StartChangeEnvelopeValue(x, y, capturePointer);
                                     break;
                             }
 
@@ -6810,7 +6790,7 @@ namespace FamiStudio
             MarkDirty();
         }
 
-        internal void StartSlideNoteCreation(int x, int y, NoteLocation location, Note note, byte noteValue)
+        internal bool StartSlideNoteCreation(int x, int y, NoteLocation location, Note note, byte noteValue, bool capturePointer = true)
         {
             var channel = Song.Channels[editChannel];
             var pattern = channel.PatternInstances[location.PatternIndex];
@@ -6820,7 +6800,7 @@ namespace FamiStudio
                 if (note != null)
                 {
                     App.UndoRedoManager.BeginTransaction(TransactionScope.Pattern, pattern.Id);
-                    StartCaptureOperation(x, y, CaptureOperation.DragSlideNoteTarget, false, location.ToAbsoluteNoteIndex(Song));
+                    StartCaptureOperation(x, y, CaptureOperation.DragSlideNoteTarget, false, location.ToAbsoluteNoteIndex(Song), capturePointer: capturePointer);
                 }
                 else
                 {
@@ -6836,7 +6816,7 @@ namespace FamiStudio
                             pattern = channel.CreatePatternAndInstance(location.PatternIndex);
                         }
 
-                        StartCaptureOperation(x, y, CaptureOperation.CreateSlideNote, true);
+                        StartCaptureOperation(x, y, CaptureOperation.CreateSlideNote, true, capturePointer: capturePointer);
 
                         // Apply snapping.
                         captureNoteAbsoluteIdx = SnapNote(captureNoteAbsoluteIdx);
@@ -6851,10 +6831,14 @@ namespace FamiStudio
                     else
                     {
                         App.ShowInstrumentError(channel, true);
-                        return;
+                        return false;
                     }
                 }
+
+                return true;
             }
+
+            return false;
         }
 
         private void UpdateSlideNoteCreation(int x, int y, bool final, bool gizmo = false)
@@ -6888,7 +6872,7 @@ namespace FamiStudio
             }
         }
 
-        internal void StartDragSlideNoteGizmo(int x, int y, NoteLocation location, Note note)
+        internal bool StartDragSlideNoteGizmo(int x, int y, NoteLocation location, Note note, bool capturePointer = true)
         {
             var channel = Song.Channels[editChannel];
             var pattern = channel.PatternInstances[location.PatternIndex];
@@ -6898,8 +6882,11 @@ namespace FamiStudio
                 // -0.5 since out note values have +1 in them (-1 + 0.5 = -0.5)
                 var offsetY = headerAndEffectSizeY + virtualSizeY - (int)((note.SlideNoteTarget - 0.5f) * noteSizeY) - scrollY - y;
                 App.UndoRedoManager.BeginTransaction(TransactionScope.Pattern, pattern.Id);
-                StartCaptureOperation(x, y, CaptureOperation.DragSlideNoteTargetGizmo, false, location.ToAbsoluteNoteIndex(Song), 0, offsetY);
+                StartCaptureOperation(x, y, CaptureOperation.DragSlideNoteTargetGizmo, false, location.ToAbsoluteNoteIndex(Song), 0, offsetY, capturePointer);
+                return true;
             }
+
+            return false;
         }
 
         private void EnterEffectValue(int x, int y, NoteLocation location, Note note)
@@ -7766,29 +7753,12 @@ namespace FamiStudio
         private void UpdateCursor()
         {
             var pt = ScreenToControl(CursorPosition);
-            var noteIdx = GetAbsoluteNoteIndexForPixelX(pt.X - pianoSizeX);
 
-            if (captureOperation == CaptureOperation.ResizeEnvelope)
-            {
-                Cursor = Cursors.SizeWE;
-            }
-            else if (captureOperation == CaptureOperation.ChangeEffectValue ||
-                     captureOperation == CaptureOperation.ChangeEnvelopeRepeatValue ||
-                     HasRepeatEnvelope() && IsPointInEffectPanel(pt.X, pt.Y))
+            if (captureOperation == CaptureOperation.ChangeEffectValue ||
+                captureOperation == CaptureOperation.ChangeEnvelopeRepeatValue ||
+                HasRepeatEnvelope() && IsPointInEffectPanel(pt.X, pt.Y))
             {
                 Cursor = Cursors.SizeNS;
-            }
-            else if ((EditEnvelope != null && IsPointInNoteArea(pt.X, pt.Y) && IsNoteSelected(noteIdx)) || captureOperation == CaptureOperation.ChangeEnvelopeValue)
-            {
-                Cursor = Cursors.SizeNS;
-            }
-            else if (ModifierKeys.IsControlDown && (captureOperation == CaptureOperation.DragNote || captureOperation == CaptureOperation.DragSelection))
-            {
-                Cursor = Cursors.CopyCursor;
-            }
-            else if (captureOperation == CaptureOperation.DeleteNotes)
-            {
-                Cursor = Cursors.Eraser;
             }
             else if (editMode == EditionMode.Channel && Settings.EyeDropNoteShortcut.IsKeyDown(ParentWindow))
             {
@@ -7815,10 +7785,7 @@ namespace FamiStudio
                 }
                 else
                 {
-                    if (captureOperation == CaptureOperation.DragNote || captureOperation == CaptureOperation.DragSelection)
-                        Cursor = Cursors.Move;
-                    else
-                        Cursor = Cursors.Default;
+                    Cursor = Cursors.Default;
                 }
             }
 

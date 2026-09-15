@@ -533,6 +533,19 @@ namespace FamiStudio
                 }
             }
 
+            // At version 20 (FamiStudio 4.6.0), we added full range volume for FDS. Double the
+            // volume track values on old projects (this is how it used to be done).
+            if (buffer.Version < 20 && channelType == global::FamiStudio.ChannelType.FdsWave)
+            {
+                foreach (var note in notes.Values)
+                {
+                    if (note.HasVolume)
+                        note.Volume = (byte)(note.Volume << 1);
+                    if (note.HasVolumeSlide)
+                        note.VolumeSlideTarget = (byte)(note.VolumeSlideTarget << 1);
+                }
+            }
+
             if (buffer.IsReading)
             {
                 if (!buffer.IsForClipboard)

@@ -1282,7 +1282,7 @@ namespace FamiStudio
 
                 if (channel.Type == ChannelType.FdsWave)
                 {
-                    volume = Math.Min(Note.VolumeMax, volume >> 1);
+                    volume = Math.Min(Note.FdsVolumeMax, volume);
                 }
                 else if (channel.Type >= ChannelType.Vrc7Fm1 && channel.Type <= ChannelType.Vrc7Fm6)
                 {

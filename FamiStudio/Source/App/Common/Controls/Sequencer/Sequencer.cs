@@ -333,7 +333,7 @@ namespace FamiStudio
             return x;
         }
 
-        private int GetPixelForNote(double n, bool scroll = true)
+        private int GetPixelForNote(float n, bool scroll = true)
         {
             var x = (int)Math.Round(n * noteSizeX);
 

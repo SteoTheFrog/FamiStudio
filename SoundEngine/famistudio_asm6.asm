@@ -846,6 +846,9 @@ famistudio_chn_volume_track:      .dsb FAMISTUDIO_NUM_CHANNELS
 .if FAMISTUDIO_USE_VOLUME_SLIDES
 famistudio_chn_volume_slide_step:   .dsb FAMISTUDIO_NUM_VOLUME_SLIDES
 famistudio_chn_volume_slide_target: .dsb FAMISTUDIO_NUM_VOLUME_SLIDES
+.if FAMISTUDIO_EXP_FDS
+famistudio_fds_volume_slide_frac: .dsb 1
+.endif
 .endif
 .endif
 .if FAMISTUDIO_USE_VIBRATO || FAMISTUDIO_USE_ARPEGGIO
@@ -1458,6 +1461,9 @@ ldx #0
     inx
     cpx #FAMISTUDIO_NUM_VOLUME_SLIDES
     bne @set_volume_slides
+.if FAMISTUDIO_EXP_FDS
+    sta famistudio_fds_volume_slide_frac
+.endif
 .endif
 
     ldx #0
@@ -1580,6 +1586,12 @@ famistudio_music_play:
     sta famistudio_chn_ref_len,x
     .if FAMISTUDIO_USE_VOLUME_TRACK
         lda #$f0
+        .if FAMISTUDIO_EXP_FDS
+            cpx #FAMISTUDIO_FDS_CH0_IDX
+            bne @default_volume_track_store
+            lda #32 ; FDS volume track is unpacked 6-bit (clamped at 32), not the packed 0xf0 4-bit default.
+        @default_volume_track_store:
+        .endif
         sta famistudio_chn_volume_track,x
     .endif
     .if FAMISTUDIO_USE_FAMITRACKER_DELAYED_NOTES_OR_CUTS
@@ -2166,7 +2178,7 @@ set_volume:
 
 .if FAMISTUDIO_EXP_FDS
 
-.if FAMISTUDIO_USE_FDS_AUTOMOD
+.if FAMISTUDIO_USE_FDS_AUTOMOD || FAMISTUDIO_USE_VOLUME_TRACK
 
 ;======================================================================================================================
 ; FAMISTUDIO_MUL (internal)
@@ -2204,6 +2216,10 @@ famistudio_mul:
     bcs @do_add
     bne @loop
     rts
+
+.endif
+
+.if FAMISTUDIO_USE_FDS_AUTOMOD
 
 ;======================================================================================================================
 ; FAMISTUDIO_DIV (internal)
@@ -2352,18 +2368,41 @@ famistudio_update_fds_channel_sound:
 
 @compute_volume:
     .if FAMISTUDIO_USE_VOLUME_TRACK
-        lda famistudio_chn_volume_track+FAMISTUDIO_FDS_CH0_IDX 
-        .if FAMISTUDIO_USE_VOLUME_SLIDES
-            ; During a slide, the lower 4 bits are fraction.
-            and #$f0
-        .endif        
-        ora famistudio_env_value+FAMISTUDIO_FDS_CH0_ENVS+FAMISTUDIO_ENV_VOLUME_OFF
-        tax
-        lda famistudio_volume_table, x 
-    .else
+
+        ; A = volume envelope: FDS DAC is 6-bit, but clamped to 32.
         lda famistudio_env_value+FAMISTUDIO_FDS_CH0_ENVS+FAMISTUDIO_ENV_VOLUME_OFF
+        sta pitch+0
+        lda #0
+        sta pitch+1
+
+        ; FDS volume track: 0..32
+        lda famistudio_chn_volume_track+FAMISTUDIO_FDS_CH0_IDX
+        sta mul
+
+        ; 16-bit result = envelope * track
+        jsr famistudio_mul
+        stx pitch+0
+        sty pitch+1
+
+        ; Shift right 5 times (divide by 32).
+        lsr pitch+1
+        ror pitch+0
+        lsr pitch+1
+        ror pitch+0
+        lsr pitch+1
+        ror pitch+0
+        lsr pitch+1
+        ror pitch+0
+        lsr pitch+1
+        ror pitch+0
+
+        lda pitch+0
+
+    .else
+
+        lda famistudio_env_value+FAMISTUDIO_FDS_CH0_ENVS+FAMISTUDIO_ENV_VOLUME_OFF
+
     .endif
-    asl ; FDS volume is 6-bits, but clamped to 32. Just double it.
 
 @set_volume:
     ora #$80
@@ -4171,6 +4210,8 @@ famistudio_update:
 ;         if step > 0 && volume >= target || step < 0 && volume <= target
 ;             volume = target
 ;             step = 0
+;
+; FDS is an exception (see @fds_volume_slide below)
 
 @update_volume_slides:
     ldx #0
@@ -4178,7 +4219,13 @@ famistudio_update:
 @volume_side_process:
     lda famistudio_chn_volume_slide_step,x
     beq @volume_slide_next
-    clc 
+
+    .if FAMISTUDIO_EXP_FDS
+        cpx #FAMISTUDIO_FDS_CH0_IDX
+        beq @fds_volume_slide
+    .endif
+
+    clc
     bmi @negative_volume_slide
     
 @positive_volume_slide:
@@ -4211,16 +4258,57 @@ famistudio_update:
     beq @clear_volume_slide
     bcs @volume_slide_next
 
-@clear_volume_slide:    
+@clear_volume_slide:
     lda famistudio_chn_volume_slide_target,x
     sta famistudio_chn_volume_track,x
     lda #0
     sta famistudio_chn_volume_slide_step,x
+    jmp @volume_slide_next
+
+    .if FAMISTUDIO_EXP_FDS
+
+    ; FDS volume track is a plain, unpacked 0..32 byte (no spare bits for a fraction), so the
+    ; slide fraction lives in its own byte and is carried into the volume with a signed 8-bit
+    ; add, similar to the pitch slide fixed-point accumulator above. A already holds
+    ; famistudio_chn_volume_slide_step,x from @volume_side_process.
+    @fds_volume_slide:
+        clc
+        adc famistudio_fds_volume_slide_frac
+        sta famistudio_fds_volume_slide_frac
+        lda famistudio_chn_volume_slide_step,x
+        and #$80
+        beq @fds_positive_volume_slide
+
+    @fds_negative_volume_slide:
+        lda #$ff
+        adc famistudio_chn_volume_track,x
+        sta famistudio_chn_volume_track,x
+        lda famistudio_chn_volume_slide_target,x
+        cmp famistudio_chn_volume_track,x
+        bcc @volume_slide_next
+        jmp @clear_fds_volume_slide
+
+    @fds_positive_volume_slide:
+        adc famistudio_chn_volume_track,x
+        sta famistudio_chn_volume_track,x
+        cmp famistudio_chn_volume_slide_target,x
+        bcc @volume_slide_next
+
+    @clear_fds_volume_slide:
+        lda famistudio_chn_volume_slide_target,x
+        sta famistudio_chn_volume_track,x
+        lda #0
+        sta famistudio_chn_volume_slide_step,x
+        sta famistudio_fds_volume_slide_frac
+
+    .endif
 
 @volume_slide_next:
-    inx 
+    inx
     cpx #FAMISTUDIO_NUM_VOLUME_SLIDES
-    bne @volume_side_process
+    beq @volume_slides_done
+    jmp @volume_side_process
+@volume_slides_done:
 .endif
 
 .if FAMISTUDIO_CFG_EQUALIZER
@@ -5605,24 +5693,75 @@ famistudio_advance_channel:
     bcc @common_note
 
 .if FAMISTUDIO_USE_VOLUME_TRACK
-; $70 to $7f = volume change 
+
+; $70-$7f = volume change.
+;
+; 2A03 / other channels:
+;   $7x
+;   volume = x << 4
+;
+; FDS:
+;   $7x + $yy
+;   volume = ((x & $0f) << 2) | ($yy & $03)
+;
 @check_volume_track:
     cmp #$70
     bcc @jmp_to_opcode
 
-@volume_track:    
+@volume_track:
     and #$0f
+    sta tmp_y1
+
+.if FAMISTUDIO_EXP_FDS
+
+    ; FDS uses 6-bit volume.
+    lda chan_idx
+    cmp #FAMISTUDIO_FDS_CH0_IDX
+    beq @volume_track_6bit
+
+.endif
+
+@volume_track_4bit:
+    ; Existing 4-bit volume representation:
+    ; 0..15 -> $00,$10,...,$f0
+    lda tmp_y1
     asl
     asl
     asl
     asl
     sta famistudio_chn_volume_track,x
-    ; Clear any volume slide.
+    jmp @volume_track_done
+
+.if FAMISTUDIO_EXP_FDS
+
+@volume_track_6bit:
+    ; Upper 4 bits become bits 5..2.
+    lda tmp_y1
+    asl
+    asl
+    sta famistudio_chn_volume_track,x
+
+    ; Read the extra byte containing the lower 2 bits.
+    lda (channel_data_ptr),y
+    iny
+    and #$03
+
+    ; Combine into 6-bit value $00-$3f.
+    ora famistudio_chn_volume_track,x
+    sta famistudio_chn_volume_track,x
+
+.endif
+
+@volume_track_done:
+
     .if FAMISTUDIO_USE_VOLUME_SLIDES
+        ; Clear any volume slide.
         lda #0
         sta famistudio_chn_volume_slide_step,x
     .endif
-    bcc @read_byte
+
+    jmp @read_byte
+
 .endif
 
 @jmp_to_opcode:
@@ -5919,7 +6058,14 @@ famistudio_advance_channel:
     lda (channel_data_ptr),y
     iny
     sta famistudio_chn_volume_slide_target, x
-    jmp @read_byte 
+    .if FAMISTUDIO_EXP_FDS
+        cpx #FAMISTUDIO_FDS_CH0_IDX
+        bne @opcode_volume_slide_done
+        lda #0
+        sta famistudio_fds_volume_slide_frac
+    @opcode_volume_slide_done:
+    .endif
+    jmp @read_byte
 .endif
 
 .if FAMISTUDIO_USE_DELTA_COUNTER

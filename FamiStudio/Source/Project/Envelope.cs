@@ -29,7 +29,7 @@ namespace FamiStudio
         {
         }
 
-        public Envelope(int type)
+        public Envelope(int type, bool fds = false)
         {
             maxLength = GetEnvelopeMaxLength(type);
             values = new sbyte[maxLength];
@@ -40,7 +40,7 @@ namespace FamiStudio
 
             if (canResize)
             {
-                ResetToDefault(type);
+                ResetToDefault(type, fds);
             }
             else
             {
@@ -92,9 +92,9 @@ namespace FamiStudio
             }
         }
 
-        public void ResetToDefault(int type)
+        public void ResetToDefault(int type, bool fds = false)
         {
-            var def = GetEnvelopeDefaultValue(type);
+            var def = GetEnvelopeDefaultValue(type, fds);
 
             if (chunkLength > 1)
                 length = chunkLength;
@@ -548,12 +548,12 @@ namespace FamiStudio
             }
         }
 
-        public static sbyte GetEnvelopeZeroValue(int type)
+        public static sbyte GetEnvelopeZeroValue(int type, bool fds = false)
         {
             switch (type)
             {
                 case EnvelopeType.Volume:
-                    return (sbyte)15;
+                    return (sbyte)(fds ? Note.FdsVolumeMax : Note.VolumeMax);
                 case EnvelopeType.S5BMixer:
                     return (sbyte)2;
                 default:
@@ -577,12 +577,12 @@ namespace FamiStudio
             }
         }
 
-        public static sbyte GetEnvelopeDefaultValue(int type)
+        public static sbyte GetEnvelopeDefaultValue(int type, bool fds = false)
         {
             switch (type)
             {
                 case EnvelopeType.Volume:
-                    return Note.VolumeMax;
+                    return (sbyte)(fds ? Note.FdsVolumeMax : Note.VolumeMax);
                 case EnvelopeType.WaveformRepeat:
                     return 1;
                 case EnvelopeType.FdsWaveform:
@@ -594,7 +594,7 @@ namespace FamiStudio
             }
         }
 
-        public bool IsEmpty(int type)
+        public bool IsEmpty(int type, bool fds = false)
         {
             if (!canResize)
                 return false;
@@ -602,7 +602,7 @@ namespace FamiStudio
             if (length == 0)
                 return true;
 
-            return AllValuesEqual(GetEnvelopeZeroValue(type));
+            return AllValuesEqual(GetEnvelopeZeroValue(type, fds));
         }
 
         public bool AllValuesEqual(sbyte val)
@@ -639,7 +639,12 @@ namespace FamiStudio
 
         public static void GetMinMaxValueForType(Instrument instrument, int type, out int min, out int max)
         {
-            if (type == EnvelopeType.Volume || type == EnvelopeType.N163Waveform)
+            if (type == EnvelopeType.Volume)
+            {
+                min = 0;
+                max = instrument != null && instrument.IsFds ? Note.FdsVolumeMax : Note.VolumeMax;
+            }
+            else if (type == EnvelopeType.N163Waveform)
             {
                 min = 0;
                 max = 15;

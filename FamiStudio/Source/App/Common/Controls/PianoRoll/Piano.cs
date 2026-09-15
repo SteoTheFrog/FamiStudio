@@ -99,7 +99,12 @@ namespace FamiStudio
 
             maxOctave = (int)Math.Ceiling(maxVisibleNote / 12.0f);
             minOctave = (int)Math.Floor(minVisibleNote / 12.0f);
+
+            if (!IsVideoRecording)
+                maxOctave = Math.Min(maxOctave, MaxReachableOctave);
         }
+
+        private int MaxReachableOctave => VirtualSizeY / OctaveSizeY;
 
         private void StartPlayPiano(int note)
         {
@@ -152,7 +157,9 @@ namespace FamiStudio
 
         internal int GetPianoNote(int x, int y)
         {
-            for (int i = 0; i < NumOctaves; i++)
+            var maxOctave = IsVideoRecording ? NumOctaves : Math.Min(NumOctaves, MaxReachableOctave);
+
+            for (int i = 0; i < maxOctave; i++)
             {
                 for (int j = 0; j < 12 && i * 12 + j < NumNotes; j++)
                 {
@@ -175,8 +182,11 @@ namespace FamiStudio
             {
                 Note.GetOctaveAndNote(note, out var octave, out var octaveNote);
 
-                if (whiteKey == !IsBlackKey(octaveNote))
-                    c.FillRectangle(GetKeyRectangle(octave, octaveNote), color);
+                if (IsVideoRecording || octave < MaxReachableOctave)
+                {
+                    if (whiteKey == !IsBlackKey(octaveNote))
+                        c.FillRectangle(GetKeyRectangle(octave, octaveNote), color);
+                }
 
                 return true;
             }
@@ -223,6 +233,14 @@ namespace FamiStudio
 
             if (playing)
                 UpdatePlayPiano(note);
+        }
+
+        protected override void OnPointerLeave(EventArgs e)
+        {
+            base.OnPointerLeave(e);
+            
+            if (!pianoRoll.IsEditingChannel)
+                HoverNote = -1;
         }
 
         protected override void OnPointerEnter(EventArgs e)

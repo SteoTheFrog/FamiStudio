@@ -120,7 +120,7 @@ namespace FamiStudio
             for (int i = 0; i < EnvelopeType.Count; i++)
             {
                 if (IsEnvelopeActive(i))
-                    envelopes[i] = new Envelope(i);
+                    envelopes[i] = new Envelope(i, expansion == ExpansionType.Fds);
             }
 
             if (expansion == ExpansionType.Fds)
@@ -193,7 +193,7 @@ namespace FamiStudio
 
         public bool IsEnvelopeEmpty(int envelopeType)
         {
-            return envelopes[envelopeType].IsEmpty(envelopeType);
+            return envelopes[envelopeType].IsEmpty(envelopeType, IsFds);
         }
 
         public static bool EnvelopeHasRepeat(int envelopeType)
@@ -1077,7 +1077,7 @@ namespace FamiStudio
                 if ((envelopeMask & (1 << i)) != 0)
                 {
                     if (buffer.IsReading)
-                        envelopes[i] = new Envelope(i);
+                        envelopes[i] = new Envelope(i, expansion == ExpansionType.Fds);
                     envelopes[i].Serialize(buffer, i);
                 }
                 else
@@ -1170,6 +1170,14 @@ namespace FamiStudio
             {
                 envelopes[EnvelopeType.S5BMixer] = new Envelope(EnvelopeType.S5BMixer);
                 envelopes[EnvelopeType.S5BNoiseFreq] = new Envelope(EnvelopeType.S5BNoiseFreq);
+            }
+
+            // At version 20 (FamiStudio 4.6.0), we added full range volume envelopes for FDS.
+            // Double values on old projects (this is how it used to be done). Clamp for safety.
+            if (buffer.Version < 20 && IsFds)
+            {
+                for (var i = 0; i < VolumeEnvelope.Length; i++)
+                    VolumeEnvelope.Values[i] = (sbyte)Utils.Clamp(VolumeEnvelope.Values[i] << 1, 0, Note.FdsVolumeMax);
             }
 
             if (buffer.IsReading)

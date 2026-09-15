@@ -1630,12 +1630,12 @@ namespace FamiStudio
         public void PlayInstrumentNote(int n, bool showWarning, bool allowRecording, bool custom = false, Instrument customInstrument = null, Arpeggio customArpeggio = null, float stopDelay = 0.0f)
         {
             Note note = new Note(n);
-            note.Volume = Note.VolumeMax;
 
             var instrument = custom ? customInstrument : selectedInstrument;
             var arpeggio   = custom ? customArpeggio   : selectedArpeggio;
 
             int channel = selectedChannelIndex;
+            note.Volume = (byte)(song.Channels[channel].IsFdsChannel ? Note.FdsVolumeMax : Note.VolumeMax);
 
             if (instrument == null)
                 return;

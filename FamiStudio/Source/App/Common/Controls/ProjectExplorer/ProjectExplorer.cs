@@ -825,7 +825,7 @@ namespace FamiStudio
                 {
                     x -= spacingX + props.Width;
                     var env = CreateImageButton(panel, x, EnvelopeType.Icons[idx]);
-                    env.Dimmed = instrument.Envelopes[idx].IsEmpty(idx);
+                    env.Dimmed = instrument.Envelopes[idx].IsEmpty(idx, instrument.IsFds);
                     env.WhiteHighlight = highlightedObject == instrument;
                     env.UserData = EnvelopeType.InternalNames[idx];
                     env.ToolTip = $"<MouseLeft> {EditEnvelopeTooltip.Format(EnvelopeType.LocalizedNames[idx].Value.ToLower())}\n<MouseLeft><Drag> {CopyEnvelopeTooltip} - <MouseRight> {MoreOptionsTooltip}";
@@ -1650,7 +1650,7 @@ namespace FamiStudio
                 {
                     var env = instrument.Envelopes[envType];
                     var button = FindInstrumentEnvelopeButton(instrument, envType);
-                    button.Dimmed = env.IsEmpty(envType);
+                    button.Dimmed = env.IsEmpty(envType, instrument.IsFds);
                 }
                 else
                 {
@@ -2113,7 +2113,7 @@ namespace FamiStudio
                                 // Update envelope button.
                                 var newEnvelopeDst = instrumentDst.Envelopes[envelopeDragIdx];
                                 var button = FindInstrumentEnvelopeButton(instrumentDst, envelopeDragIdx);
-                                button.Dimmed = newEnvelopeDst.IsEmpty(envelopeDragIdx);
+                                button.Dimmed = newEnvelopeDst.IsEmpty(envelopeDragIdx, instrumentDst.IsFds);
                                 
                                 Debug.Assert((string)button.UserData == EnvelopeType.InternalNames[envelopeDragIdx]);
 
@@ -3012,10 +3012,10 @@ namespace FamiStudio
         {
             var env = inst.Envelopes[envelopeType];
             App.UndoRedoManager.BeginTransaction(TransactionScope.Instrument, inst.Id);
-            env.ResetToDefault(envelopeType);
+            env.ResetToDefault(envelopeType, inst.IsFds);
             inst.NotifyEnvelopeChanged(envelopeType, true);
             App.UndoRedoManager.EndTransaction();
-            FindInstrumentEnvelopeButton(inst, envelopeType).Dimmed = env.IsEmpty(envelopeType);
+            FindInstrumentEnvelopeButton(inst, envelopeType).Dimmed = env.IsEmpty(envelopeType, inst.IsFds);
             MarkDirty();
         }
 

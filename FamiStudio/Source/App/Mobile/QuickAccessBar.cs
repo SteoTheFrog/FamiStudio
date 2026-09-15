@@ -429,7 +429,7 @@ namespace FamiStudio
                 if (env != null && inst.IsEnvelopeVisible(i))
                 {
                     var btn = CreateListButton(EnvelopeType.Icons[i], i, EnvelopeType.LocalizedNames[i]);
-                    btn.Dimmed = env.IsEmpty(i);
+                    btn.Dimmed = env.IsEmpty(i, inst.IsFds);
                     btn.Click += Envelope_Click;
                     buttons[j] = btn;
 

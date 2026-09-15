@@ -158,7 +158,7 @@ namespace FamiStudio
 
                 WriteRegister(NesApu.FDS_FREQ_HI, periodHi);
                 WriteRegister(NesApu.FDS_FREQ_LO, (period >> 0) & 0xff);
-                WriteRegister(NesApu.FDS_VOL_ENV, 0x80 | (volume << 1));
+                WriteRegister(NesApu.FDS_VOL_ENV, 0x80 | volume);
                 WriteRegister(NesApu.FDS_VOL, masterVolume); // Ensure we clear this if the last volume was held.
 
                 if (noteTriggered)

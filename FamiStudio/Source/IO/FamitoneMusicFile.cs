@@ -147,12 +147,14 @@ namespace FamiStudio
                     env = new Envelope(EnvelopeType.Volume);
                     instrument.Envelopes[EnvelopeType.Volume] = env;
                 }
-                if (env.Length == 0 || env.AllValuesEqual(Note.VolumeMax))
+                var volumeMax = (sbyte)(instrument.IsFds ? Note.FdsVolumeMax : Note.VolumeMax);
+
+                if (env.Length == 0 || env.AllValuesEqual(volumeMax))
                 {
-                    env.Length  =  1;
+                    env.Length  = 1;
                     env.Loop    = -1;
                     env.Release = -1;
-                    env.Values[0] = 15;
+                    env.Values[0] = volumeMax;
                 }
             }
         }
@@ -1296,7 +1298,16 @@ namespace FamiStudio
                         {
                             if (note.Volume != lastVolume)
                             {
-                                channelData.Add($"{hexp}{(byte)(OpcodeVolumeBits | note.Volume):x2}+");
+                                if (channel.IsFdsChannel)
+                                {
+                                    channelData.Add($"{hexp}{(byte)(OpcodeVolumeBits | (note.Volume >> 2)):x2}+");
+                                    channelData.Add($"{hexp}{(byte)(note.Volume & 0x03):x2}+");
+                                }
+                                else
+                                {
+                                    channelData.Add($"{hexp}{(byte)(OpcodeVolumeBits | note.Volume):x2}+");
+                                }
+
                                 lastVolume = note.Volume;
                             }
 
@@ -1304,8 +1315,10 @@ namespace FamiStudio
 
                             if (note.HasVolumeSlide)
                             {
-                                channel.ComputeVolumeSlideNoteParams(note, location, currentSpeed, false, out var stepSizeNtsc, out var _);
-                                channel.ComputeVolumeSlideNoteParams(note, location, currentSpeed, false, out var stepSizePal, out var _);
+                                // We keep the FDS fraction in its own byte in the sound engine since it's 6-bit.
+                                var fractionBits = channel.IsFdsChannel ? 8 : 4;
+                                channel.ComputeVolumeSlideNoteParams(note, location, currentSpeed, false, out var stepSizeNtsc, out var _, fractionBits);
+                                channel.ComputeVolumeSlideNoteParams(note, location, currentSpeed, false, out var stepSizePal, out var _, fractionBits);
 
                                 if (machine == MachineType.NTSC)
                                     stepSizePal = stepSizeNtsc;
@@ -1315,7 +1328,7 @@ namespace FamiStudio
                                 var stepSize = Math.Max(Math.Abs(stepSizeNtsc), Math.Abs(stepSizePal)) * Math.Sign(stepSizeNtsc);
                                 channelData.Add($"{hexp}{OpcodeVolumeSlide:x2}+");
                                 channelData.Add($"{hexp}{(byte)stepSize:x2}");
-                                channelData.Add($"{hexp}{note.VolumeSlideTarget << 4:x2}");
+                                channelData.Add($"{hexp}{(channel.IsFdsChannel ? note.VolumeSlideTarget : note.VolumeSlideTarget << 4):x2}");
 
                                 lastVolume = note.VolumeSlideTarget;
                                 usesVolumeSlide = true;

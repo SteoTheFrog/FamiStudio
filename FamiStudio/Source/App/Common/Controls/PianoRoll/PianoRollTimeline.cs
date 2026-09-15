@@ -282,13 +282,6 @@ namespace FamiStudio
 
                 ReleasePointer();
 
-                if (e.Left)
-                {
-                    CapturePointer();
-                    pianoRoll.StartTimelineSelection(pos.X, pos.Y);
-                    return;
-                }
-
                 if (e.Right)
                     e.DelayRightClick();
 

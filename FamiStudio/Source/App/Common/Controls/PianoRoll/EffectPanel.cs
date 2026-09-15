@@ -436,8 +436,8 @@ namespace FamiStudio
                             {
                                 var X0 = pianoRoll.GetPixelXForAbsoluteNoteIndex(lastFrame < 0 ? -1000000 : lastFrame - frame, false);
                                 var X1 = pianoRoll.GetPixelXForAbsoluteNoteIndex(-frame + lastFrame + lastSlideDuration, false);
-                                var sizeY0 = pianoRoll.GetPixelYForEffectValue(lastValue, 0, Note.VolumeMax);
-                                var sizeY1 = pianoRoll.GetPixelYForEffectValue(lastSlide, 0, Note.VolumeMax);
+                                var sizeY0 = pianoRoll.GetPixelYForEffectValue(lastValue, 0, maxValue);
+                                var sizeY1 = pianoRoll.GetPixelYForEffectValue(lastSlide, 0, maxValue);
 
                                 var points = new float[4 * 2]
                                 {
@@ -457,7 +457,7 @@ namespace FamiStudio
                             }
                             else
                             {
-                                var sizeY = pianoRoll.GetPixelYForEffectValue(lastValue, 0, Note.VolumeMax);
+                                var sizeY = pianoRoll.GetPixelYForEffectValue(lastValue, 0, maxValue);
                                 c.FillRectangle(pianoRoll.GetPixelXForAbsoluteNoteIndex(lastFrame < 0 ? -1000000 : lastFrame - frame, false), effectPanelSizeY - sizeY, 0, effectPanelSizeY, Theme.DarkGreyColor5);
                             }
 
@@ -480,8 +480,8 @@ namespace FamiStudio
 
                         var X0 = 0;
                         var X1 = pianoRoll.GetPixelXForAbsoluteNoteIndex(lastSlideDuration, false);
-                        var sizeY0 = pianoRoll.GetPixelYForEffectValue(lastValue, 0, Note.VolumeMax);
-                        var sizeY1 = pianoRoll.GetPixelYForEffectValue(lastSlide, 0, Note.VolumeMax);
+                        var sizeY0 = pianoRoll.GetPixelYForEffectValue(lastValue, 0, maxValue);
+                        var sizeY1 = pianoRoll.GetPixelYForEffectValue(lastSlide, 0, maxValue);
 
                         var points = new float[4 * 2]
                         {
@@ -506,7 +506,7 @@ namespace FamiStudio
                     }
                     else
                     {
-                        var lastSizeY = pianoRoll.GetPixelYForEffectValue(lastValue, 0, Note.VolumeMax);
+                        var lastSizeY = pianoRoll.GetPixelYForEffectValue(lastValue, 0, maxValue);
                         c.FillRectangle(0, effectPanelSizeY - lastSizeY, pianoRoll.GetPixelXForAbsoluteNoteIndex(1000000, false), effectPanelSizeY, Theme.DarkGreyColor5);
                     }
 
@@ -616,7 +616,7 @@ namespace FamiStudio
             int maxX = pianoRoll.GetPixelXForAbsoluteNoteIndex(Song.GetPatternStartAbsoluteNoteIndex(maxVisiblePattern));
             c.DrawLine(maxX, 0, maxX, Height, Theme.BlackColor, 3);
 
-            int seekX = pianoRoll.GetPixelXForAbsoluteNoteIndex((int)pianoRoll.GetSeekFrameToDraw());
+            int seekX = pianoRoll.GetPixelXForAbsoluteNoteIndex(pianoRoll.GetSeekFrameToDraw());
             c.DrawLine(seekX, 0, seekX, effectPanelSizeY, pianoRoll.SeekBarColor, 3);
 
             var gizmos = pianoRoll.GetEffectGizmos(out _, out _);

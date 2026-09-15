@@ -578,7 +578,7 @@ namespace FamiStudio
             }
         }
 
-        public bool ComputeVolumeSlideNoteParams(Note note, NoteLocation location, int famitrackerSpeed, bool pal, out int stepSize, out float stepSizeFloat)
+        public bool ComputeVolumeSlideNoteParams(Note note, NoteLocation location, int famitrackerSpeed, bool pal, out int stepSize, out float stepSizeFloat, int fractionBits = 4)
         {
             Debug.Assert(note.HasVolumeSlide);
 
@@ -587,7 +587,7 @@ namespace FamiStudio
             if (volumeDelta != 0)
             {
                 // Find the next note to calculate the slope.
-                FindNextNoteForVolumeSlide(location, 256, out var nextLocation); // 256 is kind of arbitrary. 
+                FindNextNoteForVolumeSlide(location, 256, out var nextLocation); // 256 is kind of arbitrary.
 
                 // Approximate how many frames separates these 2 notes.
                 var delayFrames = -(note.HasNoteDelay ? note.NoteDelay : 0);
@@ -601,12 +601,12 @@ namespace FamiStudio
                 var frameCount = Song.CountFramesBetween(location, nextLocation, famitrackerSpeed, pal) + delayFrames;
                 var volumeDeltaUnshifted = volumeDelta;
 
-                volumeDelta <<= 4;
+                // 4 bits of fraction for volume slides. FDS is an exception.
+                volumeDelta <<= fractionBits;
 
                 // Compute slide params.
                 var absStepPerFrame = Math.Abs(volumeDelta) / Math.Max(1, frameCount);
 
-                // SMMMFFFF : We have 4-bits of fraction for volume slides. 
                 stepSize = Utils.Clamp((int)Math.Ceiling(absStepPerFrame) * -Math.Sign(volumeDelta), sbyte.MinValue, sbyte.MaxValue);
                 stepSizeFloat = volumeDeltaUnshifted / (float)Math.Max(1, frameCount);
 
@@ -651,7 +651,7 @@ namespace FamiStudio
             }
 
             lastLocation = NoteLocation.Invalid;
-            return Note.GetEffectDefaultValue(song, effect);
+            return Note.GetEffectDefaultValue(song, this, effect);
         }
 
         public int GetLastEffectValue(NoteLocation location, int effect)
@@ -664,7 +664,7 @@ namespace FamiStudio
             }
             else
             {
-                return Note.GetEffectDefaultValue(song, effect);
+                return Note.GetEffectDefaultValue(song, this, effect);
             }
         }
 

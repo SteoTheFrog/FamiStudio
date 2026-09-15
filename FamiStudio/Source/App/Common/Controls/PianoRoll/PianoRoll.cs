@@ -838,6 +838,11 @@ namespace FamiStudio
                 envelopeValueSizeY = (Height - headerAndEffectSizeY) / Math.Min(maxValuesInScreen, max - min + 1);
                 virtualSizeY = (int)((max - min + 1) * envelopeValueSizeY);
             }
+            else if (Platform.IsDesktop && (editMode == EditionMode.Arpeggio || editMode == EditionMode.Envelope))
+            {
+                var maxValue = 128 / (int)envelopeValueZoom;
+                virtualSizeY = (int)(envelopeValueSizeY * maxValue);
+            }
 
             if (!pianoVisible)
                 pianoSizeX = 0;
@@ -1045,7 +1050,7 @@ namespace FamiStudio
             editEnvelope = envelope;
             showEffectsPanel = false;
             noteTooltip = "";
-            envelopeValueZoom = envelope == EnvelopeType.Volume || envelope == EnvelopeType.DutyCycle || envelope == EnvelopeType.N163Waveform ? 2 : 1;
+            envelopeValueZoom = (envelope == EnvelopeType.Volume && !instrument.IsFds) || envelope == EnvelopeType.DutyCycle || envelope == EnvelopeType.N163Waveform ? 2 : 1;
             envelopeValueOffset = 0;
             Debug.Assert(editInstrument != null);
 
@@ -1306,7 +1311,7 @@ namespace FamiStudio
             return x;
         }
 
-        private int GetPixelXForAbsoluteNoteIndex(float n, bool scroll = true)
+        internal int GetPixelXForAbsoluteNoteIndex(float n, bool scroll = true)
         {
             var x = (int)Math.Round(n * noteSizeX);
 
@@ -2017,7 +2022,7 @@ namespace FamiStudio
                 var channel = Song.Channels[editChannel];
                 var location = NoteLocation.FromAbsoluteNoteIndex(Song, selectionMinX);
                 var wantsPreviousValue = Note.EffectWantsPreviousValue(selectedEffectIdx);
-                var prevVal = wantsPreviousValue ? channel.GetLastEffectValue(location, selectedEffectIdx) : Note.GetEffectDefaultValue(Song, selectedEffectIdx);
+                var prevVal = wantsPreviousValue ? channel.GetLastEffectValue(location, selectedEffectIdx) : Note.GetEffectDefaultValue(Song, channel, selectedEffectIdx);
                 var selectedNotes = GetSelectedNotes(false);
                 var values = new int[selectedNotes.Length];
 
@@ -2072,9 +2077,18 @@ namespace FamiStudio
             TransformEnvelopeValues(startIdx, startIdx + values.Length - 1, (val, idx) =>
             {
                 return values[idx];
-            });
+            },
+            () =>
+            {
+                SetSelection(startIdx, startIdx + values.Length - 1);
 
-            SetSelection(startIdx, startIdx + values.Length - 1);
+                if (!legacySelectMode)
+                {
+                    selectedEnvelopeIndices.Clear();
+                    for (var i = startIdx; i <= startIdx + values.Length - 1; i++)
+                        selectedEnvelopeIndices.Add(i);
+                }
+            });
         }
 
         private void PasteEnvelopeValues()
@@ -3003,8 +3017,9 @@ namespace FamiStudio
 
             var note = pattern.GetOrCreateNoteAt(captureNoteLocation.NoteIndex);
 
+            var maxVolume = Note.GetEffectMaxValue(Song, channel, Note.EffectVolume);
             var ratio = Utils.Clamp(1.0f - (y - headerSizeY) / (float)effectPanelSizeY, 0.0f, 1.0f);
-            var volume = (byte)Math.Round(ratio * Note.VolumeMax);
+            var volume = (byte)Math.Round(ratio * maxVolume);
 
             if (!note.HasVolume)
                 note.Volume = volume;
@@ -3031,13 +3046,14 @@ namespace FamiStudio
             var channel = Song.Channels[editChannel];
             var pattern = channel.PatternInstances[captureNoteLocation.PatternIndex];
             var note    = pattern.Notes[captureNoteLocation.NoteIndex];
+            var maxVolume = Note.GetEffectMaxValue(Song, channel, Note.EffectVolume);
 
             // On mobile, we use gizmos, so let's pretend the drag is happening at the effect value instead of at the gizmo position.
             if (Platform.IsMobile)
-                y += headerAndEffectSizeY - GetPixelYForEffectValue(note.VolumeSlideTarget, 0, Note.VolumeMax) - captureMouseY;
+                y += headerAndEffectSizeY - GetPixelYForEffectValue(note.VolumeSlideTarget, 0, maxVolume) - captureMouseY;
 
             var ratio = Utils.Clamp(1.0f - (y - headerSizeY) / (float)effectPanelSizeY, 0.0f, 1.0f);
-            note.VolumeSlideTarget = (byte)Math.Round(ratio * Note.VolumeMax);
+            note.VolumeSlideTarget = (byte)Math.Round(ratio * maxVolume);
 
             if (final)
             {
@@ -3880,7 +3896,7 @@ namespace FamiStudio
             MarkDirty();
         }
 
-        private void TransformEnvelopeValues(int startFrameIdx, int endFrameIdx, Func<sbyte, int, sbyte> function)
+        private void TransformEnvelopeValues(int startFrameIdx, int endFrameIdx, Func<sbyte, int, sbyte> function, Action postTransform = null)
         {
             if (editMode == EditionMode.Arpeggio)
                 App.UndoRedoManager.BeginTransaction(TransactionScope.Arpeggio, editArpeggio.Id);
@@ -3897,6 +3913,7 @@ namespace FamiStudio
 
             editInstrument?.NotifyEnvelopeChanged(editEnvelope, true);
             EnvelopeChanged?.Invoke(editInstrument, editEnvelope);
+            postTransform?.Invoke();
             App.UndoRedoManager.EndTransaction();
             MarkDirty();
         }
@@ -5387,15 +5404,17 @@ namespace FamiStudio
 
         private void ToggleVolumeSlide(NoteLocation location, Note note)
         {
-            var pattern = Song.Channels[editChannel].PatternInstances[location.PatternIndex];
+            var channel = Song.Channels[editChannel];
+            var pattern = channel.PatternInstances[location.PatternIndex];
             var selected = IsNoteSelected(location);
+            var maxVolume = Note.GetEffectMaxValue(Song, channel, Note.EffectVolume);
 
             App.UndoRedoManager.BeginTransaction(TransactionScope.Pattern, pattern.Id);
 
             if (note.HasVolumeSlide)
                 note.HasVolumeSlide = false;
             else
-                note.VolumeSlideTarget = (byte)Utils.Clamp(note.Volume + note.Value >= 8 ? -5 : 5, 0, Note.VolumeMax);
+                note.VolumeSlideTarget = (byte)Utils.Clamp(note.Volume + note.Value >= 8 ? -5 : 5, 0, maxVolume);
 
             MarkPatternDirty(location.PatternIndex);
 
@@ -6898,7 +6917,7 @@ namespace FamiStudio
             var val = note.GetEffectValue(selectedEffectIdx);
             var min = Note.GetEffectMinValue(Song, channel, selectedEffectIdx);
             var max = Note.GetEffectMaxValue(Song, channel, selectedEffectIdx);
-            var def = Note.GetEffectDefaultValue(Song, selectedEffectIdx);
+            var def = Note.GetEffectDefaultValue(Song, channel, selectedEffectIdx);
             var dlg = new ValueInputDialog(ParentWindow, new Point(left + x, top + y), EffectType.LocalizedNames[selectedEffectIdx], val, min, max, false);
 
             dlg.ShowDialogAsync((r) =>
@@ -7778,6 +7797,10 @@ namespace FamiStudio
                                 Cursor = Cursors.Default;
                                 break;
                         }
+                    }
+                    else
+                    {
+                        Cursor = Cursors.Default;
                     }
                 }
                 else

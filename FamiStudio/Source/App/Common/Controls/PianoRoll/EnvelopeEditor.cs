@@ -387,7 +387,7 @@ namespace FamiStudio
 
                 if ((value % spacing) == 0 || i == 0 || i == maxi)
                 {
-                    if (lastRectangleValue >= envTypeMinValue && lastRectangleValue <= envTypeMaxValue)
+                    if (lastRectangleValue >= envTypeMinValue && lastRectangleValue < envTypeMaxValue)
                     {
                         b.FillRectangle(0, lastRectangleY, maxX, y, oddRectangle ? Theme.DarkGreyColor5 : Theme.DarkGreyColor4);
                         oddRectangle = !oddRectangle;
@@ -401,14 +401,22 @@ namespace FamiStudio
                 if (drawLabel)
                     b.DrawText(value.ToString(), Fonts.FontSmall, maxX + 4 * DpiScaling.Window, y - envelopeValueSizeY, Theme.LightGreyColor1, TextFlags.MiddleLeft, 0, envelopeValueSizeY);
             }
-            
+
+            if (Platform.IsDesktop)
+            {
+                var maxRowI = envTypeMaxValue + midValue;
+                var maxRowYBottom = virtualSizeY - envelopeValueSizeY * maxRowI - scrollY;
+                var maxRowYTop = maxRowYBottom - envelopeValueSizeY;
+                b.FillRectangle(0, maxRowYTop, maxX, maxRowYBottom, Theme.DarkGreyColor4);
+            }
+
             // Horizontal lines
             for (int i = 0; i <= maxi; i++)
             {
                 var value = Platform.IsMobile ? i + envTypeMinValue : i - midValue;
                 var y = (virtualSizeY - envelopeValueSizeY * i) - scrollY;
 
-                if (i != maxi)
+                if (i != maxi && value >= envTypeMinValue && value <= envTypeMaxValue + 1)
                     b.DrawLine(0, y, GetPixelXForAbsoluteNoteIndex(env.Length), y, Theme.DarkGreyColor1, (value % spacing) == 0 ? 3 : 1);
             }
 

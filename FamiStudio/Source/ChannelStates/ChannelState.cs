@@ -44,13 +44,15 @@ namespace FamiStudio
         protected byte noteValueBeforeSlide = 0;
         protected IPlayerInterface player;
 
-        public int InnerChannelType => channelType; 
+        public int InnerChannelType => channelType;
+        protected int VolumeMax => ChannelType.IsFdsChannel(channelType) ? Note.FdsVolumeMax : Note.VolumeMax;
 
         public ChannelState(IPlayerInterface play, int apu, int type, int tuning, bool pal = false, int numN163Channels = 1)
         {
             player = play;
             apuIdx = apu;
             channelType = type;
+            volume = VolumeMax << 4;
             palPlayback = pal;
             instrumentPlayer = apuIdx == NesApu.APU_INSTRUMENT; // HACK : Pass a flag for this.
             maximumPeriod = NesApu.GetPitchLimitForChannelType(channelType);
@@ -437,11 +439,11 @@ namespace FamiStudio
                 for (int j = 0; j < EnvelopeType.Count; j++)
                 {
                     if (envelopes[j] == null ||
-                        (!instrumentPlayer && envelopes[j].IsEmpty(j)) ||
+                        (!instrumentPlayer && envelopes[j].IsEmpty(j, ChannelType.IsFdsChannel(channelType))) ||
                         ( instrumentPlayer && envelopes[j].Length == 0))
                     {
                         if (j != EnvelopeType.DutyCycle)
-                            envelopeValues[j] = Envelope.GetEnvelopeDefaultValue(j);
+                            envelopeValues[j] = Envelope.GetEnvelopeDefaultValue(j, ChannelType.IsFdsChannel(channelType));
                         continue;
                     }
 
@@ -576,7 +578,9 @@ namespace FamiStudio
 
         protected int MultiplyVolumes(int v0, int v1)
         {
-            var vol = (int)Math.Round((v0 / 15.0f) * (v1 / 15.0f) * 15.0f);
+            // FDS volume DAC is 6-bit, but clamped to 32.
+            var max = (float)VolumeMax;
+            var vol = (int)Math.Round((v0 / max) * (v1 / max) * max);
             if (vol == 0 && v0 != 0 && v1 != 0) return 1;
             return vol;
         }

@@ -422,8 +422,15 @@ namespace FamiStudio
 
                         if (dragNote != null && dragNote.IsMusical)
                         {
-                            var sourceLocation = NoteLocation.FromAbsoluteNoteIndex(Song, kv.Key);
-                            duration = GetVisualNoteDuration(sourceLocation, dragNote);
+                            if (resizeStart)
+                            {
+                                duration = Math.Max(1, dragNote.Duration + deltaDuration);
+                            }
+                            else
+                            {
+                                var sourceLocation = NoteLocation.FromAbsoluteNoteIndex(Song, kv.Key);
+                                duration = GetVisualNoteDuration(sourceLocation, dragNote);
+                            }
                         }
 
                         var endFrame = Math.Min(frame + duration, Song.GetPatternStartAbsoluteNoteIndex(Song.Length));
@@ -1284,6 +1291,7 @@ namespace FamiStudio
         }
 
         private int GetPixelXForAbsoluteNoteIndex(int n, bool scroll = true) => pianoRoll.GetPixelXForAbsoluteNoteIndex(n, scroll);
+        private int GetPixelXForAbsoluteNoteIndex(float n, bool scroll = true) => pianoRoll.GetPixelXForAbsoluteNoteIndex(n, scroll);
         private int GetPixelYForNoteValue(int note) => pianoRoll.GetPixelYForNoteValue(note);
         private float GetSeekFrameToDraw() => pianoRoll.GetSeekFrameToDraw();
         private Color GetSeekBarColor() => pianoRoll.SeekBarColor;
@@ -1514,7 +1522,7 @@ namespace FamiStudio
 
                 if (editMode != EditionMode.VideoRecording)
                 {
-                    int seekX = GetPixelXForAbsoluteNoteIndex((int)GetSeekFrameToDraw());
+                    var seekX = GetPixelXForAbsoluteNoteIndex(GetSeekFrameToDraw());
                     r.c.DrawLine(seekX, 0, seekX, Height, GetSeekBarColor(), 3);
                 }
 

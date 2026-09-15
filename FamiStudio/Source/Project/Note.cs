@@ -23,6 +23,7 @@ namespace FamiStudio
         };
 
         public const int VolumeMax       = 0x0f;
+        public const int FdsVolumeMax    = 0x20; // FDS volume DAC is 6-bit, clamped to 32.
         public const int VibratoSpeedMax = 0x0c;
         public const int VibratoDepthMax = 0x0f;
         public const int FinePitchMin    = -128;
@@ -285,13 +286,13 @@ namespace FamiStudio
         public byte Volume
         {
             get { Debug.Assert(HasVolume); return volume; }
-            set { volume = (byte)Utils.Clamp(value, 0, VolumeMax); HasVolume = true; }
+            set { volume = (byte)Utils.Clamp(value, 0, FdsVolumeMax); HasVolume = true; }
         }
 
         public byte VolumeSlideTarget
         {
             get { Debug.Assert(HasVolume); Debug.Assert(HasVolumeSlide); return volumeSlide; }
-            set { volumeSlide = (byte)Utils.Clamp(value, 0, VolumeMax); HasVolumeSlide = true; }
+            set { volumeSlide = (byte)Utils.Clamp(value, 0, FdsVolumeMax); HasVolumeSlide = true; }
         }
 
         public byte RawVibrato
@@ -834,8 +835,8 @@ namespace FamiStudio
         {
             switch (fx)
             {
-                case EffectVolume         : return VolumeMax;
-                case EffectVolumeSlide    : return VolumeMax;
+                case EffectVolume         : return channel.IsFdsChannel ? FdsVolumeMax : VolumeMax;
+                case EffectVolumeSlide    : return channel.IsFdsChannel ? FdsVolumeMax : VolumeMax;
                 case EffectVibratoDepth   : return VibratoDepthMax;
                 case EffectVibratoSpeed   : return VibratoSpeedMax;
                 case EffectFinePitch      : return FinePitchMax;
@@ -861,11 +862,11 @@ namespace FamiStudio
                 GetEffectMaxValue(song, channel, fx));
         }
 
-        public static int GetEffectDefaultValue(Song song, int fx)
+        public static int GetEffectDefaultValue(Song song, Channel channel, int fx)
         {
             switch (fx)
             {
-                case EffectVolume : return VolumeMax;
+                case EffectVolume : return channel.IsFdsChannel ? FdsVolumeMax : VolumeMax;
                 case EffectSpeed  : return song.FamitrackerSpeed;
             }
 

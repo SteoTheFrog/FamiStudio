@@ -122,6 +122,7 @@ namespace FamiStudio
         static LocalizedString EnvelopeManualFreqLabel;
 
         // VRC6 labels
+        static LocalizedString UseFullVolumeLabel;
         static LocalizedString SawMasterVolumeLabel;
 
         // VRC7 labels
@@ -283,8 +284,10 @@ namespace FamiStudio
                     break;
 
                 case ExpansionType.Vrc6:
+                    paramInfos.Add(new InstrumentParamInfo(instrument, UseFullVolumeLabel, 0, 1, 1)
+                        { GetValue = () => { return instrument.Vrc6SawFullVolume ? 1 : 0; }, SetValue = (v) => { instrument.Vrc6SawFullVolume = v != 0; if (v == 0) instrument.Envelopes[EnvelopeType.Volume].ClampToValidRange(instrument, EnvelopeType.Volume); FamiStudio.StaticInstance.PianoRoll.UpdateRenderCoords(); } });
                     paramInfos.Add(new InstrumentParamInfo(instrument, SawMasterVolumeLabel, 0, 2, 0, null, true)
-                        { GetValue = ()  => { return instrument.Vrc6SawMasterVolume; }, GetValueString = () => { return Vrc6SawMasterVolumeType.Names[instrument.Vrc6SawMasterVolume]; }, SetValue = (v) => { instrument.Vrc6SawMasterVolume = (byte)v; } });
+                        { GetValue = ()  => { return instrument.Vrc6SawMasterVolume; }, GetValueString = () => { return Vrc6SawMasterVolumeType.Names[instrument.Vrc6SawMasterVolume]; }, SetValue = (v) => { instrument.Vrc6SawMasterVolume = (byte)v; }, IsEnabled = () => !instrument.Vrc6SawFullVolume });
                     break;
 
                 case ExpansionType.Vrc7:

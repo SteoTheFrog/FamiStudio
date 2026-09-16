@@ -24,6 +24,7 @@ namespace FamiStudio
 
         public const int VolumeMax       = 0x0f;
         public const int FdsVolumeMax    = 0x20; // FDS volume DAC is 6-bit, clamped to 32.
+        public const int Vrc6SawVolumeMax = 0x3f; // VRC6 saw volume is 6-bit, full range.
         public const int VibratoSpeedMax = 0x0c;
         public const int VibratoDepthMax = 0x0f;
         public const int FinePitchMin    = -128;
@@ -286,13 +287,13 @@ namespace FamiStudio
         public byte Volume
         {
             get { Debug.Assert(HasVolume); return volume; }
-            set { volume = (byte)Utils.Clamp(value, 0, FdsVolumeMax); HasVolume = true; }
+            set { volume = (byte)Utils.Clamp(value, 0, Vrc6SawVolumeMax); HasVolume = true; }
         }
 
         public byte VolumeSlideTarget
         {
             get { Debug.Assert(HasVolume); Debug.Assert(HasVolumeSlide); return volumeSlide; }
-            set { volumeSlide = (byte)Utils.Clamp(value, 0, FdsVolumeMax); HasVolumeSlide = true; }
+            set { volumeSlide = (byte)Utils.Clamp(value, 0, Vrc6SawVolumeMax); HasVolumeSlide = true; }
         }
 
         public byte RawVibrato
@@ -831,12 +832,12 @@ namespace FamiStudio
             return 0;
         }
 
-        public static int GetEffectMaxValue(Song song, Channel channel, int fx)
+        public static int GetEffectMaxValue(Song song, Channel channel, int fx, Instrument instrument = null)
         {
             switch (fx)
             {
-                case EffectVolume         : return channel.IsFdsChannel ? FdsVolumeMax : VolumeMax;
-                case EffectVolumeSlide    : return channel.IsFdsChannel ? FdsVolumeMax : VolumeMax;
+                case EffectVolume         : return channel.IsFdsChannel ? FdsVolumeMax : ChannelType.IsVrc6SawChannel(channel.Type) ? Vrc6SawVolumeMax : VolumeMax;
+                case EffectVolumeSlide    : return channel.IsFdsChannel ? FdsVolumeMax : ChannelType.IsVrc6SawChannel(channel.Type) ? Vrc6SawVolumeMax : VolumeMax;
                 case EffectVibratoDepth   : return VibratoDepthMax;
                 case EffectVibratoSpeed   : return VibratoSpeedMax;
                 case EffectFinePitch      : return FinePitchMax;
@@ -854,19 +855,19 @@ namespace FamiStudio
             return 0;
         }
 
-        public static int ClampEffectValue(Song song, Channel channel, int fx, int value)
+        public static int ClampEffectValue(Song song, Channel channel, int fx, int value, Instrument instrument = null)
         {
             return Utils.Clamp(
                 value,
                 GetEffectMinValue(song, channel, fx),
-                GetEffectMaxValue(song, channel, fx));
+                GetEffectMaxValue(song, channel, fx, instrument));
         }
 
-        public static int GetEffectDefaultValue(Song song, Channel channel, int fx)
+        public static int GetEffectDefaultValue(Song song, Channel channel, int fx, Instrument instrument = null)
         {
             switch (fx)
             {
-                case EffectVolume : return channel.IsFdsChannel ? FdsVolumeMax : VolumeMax;
+                case EffectVolume : return channel.IsFdsChannel ? FdsVolumeMax : ChannelType.IsVrc6SawChannel(channel.Type) ? Vrc6SawVolumeMax : VolumeMax;
                 case EffectSpeed  : return song.FamitrackerSpeed;
             }
 

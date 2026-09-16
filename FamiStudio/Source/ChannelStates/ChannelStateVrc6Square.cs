@@ -30,7 +30,7 @@ namespace FamiStudio
 
                 WriteRegister(NesApu.VRC6_PL1_LO  + regOffset, period & 0xff);
                 WriteRegister(NesApu.VRC6_PL1_HI  + regOffset, periodHi | 0x80);
-                WriteRegister(NesApu.VRC6_PL1_VOL + regOffset, (duty << 4) | volume);
+                WriteRegister(NesApu.VRC6_PL1_VOL + regOffset, (duty << 4) | Math.Min(15, volume)); // Saw can be 64-step.
             }
 
             base.UpdateAPU();

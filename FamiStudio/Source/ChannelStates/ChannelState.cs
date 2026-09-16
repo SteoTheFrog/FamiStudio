@@ -45,7 +45,10 @@ namespace FamiStudio
         protected IPlayerInterface player;
 
         public int InnerChannelType => channelType;
-        protected int VolumeMax => ChannelType.IsFdsChannel(channelType) ? Note.FdsVolumeMax : Note.VolumeMax;
+        protected int VolumeMax =>
+            ChannelType.IsFdsChannel(channelType) ? Note.FdsVolumeMax :
+            ChannelType.IsVrc6SawChannel(channelType) && note.Instrument != null && note.Instrument.Vrc6SawFullVolume ? Note.Vrc6SawVolumeMax :
+            Note.VolumeMax;
 
         public ChannelState(IPlayerInterface play, int apu, int type, int tuning, bool pal = false, int numN163Channels = 1)
         {
@@ -187,7 +190,9 @@ namespace FamiStudio
 
                 if (newNote.HasVolumeSlide)
                 {
-                    channel.ComputeVolumeSlideNoteParams(newNote, location, famitrackerSpeed, palPlayback, out volumeSlideStep, out _);
+                    var slideInstrument = newNote.Instrument ?? note.Instrument;
+                    var volumeShift = ChannelType.IsVrc6SawChannel(channelType) && (slideInstrument == null || !slideInstrument.Vrc6SawFullVolume) ? 2 : 0;
+                    channel.ComputeVolumeSlideNoteParams(newNote, location, famitrackerSpeed, palPlayback, out volumeSlideStep, out _, 4, volumeShift, short.MaxValue);
                 }
 
                 // Store note for later if delayed.
@@ -349,6 +354,9 @@ namespace FamiStudio
                 {
                     LoadInstrument(note.Instrument);
                     forceInstrumentReload = false;
+
+                    if (ChannelType.IsVrc6SawChannel(channelType))
+                        volume = VolumeMax << 4;
                 }
             }
             else
@@ -373,13 +381,13 @@ namespace FamiStudio
 
             if (note.HasVolume)
             {
-                volume = note.Volume << 4;
+                volume = GetVolumeTrackValue(note.Volume) << 4;
                 volumeSlideStep = 0;
             }
 
             if (note.HasVolumeSlide)
             {
-                volumeSlideTarget = note.VolumeSlideTarget << 4;
+                volumeSlideTarget = GetVolumeTrackValue(note.VolumeSlideTarget) << 4;
                 volumeSlideStep = noteVolumeSlideStep;
             }
 
@@ -438,12 +446,14 @@ namespace FamiStudio
             {
                 for (int j = 0; j < EnvelopeType.Count; j++)
                 {
+                    var isVrc6SawFullVolume = ChannelType.IsVrc6SawChannel(channelType) && note.Instrument.Vrc6SawFullVolume;
+
                     if (envelopes[j] == null ||
-                        (!instrumentPlayer && envelopes[j].IsEmpty(j, ChannelType.IsFdsChannel(channelType))) ||
+                        (!instrumentPlayer && envelopes[j].IsEmpty(j, ChannelType.IsFdsChannel(channelType), isVrc6SawFullVolume)) ||
                         ( instrumentPlayer && envelopes[j].Length == 0))
                     {
                         if (j != EnvelopeType.DutyCycle)
-                            envelopeValues[j] = Envelope.GetEnvelopeDefaultValue(j, ChannelType.IsFdsChannel(channelType));
+                            envelopeValues[j] = Envelope.GetEnvelopeDefaultValue(j, ChannelType.IsFdsChannel(channelType), isVrc6SawFullVolume);
                         continue;
                     }
 
@@ -578,11 +588,30 @@ namespace FamiStudio
 
         protected int MultiplyVolumes(int v0, int v1)
         {
-            // FDS volume DAC is 6-bit, but clamped to 32.
+            // FDS volume DAC is 6-bit, but clamped to 32 (a power of 2), so an exact float divide
+            // here is already bit-identical to the sound engine's shift-based divide. VRC6 saw's
+            // 64-step mode is also 6-bit, but full range (max 63, not a power of 2), so a plain
+            // divide-by-64 can't be both exact and reach 63. True silence (product == 0) is always
+            // unambiguous on its own (a stopped note bypasses this entirely via a separate opcode),
+            // so it's handled as its own case rather than needing to also emerge from the shift —
+            // that's what lets the nonzero path (>>6, then +1) be an exact bijection onto 1..63
+            // whenever either operand is at its own max, with at most +/-1 error elsewhere (matching
+            // the real resolution limit when one operand is small, not an added approximation error).
+            if (ChannelType.IsVrc6SawChannel(channelType) && VolumeMax == Note.Vrc6SawVolumeMax)
+            {
+                var product = v0 * v1;
+                return product == 0 ? 0 : (product >> 6) + 1;
+            }
+
             var max = (float)VolumeMax;
             var vol = (int)Math.Round((v0 / max) * (v1 / max) * max);
             if (vol == 0 && v0 != 0 && v1 != 0) return 1;
             return vol;
+        }
+
+        private int GetVolumeTrackValue(int noteValue)
+        {
+            return ChannelType.IsVrc6SawChannel(channelType) && VolumeMax == Note.VolumeMax ? noteValue >> 2 : noteValue;
         }
 
         protected virtual void LoadInstrument(Instrument instrument)

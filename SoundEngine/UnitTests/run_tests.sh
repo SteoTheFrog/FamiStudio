@@ -13,6 +13,8 @@ compile_rom_permutation() {
 
   : > test_defs.inc
 
+  vrc6_enabled=0
+
   rnd=$((RANDOM % 3))
   if (( rnd == 0 )); then
     echo "FAMISTUDIO_CFG_NTSC_SUPPORT=1" >> test_defs.inc
@@ -58,6 +60,7 @@ compile_rom_permutation() {
   rnd=$((RANDOM % 8))
   if (( rnd == 0 )); then
     echo "FAMISTUDIO_EXP_VRC6=1" >> test_defs.inc
+    vrc6_enabled=1
   elif (( rnd == 1 )); then
     echo "FAMISTUDIO_EXP_VRC7=1" >> test_defs.inc
   elif (( rnd == 2 )); then
@@ -114,6 +117,12 @@ compile_rom_permutation() {
     rnd=$((RANDOM % 2))
     if (( rnd == 1 )); then
       echo "FAMISTUDIO_USE_VOLUME_SLIDES=1" >> test_defs.inc
+    fi
+    if (( vrc6_enabled == 1 )); then
+      rnd=$((RANDOM % 2))
+      if (( rnd == 1 )); then
+        echo "FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME=1" >> test_defs.inc
+      fi
     fi
   fi
 

@@ -548,12 +548,12 @@ namespace FamiStudio
             }
         }
 
-        public static sbyte GetEnvelopeZeroValue(int type, bool fds = false)
+        public static sbyte GetEnvelopeZeroValue(int type, bool fds = false, bool vrc6Saw = false)
         {
             switch (type)
             {
                 case EnvelopeType.Volume:
-                    return (sbyte)(fds ? Note.FdsVolumeMax : Note.VolumeMax);
+                    return (sbyte)(fds ? Note.FdsVolumeMax : vrc6Saw ? Note.Vrc6SawVolumeMax : Note.VolumeMax);
                 case EnvelopeType.S5BMixer:
                     return (sbyte)2;
                 default:
@@ -577,12 +577,12 @@ namespace FamiStudio
             }
         }
 
-        public static sbyte GetEnvelopeDefaultValue(int type, bool fds = false)
+        public static sbyte GetEnvelopeDefaultValue(int type, bool fds = false, bool vrc6Saw = false)
         {
             switch (type)
             {
                 case EnvelopeType.Volume:
-                    return (sbyte)(fds ? Note.FdsVolumeMax : Note.VolumeMax);
+                    return (sbyte)(fds ? Note.FdsVolumeMax : vrc6Saw ? Note.Vrc6SawVolumeMax : Note.VolumeMax);
                 case EnvelopeType.WaveformRepeat:
                     return 1;
                 case EnvelopeType.FdsWaveform:
@@ -594,7 +594,7 @@ namespace FamiStudio
             }
         }
 
-        public bool IsEmpty(int type, bool fds = false)
+        public bool IsEmpty(int type, bool fds = false, bool vrc6Saw = false)
         {
             if (!canResize)
                 return false;
@@ -602,7 +602,7 @@ namespace FamiStudio
             if (length == 0)
                 return true;
 
-            return AllValuesEqual(GetEnvelopeZeroValue(type, fds));
+            return AllValuesEqual(GetEnvelopeZeroValue(type, fds, vrc6Saw));
         }
 
         public bool AllValuesEqual(sbyte val)
@@ -642,7 +642,7 @@ namespace FamiStudio
             if (type == EnvelopeType.Volume)
             {
                 min = 0;
-                max = instrument != null && instrument.IsFds ? Note.FdsVolumeMax : Note.VolumeMax;
+                max = instrument.IsFds ? Note.FdsVolumeMax : instrument.IsVrc6 && instrument.Vrc6SawFullVolume ? Note.Vrc6SawVolumeMax : Note.VolumeMax;
             }
             else if (type == EnvelopeType.N163Waveform)
             {

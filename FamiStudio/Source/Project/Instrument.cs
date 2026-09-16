@@ -53,6 +53,7 @@ namespace FamiStudio
 
         // VRC6
         private byte vrc6SawMasterVolume = Vrc6SawMasterVolumeType.Half;
+        private bool vrc6SawFullVolume   = false; // 64-step (6-bit) volume, no master volume shift.
 
         // VRC7
         private byte   vrc7Patch = Vrc7InstrumentPatch.Bell;
@@ -380,6 +381,12 @@ namespace FamiStudio
         {
             get { return vrc6SawMasterVolume; }
             set { vrc6SawMasterVolume = (byte)Utils.Clamp(value, 0, 2); }
+        }
+
+        public bool Vrc6SawFullVolume
+        {
+            get { return vrc6SawFullVolume; }
+            set { vrc6SawFullVolume = value; }
         }
 
         public byte Vrc7Patch
@@ -1045,6 +1052,11 @@ namespace FamiStudio
                                 buffer.Serialize(ref vrc6SawMasterVolume);
                             else
                                 vrc6SawMasterVolume = Vrc6SawMasterVolumeType.Full;
+                            // At version 20 (FamiStudio 4.6.0), we added 64-step saw volume.
+                            if (buffer.Version >= 20)
+                                buffer.Serialize(ref vrc6SawFullVolume);
+                            else
+                                vrc6SawFullVolume = false;
                             break;
                     }
                 }

@@ -235,6 +235,10 @@ FAMISTUDIO_USE_ARPEGGIO          = 1
 ; Must be enabled if your project uses the FDS expansion and at least one instrument with FDS Auto-Mod enabled.
 ; FAMISTUDIO_USE_FDS_AUTOMOD  = 1
 
+; Must be enabled if your project uses the VRC6 expansion and at least one saw instrument with
+; "64-step Saw Volume" enabled (full 6-bit 0-63 volume).
+; FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME = 1
+
 .endif
 
 ; Memory location of the DPCM samples. Must be between $c000 and $ffc0, and a multiple of 64.
@@ -413,6 +417,10 @@ FAMISTUDIO_USE_ARPEGGIO          = 1
     FAMISTUDIO_USE_FDS_AUTOMOD = 0
 .endif
 
+.ifndef FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME
+    FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME = 0
+.endif
+
 .ifndef FAMISTUDIO_USE_RELEASE_NOTES
     FAMISTUDIO_USE_RELEASE_NOTES = 0    
 .endif
@@ -452,6 +460,10 @@ FAMISTUDIO_USE_ARPEGGIO          = 1
 
 .if FAMISTUDIO_USE_VOLUME_SLIDES && (FAMISTUDIO_USE_VOLUME_TRACK = 0)
     .error "Volume slides can only be used when the volume track is enabled too."
+.endif
+
+.if FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME && (FAMISTUDIO_USE_VOLUME_TRACK = 0)
+    .error "VRC6 64-step saw volume can only be used when the volume track is enabled too."
 .endif
 
 .if FAMISTUDIO_USE_FAMITRACKER_DELAYED_NOTES_OR_CUTS && (FAMISTUDIO_USE_FAMITRACKER_TEMPO = 0)
@@ -697,6 +709,7 @@ FAMISTUDIO_ENV_NOISE_IDX_OFF     = 3
     FAMISTUDIO_VRC6_CH0_IDX = 5
     FAMISTUDIO_VRC6_CH1_IDX = 6
     FAMISTUDIO_VRC6_CH2_IDX = 7
+    FAMISTUDIO_VRC6_SAW_VOLUME_FULL_SENTINEL = 2
 .else
     FAMISTUDIO_VRC6_CH0_IDX = -1
     FAMISTUDIO_VRC6_CH1_IDX = -1
@@ -846,8 +859,8 @@ famistudio_chn_volume_track:      .dsb FAMISTUDIO_NUM_CHANNELS
 .if FAMISTUDIO_USE_VOLUME_SLIDES
 famistudio_chn_volume_slide_step:   .dsb FAMISTUDIO_NUM_VOLUME_SLIDES
 famistudio_chn_volume_slide_target: .dsb FAMISTUDIO_NUM_VOLUME_SLIDES
-.if FAMISTUDIO_EXP_FDS
-famistudio_fds_volume_slide_frac: .dsb 1
+.if FAMISTUDIO_EXP_FDS || (FAMISTUDIO_EXP_VRC6 && FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME)
+famistudio_volume_slide_frac: .dsb FAMISTUDIO_NUM_VOLUME_SLIDES
 .endif
 .endif
 .endif
@@ -872,6 +885,9 @@ famistudio_dmc_delta_counter:     .dsb 1
 .endif
 .if FAMISTUDIO_EXP_VRC6
 famistudio_vrc6_saw_volume:       .dsb 1 ; -1 = 1/4, 0 = 1/2, 1 = Full
+.if FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME
+famistudio_vrc6_saw_full_volume:  .dsb 1
+.endif
 .if FAMISTUDIO_USE_PHASE_RESET
 famistudio_vrc6_pulse1_prev_hi:   .dsb 1
 famistudio_vrc6_pulse2_prev_hi:   .dsb 1
@@ -1458,12 +1474,12 @@ ldx #0
 @set_volume_slides:
     sta famistudio_chn_volume_slide_step, x
     sta famistudio_chn_volume_slide_target, x
+.if FAMISTUDIO_EXP_FDS || (FAMISTUDIO_EXP_VRC6 && FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME)
+    sta famistudio_volume_slide_frac, x
+.endif
     inx
     cpx #FAMISTUDIO_NUM_VOLUME_SLIDES
     bne @set_volume_slides
-.if FAMISTUDIO_EXP_FDS
-    sta famistudio_fds_volume_slide_frac
-.endif
 .endif
 
     ldx #0
@@ -1692,6 +1708,9 @@ famistudio_music_play:
 .if FAMISTUDIO_EXP_VRC6
     lda #0
     sta famistudio_vrc6_saw_volume
+    .if FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME
+        sta famistudio_vrc6_saw_full_volume
+    .endif
     .if FAMISTUDIO_USE_PHASE_RESET
         sta famistudio_vrc6_pulse1_prev_hi
         sta famistudio_vrc6_pulse2_prev_hi
@@ -2132,7 +2151,13 @@ no_noise_slide:
 
 compute_volume:
 
-    .if FAMISTUDIO_USE_VOLUME_TRACK    
+    .if FAMISTUDIO_EXP_VRC6 && FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME && (idx = FAMISTUDIO_VRC6_CH2_IDX)
+        ; If this instrument uses 64-step (6-bit) saw volume, we need to compute it from the raw envelope/track values.
+        lda famistudio_vrc6_saw_full_volume
+        bne vrc6_saw_full_volume
+    .endif
+
+    .if FAMISTUDIO_USE_VOLUME_TRACK
         lda famistudio_chn_volume_track+idx
         .if FAMISTUDIO_USE_VOLUME_SLIDES
             ; During a slide, the lower 4 bits are fraction.
@@ -2140,7 +2165,7 @@ compute_volume:
         .endif
         ora famistudio_env_value+env_offset+FAMISTUDIO_ENV_VOLUME_OFF
         tax
-        lda famistudio_volume_table, x 
+        lda famistudio_volume_table, x
     .else
         lda famistudio_env_value+env_offset+FAMISTUDIO_ENV_VOLUME_OFF
     .endif
@@ -2148,12 +2173,49 @@ compute_volume:
 .if FAMISTUDIO_EXP_VRC6 && (idx = FAMISTUDIO_VRC6_CH2_IDX)
     ; VRC6 saw has 6-bits
     ldx famistudio_vrc6_saw_volume
-    bmi set_volume 
+    bmi set_volume
     asl
     ldx famistudio_vrc6_saw_volume
     beq set_volume
     asl
 .endif
+
+    .if FAMISTUDIO_EXP_VRC6 && FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME && (idx = FAMISTUDIO_VRC6_CH2_IDX)
+        jmp set_volume
+
+    vrc6_saw_full_volume:
+        ; 64-step (6-bit) VRC6 saw volume: result = (envelope * track == 0) ? 0 : ((envelope * track) >> 6) + 1. 
+        ; This is an exact bijection onto 1..63 whenever either operand is at its own max (0-63).
+        lda famistudio_env_value+env_offset+FAMISTUDIO_ENV_VOLUME_OFF
+        sta pitch+0
+        lda #0
+        sta pitch+1
+        lda famistudio_chn_volume_track+idx
+        sta famistudio_r1
+        jsr famistudio_mul
+        stx pitch+0
+        sty pitch+1
+        txa
+        ora pitch+1
+        beq set_volume ; product == 0 -> A already 0.
+
+        lsr pitch+1
+        ror pitch+0
+        lsr pitch+1
+        ror pitch+0
+        lsr pitch+1
+        ror pitch+0
+        lsr pitch+1
+        ror pitch+0
+        lsr pitch+1
+        ror pitch+0
+        lsr pitch+1
+        ror pitch+0
+
+        lda pitch+0
+        clc
+        adc #1
+    .endif
 
 set_volume:
 
@@ -2176,9 +2238,8 @@ set_volume:
 
 .endm
 
-.if FAMISTUDIO_EXP_FDS
-
-.if FAMISTUDIO_USE_FDS_AUTOMOD || FAMISTUDIO_USE_VOLUME_TRACK
+; FAMISTUDIO_MUL is shared between FDS automod, FDS 32-step volume, and VRC6 saw 64-step volume.
+.if (FAMISTUDIO_EXP_FDS && (FAMISTUDIO_USE_FDS_AUTOMOD || FAMISTUDIO_USE_VOLUME_TRACK)) || (FAMISTUDIO_EXP_VRC6 && FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME)
 
 ;======================================================================================================================
 ; FAMISTUDIO_MUL (internal)
@@ -2218,6 +2279,8 @@ famistudio_mul:
     rts
 
 .endif
+
+.if FAMISTUDIO_EXP_FDS
 
 .if FAMISTUDIO_USE_FDS_AUTOMOD
 
@@ -4211,20 +4274,37 @@ famistudio_update:
 ;             volume = target
 ;             step = 0
 ;
-; FDS is an exception (see @fds_volume_slide below)
+; FDS (always) and VRC6 saw (when the active instrument is 64-step) are exceptions
+; (see @unpacked_volume_slide below)
 
 @update_volume_slides:
     ldx #0
 
 @volume_side_process:
     lda famistudio_chn_volume_slide_step,x
-    beq @volume_slide_next
+    bne @volume_side_active
+    jmp @volume_slide_next
+@volume_side_active:
 
     .if FAMISTUDIO_EXP_FDS
         cpx #FAMISTUDIO_FDS_CH0_IDX
-        beq @fds_volume_slide
+        beq @unpacked_volume_slide
     .endif
 
+    .if FAMISTUDIO_EXP_VRC6 && FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME
+        cpx #FAMISTUDIO_VRC6_CH2_IDX
+        bne @not_vrc6_saw_slide
+        lda famistudio_vrc6_saw_full_volume
+        beq @not_vrc6_saw_slide
+        lda famistudio_chn_volume_slide_step,x
+        jmp @unpacked_volume_slide
+    @not_vrc6_saw_slide:
+    .endif
+
+    ; Refresh A and its flags here unconditionally -- the VRC6 saw check above uses CPX/LDA,
+    ; which clobber N/Z, so whatever fell through to this point can't be trusted to still have
+    ; the slide step's sign in the flags.
+    lda famistudio_chn_volume_slide_step,x
     clc
     bmi @negative_volume_slide
     
@@ -4265,41 +4345,42 @@ famistudio_update:
     sta famistudio_chn_volume_slide_step,x
     jmp @volume_slide_next
 
-    .if FAMISTUDIO_EXP_FDS
+    .if FAMISTUDIO_EXP_FDS || (FAMISTUDIO_EXP_VRC6 && FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME)
 
-    ; FDS volume track is a plain, unpacked 0..32 byte (no spare bits for a fraction), so the
-    ; slide fraction lives in its own byte and is carried into the volume with a signed 8-bit
-    ; add, similar to the pitch slide fixed-point accumulator above. A already holds
+    ; Shared by FDS (always) and VRC6 saw (when the active instrument is 64-step): the volume
+    ; track is a plain, unpacked byte (no spare bits for a fraction), so the slide fraction
+    ; lives in its own per-channel byte and is carried into the volume with a signed 8-bit add,
+    ; similar to the pitch slide fixed-point accumulator above. A already holds
     ; famistudio_chn_volume_slide_step,x from @volume_side_process.
-    @fds_volume_slide:
+    @unpacked_volume_slide:
         clc
-        adc famistudio_fds_volume_slide_frac
-        sta famistudio_fds_volume_slide_frac
+        adc famistudio_volume_slide_frac,x
+        sta famistudio_volume_slide_frac,x
         lda famistudio_chn_volume_slide_step,x
         and #$80
-        beq @fds_positive_volume_slide
+        beq @unpacked_positive_volume_slide
 
-    @fds_negative_volume_slide:
+    @unpacked_negative_volume_slide:
         lda #$ff
         adc famistudio_chn_volume_track,x
         sta famistudio_chn_volume_track,x
         lda famistudio_chn_volume_slide_target,x
         cmp famistudio_chn_volume_track,x
         bcc @volume_slide_next
-        jmp @clear_fds_volume_slide
+        jmp @clear_unpacked_volume_slide
 
-    @fds_positive_volume_slide:
+    @unpacked_positive_volume_slide:
         adc famistudio_chn_volume_track,x
         sta famistudio_chn_volume_track,x
         cmp famistudio_chn_volume_slide_target,x
         bcc @volume_slide_next
 
-    @clear_fds_volume_slide:
+    @clear_unpacked_volume_slide:
         lda famistudio_chn_volume_slide_target,x
         sta famistudio_chn_volume_track,x
         lda #0
         sta famistudio_chn_volume_slide_step,x
-        sta famistudio_fds_volume_slide_frac
+        sta famistudio_volume_slide_frac,x
 
     .endif
 
@@ -5700,7 +5781,7 @@ famistudio_advance_channel:
 ;   $7x
 ;   volume = x << 4
 ;
-; FDS:
+; FDS, or VRC6 saw when the active instrument uses 64-step (6-bit) volume:
 ;   $7x + $yy
 ;   volume = ((x & $0f) << 2) | ($yy & $03)
 ;
@@ -5721,6 +5802,18 @@ famistudio_advance_channel:
 
 .endif
 
+.if FAMISTUDIO_EXP_VRC6 && FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME
+
+    ; VRC6 saw also uses 6-bit volume when the active instrument is 64-step (runtime check,
+    ; since unlike FDS this isn't fixed per channel -- see famistudio_vrc6_saw_full_volume).
+    lda chan_idx
+    cmp #FAMISTUDIO_VRC6_CH2_IDX
+    bne @volume_track_4bit
+    lda famistudio_vrc6_saw_full_volume
+    bne @volume_track_6bit
+
+.endif
+
 @volume_track_4bit:
     ; Existing 4-bit volume representation:
     ; 0..15 -> $00,$10,...,$f0
@@ -5732,7 +5825,7 @@ famistudio_advance_channel:
     sta famistudio_chn_volume_track,x
     jmp @volume_track_done
 
-.if FAMISTUDIO_EXP_FDS
+.if FAMISTUDIO_EXP_FDS || (FAMISTUDIO_EXP_VRC6 && FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME)
 
 @volume_track_6bit:
     ; Upper 4 bits become bits 5..2.
@@ -6045,9 +6138,22 @@ famistudio_advance_channel:
 .if FAMISTUDIO_EXP_VRC6
 @opcode_vrc6_saw_volume:
     lda (channel_data_ptr),y
-    iny 
-    sta famistudio_vrc6_saw_volume
-    jmp @read_byte
+    iny
+    .if FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME
+        cmp #FAMISTUDIO_VRC6_SAW_VOLUME_FULL_SENTINEL
+        beq @vrc6_saw_volume_full
+        sta famistudio_vrc6_saw_volume
+        lda #0
+        sta famistudio_vrc6_saw_full_volume
+        jmp @read_byte
+    @vrc6_saw_volume_full:
+        lda #1
+        sta famistudio_vrc6_saw_full_volume
+        jmp @read_byte
+    .else
+        sta famistudio_vrc6_saw_volume
+        jmp @read_byte
+    .endif
 .endif
 
 .if FAMISTUDIO_USE_VOLUME_SLIDES
@@ -6058,12 +6164,9 @@ famistudio_advance_channel:
     lda (channel_data_ptr),y
     iny
     sta famistudio_chn_volume_slide_target, x
-    .if FAMISTUDIO_EXP_FDS
-        cpx #FAMISTUDIO_FDS_CH0_IDX
-        bne @opcode_volume_slide_done
+    .if FAMISTUDIO_EXP_FDS || (FAMISTUDIO_EXP_VRC6 && FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME)
         lda #0
-        sta famistudio_fds_volume_slide_frac
-    @opcode_volume_slide_done:
+        sta famistudio_volume_slide_frac, x
     .endif
     jmp @read_byte
 .endif

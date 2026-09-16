@@ -1635,7 +1635,7 @@ namespace FamiStudio
             var arpeggio   = custom ? customArpeggio   : selectedArpeggio;
 
             int channel = selectedChannelIndex;
-            note.Volume = (byte)(song.Channels[channel].IsFdsChannel ? Note.FdsVolumeMax : Note.VolumeMax);
+            note.Volume = (byte)Note.GetEffectMaxValue(song, song.Channels[channel], Note.EffectVolume, instrument);
 
             if (instrument == null)
                 return;

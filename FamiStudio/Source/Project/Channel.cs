@@ -31,6 +31,7 @@ namespace FamiStudio
         public bool IsFdsChannel        => ChannelType.IsFdsChannel(type);
         public bool IsN163Channel       => ChannelType.IsN163Channel(type);
         public bool IsVrc6Channel       => ChannelType.IsVrc6Channel(type);
+        public bool IsVrc6SawChannel    => ChannelType.IsVrc6SawChannel(type);
         public bool IsVrc7Channel       => ChannelType.IsVrc7Channel(type);
         public bool IsMmc5Channel       => ChannelType.IsMmc5Channel(type);
         public bool IsS5BChannel        => ChannelType.IsS5BChannel(type);
@@ -578,12 +579,11 @@ namespace FamiStudio
             }
         }
 
-        public bool ComputeVolumeSlideNoteParams(Note note, NoteLocation location, int famitrackerSpeed, bool pal, out int stepSize, out float stepSizeFloat, int fractionBits = 4)
+        public bool ComputeVolumeSlideNoteParams(Note note, NoteLocation location, int famitrackerSpeed, bool pal, out int stepSize, out float stepSizeFloat, int fractionBits = 4, int volumeShift = 0, int maxAbsStepSize = sbyte.MaxValue)
         {
             Debug.Assert(note.HasVolumeSlide);
 
-            var volumeDelta = note.Volume - note.VolumeSlideTarget;
-
+            var volumeDelta = (note.Volume >> volumeShift) - (note.VolumeSlideTarget >> volumeShift);
             if (volumeDelta != 0)
             {
                 // Find the next note to calculate the slope.
@@ -607,7 +607,7 @@ namespace FamiStudio
                 // Compute slide params.
                 var absStepPerFrame = Math.Abs(volumeDelta) / Math.Max(1, frameCount);
 
-                stepSize = Utils.Clamp((int)Math.Ceiling(absStepPerFrame) * -Math.Sign(volumeDelta), sbyte.MinValue, sbyte.MaxValue);
+                stepSize = Utils.Clamp((int)Math.Ceiling(absStepPerFrame) * -Math.Sign(volumeDelta), -maxAbsStepSize, maxAbsStepSize);
                 stepSizeFloat = volumeDeltaUnshifted / (float)Math.Max(1, frameCount);
 
                 return true;
@@ -1879,6 +1879,7 @@ namespace FamiStudio
         public static bool IsFdsChannel(int type) => type == FdsWave;
         public static bool IsN163Channel(int type) => type >= N163Wave1 && type <= N163Wave8;
         public static bool IsVrc6Channel(int type) => type >= Vrc6Square1 && type <= Vrc6Saw;
+        public static bool IsVrc6SawChannel(int type) => type == Vrc6Saw;
         public static bool IsVrc7Channel(int type) => type >= Vrc7Fm1 && type <= Vrc7Fm6;
         public static bool IsMmc5Channel(int type) => type >= Mmc5Square1 && type <= Mmc5Dpcm;
         public static bool IsS5BChannel(int type) => type >= S5BSquare1 && type <= S5BSquare3;

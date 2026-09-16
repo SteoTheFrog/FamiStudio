@@ -21,6 +21,8 @@ type NUL > test_defs.inc
 
 @setlocal enabledelayedexpansion
 
+set vrc6_enabled=0
+
 set /a rnd=%random% %%3
 if "%rnd%"=="0" (
 	echo FAMISTUDIO_CFG_NTSC_SUPPORT=1 >> test_defs.inc
@@ -65,6 +67,7 @@ if "%rnd%"=="1" (
 set /a rnd=%random% %%8
 if "%rnd%"=="0" (
 	echo FAMISTUDIO_EXP_VRC6=1 >> test_defs.inc
+	set vrc6_enabled=1
 ) else (
 	if "%rnd%"=="1" (
 		echo FAMISTUDIO_EXP_VRC7=1 >> test_defs.inc
@@ -132,6 +135,12 @@ if "%rnd%"=="1" (
 	set /a rnd=%random% %%2
 	if "!rnd!"=="1" (
 		echo FAMISTUDIO_USE_VOLUME_SLIDES=1 >> test_defs.inc
+	)
+	if "!vrc6_enabled!"=="1" (
+		set /a rnd=%random% %%2
+		if "!rnd!"=="1" (
+			echo FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME=1 >> test_defs.inc
+		)
 	)
 )
 

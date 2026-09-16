@@ -769,7 +769,7 @@ namespace FamiStudio
             supportsDoubleClick = true;
         }
 
-        private void UpdateRenderCoords()
+        internal void UpdateRenderCoords()
         {
             var videoMode = editMode == EditionMode.VideoRecording;
             var headerScale = editMode == EditionMode.DPCMMapping || editMode == EditionMode.DPCM ? 1 : (editMode == EditionMode.VideoRecording ? 0 : 2);
@@ -809,6 +809,15 @@ namespace FamiStudio
             minScrollBarLength        = DpiScaling.ScaleForWindow(DefaultMinScrollBarLength);
             noteResizeMargin          = DpiScaling.ScaleForWindow(DefaultNoteResizeMargin);
             minPixelDistForLines      = DpiScaling.ScaleForWindow(DefaultMinPixelDistForLines);
+
+            if (editMode == EditionMode.Envelope && editInstrument != null)
+            {
+                envelopeValueZoom =
+                    (editEnvelope == EnvelopeType.Volume && !editInstrument.IsFds && !(editInstrument.IsVrc6 && editInstrument.Vrc6SawFullVolume)) ||
+                    editEnvelope == EnvelopeType.DutyCycle ||
+                    editEnvelope == EnvelopeType.N163Waveform ? 2 : 1;
+            }
+
             envelopeValueSizeY        = DpiScaling.ScaleForWindowFloat(DefaultEnvelopeSizeY * envelopeValueZoom);
             gizmoSize                 = DpiScaling.ScaleForWindow(DefaultGizmoSize);
             scrollMargin              = (width - pianoSizeX) / 8;
@@ -1050,7 +1059,7 @@ namespace FamiStudio
             editEnvelope = envelope;
             showEffectsPanel = false;
             noteTooltip = "";
-            envelopeValueZoom = (envelope == EnvelopeType.Volume && !instrument.IsFds) || envelope == EnvelopeType.DutyCycle || envelope == EnvelopeType.N163Waveform ? 2 : 1;
+            envelopeValueZoom = (envelope == EnvelopeType.Volume && !instrument.IsFds && !(instrument.IsVrc6 && instrument.Vrc6SawFullVolume)) || envelope == EnvelopeType.DutyCycle || envelope == EnvelopeType.N163Waveform ? 2 : 1;
             envelopeValueOffset = 0;
             Debug.Assert(editInstrument != null);
 
@@ -1668,11 +1677,11 @@ namespace FamiStudio
             return (max == min) ? effectPanelSizeY : (int)MathF.Floor(MathF.Pow((val - min) / (float)(max - min), exp) * effectPanelSizeY);
         }
 
-        private int GetPixelYForEffectValue(int effect, int value)
+        private int GetPixelYForEffectValue(int effect, int value, Instrument instrument = null)
         {
             var channel = Song.Channels[editChannel];
             var minValue = Note.GetEffectMinValue(Song, channel, effect);
-            var maxValue = Note.GetEffectMaxValue(Song, channel, effect);
+            var maxValue = Note.GetEffectMaxValue(Song, channel, effect, instrument);
             return GetPixelYForEffectValue(value, minValue, maxValue);
         }
 
@@ -1866,7 +1875,7 @@ namespace FamiStudio
                         note.ClearEffectValue(i);
                         if (channel.SupportsEffect(i) && newNote.HasValidEffectValue(i))
                         {
-                            int clampedEffectValue = Note.ClampEffectValue(Song, channel, i, newNote.GetEffectValue(i));
+                            int clampedEffectValue = Note.ClampEffectValue(Song, channel, i, newNote.GetEffectValue(i), note.Instrument);
                             note.SetEffectValue(i, clampedEffectValue);
                         }
                     }
@@ -2863,11 +2872,10 @@ namespace FamiStudio
             var location = captureNoteLocation;
             var captureEffectValue = 0;
 
-            var min = Note.GetEffectMinValue(Song, channel, selectedEffectIdx);
-            var max = Note.GetEffectMaxValue(Song, channel, selectedEffectIdx);
-            var exp = GetEffectValueExponent(max);
+            Note note;
+            bool isNewNote;
 
-            if (pattern == null || !pattern.TryGetNoteWithEffectAt(location.NoteIndex, selectedEffectIdx, out var note))
+            if (pattern == null || !pattern.TryGetNoteWithEffectAt(location.NoteIndex, selectedEffectIdx, out note))
             {
                 if (SnapEnabled && SnapEffectEnabled)
                     location = SnapNote(location);
@@ -2875,8 +2883,21 @@ namespace FamiStudio
                 if (pattern == null)
                     pattern = channel.CreatePatternAndInstance(location.PatternIndex);
 
-                captureEffectValue = GetEffectValueForPixelY(effectPanelSizeY - (captureMouseY - headerSizeY), min, max, exp);
                 note = pattern.GetOrCreateNoteAt(location.NoteIndex);
+                isNewNote = true;
+            }
+            else
+            {
+                isNewNote = false;
+            }
+
+            var min = Note.GetEffectMinValue(Song, channel, selectedEffectIdx);
+            var max = Note.GetEffectMaxValue(Song, channel, selectedEffectIdx, note.Instrument);
+            var exp = GetEffectValueExponent(max);
+
+            if (isNewNote)
+            {
+                captureEffectValue = GetEffectValueForPixelY(effectPanelSizeY - (captureMouseY - headerSizeY), min, max, exp);
                 note.SetEffectValue(selectedEffectIdx, captureEffectValue);
             }
             else
@@ -3017,7 +3038,7 @@ namespace FamiStudio
 
             var note = pattern.GetOrCreateNoteAt(captureNoteLocation.NoteIndex);
 
-            var maxVolume = Note.GetEffectMaxValue(Song, channel, Note.EffectVolume);
+            var maxVolume = Note.GetEffectMaxValue(Song, channel, Note.EffectVolume, note.Instrument);
             var ratio = Utils.Clamp(1.0f - (y - headerSizeY) / (float)effectPanelSizeY, 0.0f, 1.0f);
             var volume = (byte)Math.Round(ratio * maxVolume);
 
@@ -3032,7 +3053,7 @@ namespace FamiStudio
         {
             var channel = Song.Channels[editChannel];
             var pattern = channel.PatternInstances[location.PatternIndex];
-            var offsetY = headerSizeY + effectPanelSizeY - GetPixelYForEffectValue(Note.EffectVolumeSlide, note.VolumeSlideTarget) - y;
+            var offsetY = headerSizeY + effectPanelSizeY - GetPixelYForEffectValue(Note.EffectVolumeSlide, note.VolumeSlideTarget, note.Instrument) - y;
            
             StartCaptureOperation(x, y, CaptureOperation.DragVolumeSlideTargetGizmo, false, location.ToAbsoluteNoteIndex(Song), 0, offsetY);
             App.UndoRedoManager.BeginTransaction(TransactionScope.Pattern, pattern.Id);
@@ -3046,7 +3067,7 @@ namespace FamiStudio
             var channel = Song.Channels[editChannel];
             var pattern = channel.PatternInstances[captureNoteLocation.PatternIndex];
             var note    = pattern.Notes[captureNoteLocation.NoteIndex];
-            var maxVolume = Note.GetEffectMaxValue(Song, channel, Note.EffectVolume);
+            var maxVolume = Note.GetEffectMaxValue(Song, channel, Note.EffectVolume, note.Instrument);
 
             // On mobile, we use gizmos, so let's pretend the drag is happening at the effect value instead of at the gizmo position.
             if (Platform.IsMobile)
@@ -4235,7 +4256,7 @@ namespace FamiStudio
             var locationAbsIndex = location.ToAbsoluteNoteIndex(Song);
             var channel  = Song.Channels[editChannel];
             var minValue = Note.GetEffectMinValue(Song, channel, selectedEffectIdx);
-            var maxValue = Note.GetEffectMaxValue(Song, channel, selectedEffectIdx);
+            var maxValue = Note.GetEffectMaxValue(Song, channel, selectedEffectIdx, note.Instrument);
             var exp = GetEffectValueExponent(maxValue);
             var midValue = (int)MathF.Round(Utils.Lerp(minValue, maxValue, MathF.Pow(0.5f, 1.0f / exp)));
             var value    = note.GetEffectValue(selectedEffectIdx);
@@ -5286,7 +5307,7 @@ namespace FamiStudio
             var note = pattern.GetOrCreateNoteAt(location.NoteIndex);
 
             var minValue = Note.GetEffectMinValue(Song, channel, selectedEffectIdx);
-            var maxValue = Note.GetEffectMaxValue(Song, channel, selectedEffectIdx);
+            var maxValue = Note.GetEffectMaxValue(Song, channel, selectedEffectIdx, note.Instrument);
             var ratio = Utils.Clamp(1.0f - (y - headerSizeY) / (float)effectPanelSizeY, 0.0f, 1.0f);
             var value = (int)Math.Round(ratio * (maxValue - minValue) + minValue);
 
@@ -5407,7 +5428,7 @@ namespace FamiStudio
             var channel = Song.Channels[editChannel];
             var pattern = channel.PatternInstances[location.PatternIndex];
             var selected = IsNoteSelected(location);
-            var maxVolume = Note.GetEffectMaxValue(Song, channel, Note.EffectVolume);
+            var maxVolume = Note.GetEffectMaxValue(Song, channel, Note.EffectVolume, note.Instrument);
 
             App.UndoRedoManager.BeginTransaction(TransactionScope.Pattern, pattern.Id);
 
@@ -6916,8 +6937,8 @@ namespace FamiStudio
 
             var val = note.GetEffectValue(selectedEffectIdx);
             var min = Note.GetEffectMinValue(Song, channel, selectedEffectIdx);
-            var max = Note.GetEffectMaxValue(Song, channel, selectedEffectIdx);
-            var def = Note.GetEffectDefaultValue(Song, channel, selectedEffectIdx);
+            var max = Note.GetEffectMaxValue(Song, channel, selectedEffectIdx, note.Instrument);
+            var def = Note.GetEffectDefaultValue(Song, channel, selectedEffectIdx, note.Instrument);
             var dlg = new ValueInputDialog(ParentWindow, new Point(left + x, top + y), EffectType.LocalizedNames[selectedEffectIdx], val, min, max, false);
 
             dlg.ShowDialogAsync((r) =>

@@ -400,8 +400,9 @@ namespace FamiStudio
             {
                 var lastFrame = -1;
                 var lastValue = channel.GetCachedLastValidEffectValue(minVisiblePattern - 1, selectedEffectIdx, out var lastValueLocation);
+                var lastValueInstrument = lastValueLocation.IsValid ? channel.GetNoteAt(lastValueLocation)?.Instrument : null;
                 var minValue = Note.GetEffectMinValue(song, channel, selectedEffectIdx);
-                var maxValue = Note.GetEffectMaxValue(song, channel, selectedEffectIdx);
+                var maxValue = Note.GetEffectMaxValue(song, channel, selectedEffectIdx, lastValueInstrument);
                 var exp = pianoRoll.GetEffectValueExponent(maxValue);
 
                 // Special case for volume, since it can have slides.
@@ -564,7 +565,7 @@ namespace FamiStudio
                 {
                     var effectValue = note.GetEffectValue(selectedEffectIdx);
                     var minValue = Note.GetEffectMinValue(song, channel, selectedEffectIdx);
-                    var maxValue = Note.GetEffectMaxValue(song, channel, selectedEffectIdx);
+                    var maxValue = Note.GetEffectMaxValue(song, channel, selectedEffectIdx, note.Instrument);
                     var exp = pianoRoll.GetEffectValueExponent(maxValue);
                     var sizeY = pianoRoll.GetPixelYForEffectValue(effectValue, minValue, maxValue, exp);
                     var noteSizeX = pianoRoll.NoteSizeX;

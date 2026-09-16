@@ -964,7 +964,7 @@ namespace FamiStudio
                                 if (note.HasValidEffectValue(i))
                                 {
                                     if (channel.SupportsEffect(i))
-                                        note.SetEffectValue(i, Note.ClampEffectValue(this, channel, i, note.GetEffectValue(i)));
+                                        note.SetEffectValue(i, Note.ClampEffectValue(this, channel, i, note.GetEffectValue(i), note.Instrument));
                                     else
                                         note.ClearEffectValue(i);
                                 }

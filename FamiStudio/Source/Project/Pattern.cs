@@ -444,7 +444,7 @@ namespace FamiStudio
 
                         var val = note.GetEffectValue(i);
                         var min = Note.GetEffectMinValue(song, channel, i);
-                        var max = Note.GetEffectMaxValue(song, channel, i);
+                        var max = Note.GetEffectMaxValue(song, channel, i, note.Instrument);
                         Debug.Assert(val >= min && val <= max);
                     }
                 }
@@ -543,6 +543,19 @@ namespace FamiStudio
                         note.Volume = (byte)(note.Volume << 1);
                     if (note.HasVolumeSlide)
                         note.VolumeSlideTarget = (byte)(note.VolumeSlideTarget << 1);
+                }
+            }
+
+            // At version 20 (FamiStudio 4.6.0), VRC6 saw volume track values became 0-63. We need
+            // to ensure old projects sound correct that were using volume effects.
+            if (buffer.Version < 20 && channelType == global::FamiStudio.ChannelType.Vrc6Saw)
+            {
+                foreach (var note in notes.Values)
+                {
+                    if (note.HasVolume)
+                        note.Volume = (byte)(note.Volume << 2);
+                    if (note.HasVolumeSlide)
+                        note.VolumeSlideTarget = (byte)(note.VolumeSlideTarget << 2);
                 }
             }
 

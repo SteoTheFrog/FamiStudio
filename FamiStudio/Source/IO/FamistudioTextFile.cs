@@ -152,6 +152,7 @@ namespace FamiStudio
                     }
                     else if (instrument.IsVrc6)
                     {
+                        instrumentLine += GenerateAttribute("Vrc6SawFullVolume", instrument.Vrc6SawFullVolume);
                         instrumentLine += GenerateAttribute("Vrc6SawMasterVolume", Vrc6SawMasterVolumeType.Names[instrument.Vrc6SawMasterVolume]);
                     }
                     else if (instrument.IsVrc7)
@@ -544,6 +545,7 @@ namespace FamiStudio
                             }
                             else if (instrument.IsVrc6)
                             {
+                                 if (parameters.TryGetValue("Vrc6SawMasterVolume", out var vrc6SawFullVolumeStr)) instrument.Vrc6SawFullVolume = bool.Parse(vrc6SawFullVolumeStr);
                                  if (parameters.TryGetValue("Vrc6SawMasterVolume", out var vrc6SawVolumeStr)) instrument.Vrc6SawMasterVolume = (byte)Vrc6SawMasterVolumeType.GetValueForName(vrc6SawVolumeStr);
                             }
                             else if (instrument.IsS5B)

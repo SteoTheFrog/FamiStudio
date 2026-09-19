@@ -2118,6 +2118,7 @@ famistudio_get_note_pitch_vrc6_saw:
     .local @noise_slide_shift_loop
     .local @no_noise_slide
     .local @vrc6_saw_full_volume
+    .local @env_clamped
 
     @tmp   = famistudio_r0
     @pitch = famistudio_ptr1
@@ -2237,22 +2238,33 @@ famistudio_get_note_pitch_vrc6_saw:
             ; During a slide, the lower 4 bits are fraction.
             and #$f0
         .endif
-        ora famistudio_env_value+env_offset+FAMISTUDIO_ENV_VOLUME_OFF
+        sta @tmp
+        lda famistudio_env_value+env_offset+FAMISTUDIO_ENV_VOLUME_OFF
+
+        ; Clamp VRC6 square volume within valid range if instrument has 64-step saw volume.
+        .if FAMISTUDIO_EXP_VRC6 && FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME && idx < FAMISTUDIO_VRC6_CH2_IDX
+            cmp #16
+            bcc @env_clamped
+            lda #15
+        @env_clamped:
+        .endif
+
+        ora @tmp
         tax
         lda famistudio_volume_table, x
     .else
         lda famistudio_env_value+env_offset+FAMISTUDIO_ENV_VOLUME_OFF
     .endif
 
-.if FAMISTUDIO_EXP_VRC6 && (idx = FAMISTUDIO_VRC6_CH2_IDX)
-    ; VRC6 saw has 6-bits
-    ldx famistudio_vrc6_saw_volume
-    bmi @set_volume
-    asl
-    ldx famistudio_vrc6_saw_volume
-    beq @set_volume
-    asl
-.endif
+    .if FAMISTUDIO_EXP_VRC6 && (idx = FAMISTUDIO_VRC6_CH2_IDX)
+        ; VRC6 saw has 6-bits
+        ldx famistudio_vrc6_saw_volume
+        bmi @set_volume
+        asl
+        ldx famistudio_vrc6_saw_volume
+        beq @set_volume
+        asl
+    .endif
 
     .if FAMISTUDIO_EXP_VRC6 && FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME && (idx = FAMISTUDIO_VRC6_CH2_IDX)
         jmp @set_volume

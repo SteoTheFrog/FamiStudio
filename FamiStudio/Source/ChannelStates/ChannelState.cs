@@ -588,20 +588,17 @@ namespace FamiStudio
 
         protected int MultiplyVolumes(int v0, int v1)
         {
-            // FDS volume DAC is 6-bit, but clamped to 32 (a power of 2), so an exact float divide
-            // here is already bit-identical to the sound engine's shift-based divide. VRC6 saw's
-            // 64-step mode is also 6-bit, but full range (max 63, not a power of 2), so a plain
-            // divide-by-64 can't be both exact and reach 63. True silence (product == 0) is always
-            // unambiguous on its own (a stopped note bypasses this entirely via a separate opcode),
-            // so it's handled as its own case rather than needing to also emerge from the shift —
-            // that's what lets the nonzero path (>>6, then +1) be an exact bijection onto 1..63
-            // whenever either operand is at its own max, with at most +/-1 error elsewhere (matching
-            // the real resolution limit when one operand is small, not an added approximation error).
+            // VRC6 saw is 6-bit. Since our math can only reach 62, we add 1, returning 0 explicitely.
+            // This mimics what we do in the sound engine for full range saw.
             if (ChannelType.IsVrc6SawChannel(channelType) && VolumeMax == Note.Vrc6SawVolumeMax)
             {
                 var product = v0 * v1;
                 return product == 0 ? 0 : (product >> 6) + 1;
             }
+
+            // For anything over 4-bit, we don't want to incorrectly mix volume tracks.
+            if (v1 > VolumeMax)
+                return v0;
 
             var max = (float)VolumeMax;
             var vol = (int)Math.Round((v0 / max) * (v1 / max) * max);

@@ -150,7 +150,7 @@ namespace FamiStudio
             UpdateNoteTooltip();
         }
 
-        private void UpdateNoteTooltip()
+        public void UpdateNoteTooltip()
         {
             var tooltip = $"<MouseLeft><Drag> {OrTooltip} <MouseRight><Drag> {SelectSamplesFromSourceTooltip}";
             var newNoteTooltip = "";

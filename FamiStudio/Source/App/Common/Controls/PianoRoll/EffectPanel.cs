@@ -58,6 +58,16 @@ namespace FamiStudio
         {
             base.OnPointerMove(e);
             UpdateToolTip(e.X, e.Y);
+
+            if (panelMode == PanelMode.Notes && pianoRoll.HasRepeatEnvelope() &&
+                (pianoRoll.IsChangingEnvelopeRepeatValue || pianoRoll.IsPointInEffectPanel(e.X, e.Y)))
+            {
+                Cursor = Cursors.SizeNS;
+            }
+            else
+            {
+                Cursor = Cursors.Default;
+            }
         }
 
         private void UpdateToolTip(int x, int y)
@@ -227,6 +237,12 @@ namespace FamiStudio
 
             if (panelMode == PanelMode.Wave && pianoRoll.HandleMouseDownDPCMVolumeEnvelope(e))
                 return;
+
+            if (e.Left && panelMode == PanelMode.Notes && pianoRoll.HasRepeatEnvelope() && pianoRoll.IsPointInEffectPanel(e.X, e.Y))
+            {
+                pianoRoll.StartChangeEnvelopeRepeatValue(e.X, e.Y);
+                return;
+            }
 
             var isChannelEffects = panelMode == PanelMode.Notes && !pianoRoll.HasRepeatEnvelope();
 

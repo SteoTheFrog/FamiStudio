@@ -99,7 +99,7 @@ namespace FamiStudio
         private HashSet<int> selectedEffectIndices          => pianoRoll.SelectedEffectIndicesSet;
 
         private SortedList<int, Note> dragNotes { get => pianoRoll.DragNotes; set => pianoRoll.DragNotes = value; }
-        private SortedList<int, int> dragEffects            => pianoRoll.DragEffects;
+        private SortedList<int, Dictionary<int, int>> dragEffects => pianoRoll.DragEffects;
         private int dragFrameMin { get => pianoRoll.DragFrameMin; set => pianoRoll.DragFrameMin = value; }
         private int dragFrameMax { get => pianoRoll.DragFrameMax; set => pianoRoll.DragFrameMax = value; }
         private int dragLastNoteValue { get => pianoRoll.DragLastNoteValue; set => pianoRoll.DragLastNoteValue = value; }
@@ -261,15 +261,35 @@ namespace FamiStudio
 
                 dragEffects.Clear();
 
-                if (!legacySelectMode && selectedEffectIdx >= 0)
+                if (!legacySelectMode)
                 {
-                    foreach (var absoluteIdx in selectedEffectIndices)
+                    foreach (var kv in dragNotes)
                     {
-                        var effectLocation = NoteLocation.FromAbsoluteNoteIndex(Song, absoluteIdx);
-                        var effectNote = channel.GetNoteAt(effectLocation);
-                        if (effectNote != null && effectNote.HasValidEffectValue(selectedEffectIdx))
+                        var dragNote = kv.Value;
+                        if (dragNote == null)
+                            continue;
+
+                        var startFrame = kv.Key;
+                        var endFrame = startFrame + Math.Max(1, dragNote.Duration);
+
+                        for (int absoluteIdx = startFrame; absoluteIdx < endFrame; absoluteIdx++)
                         {
-                            dragEffects[absoluteIdx] = effectNote.GetEffectValue(selectedEffectIdx);
+                            var effectLocation = NoteLocation.FromAbsoluteNoteIndex(Song, absoluteIdx);
+                            var effectNote = channel.GetNoteAt(effectLocation);
+
+                            if (effectNote == null)
+                                continue;
+
+                            var effects = new Dictionary<int, int>();
+
+                            for (int effectIdx = 0; effectIdx < Note.EffectCount; effectIdx++)
+                            {
+                                if (effectNote.HasValidEffectValue(effectIdx))
+                                    effects[effectIdx] = effectNote.GetEffectValue(effectIdx);
+                            }
+
+                            if (effects.Count > 0)
+                                dragEffects[absoluteIdx] = effects;
                         }
                     }
                 }
@@ -378,28 +398,18 @@ namespace FamiStudio
                     // For modern selection mode, we need to move any selected effects.
                     if (modernDrag)
                     {
-                        foreach (var kv in dragEffects)
+                        foreach (var kv in dragNotes)
                         {
-                            var oldLocation = NoteLocation.FromAbsoluteNoteIndex(Song, kv.Key);
-                            var pattern = channel.PatternInstances[oldLocation.PatternIndex];
-
-                            if (pattern == null)
-                                continue;
-
-                            var oldNote = channel.GetNoteAt(oldLocation);
+                            var oldNote = kv.Value;
                             if (oldNote == null)
                                 continue;
 
-                            oldNote.ClearEffectValue(selectedEffectIdx);
+                            var startFrame = kv.Key;
+                            var duration = oldNote.IsMusical ? Math.Max(1, oldNote.Duration) : 1;
+                            var endFrame = Math.Min(startFrame + duration, Song.GetPatternStartAbsoluteNoteIndex(Song.Length));
 
-                            if (oldNote.IsEmpty)
-                                pattern.DeleteNotesBetween(oldLocation.NoteIndex, oldLocation.NoteIndex + 1);
+                            channel.DeleteNotesBetween(startFrame, endFrame, false);
                         }
-                    }
-
-                    foreach (var kv in dragNotes)
-                    {
-                        channel.DeleteNotesBetween(kv.Key, kv.Key + 1, keepFx);
                     }
                 }
 
@@ -502,7 +512,7 @@ namespace FamiStudio
 
                         if (frame < 0 || frame >= Song.GetPatternStartAbsoluteNoteIndex(Song.Length))
                             continue;
-                        
+
                         var newLocation = NoteLocation.FromAbsoluteNoteIndex(Song, frame);
                         var pattern = channel.PatternInstances[newLocation.PatternIndex];
 
@@ -521,7 +531,8 @@ namespace FamiStudio
 
                         var effectNote = pattern.GetOrCreateNoteAt(newLocation.NoteIndex);
 
-                        effectNote.SetEffectValue(selectedEffectIdx, kv.Value);
+                        foreach (var effect in kv.Value)
+                            effectNote.SetEffectValue(effect.Key, effect.Value);
                     }
                 }
 
@@ -1273,21 +1284,7 @@ namespace FamiStudio
                 }
             }
 
-            // We only display frames in modern select mode during selection, for means of measurement.
-            if (pianoRoll.LegacySelectMode ? pianoRoll.IsSelectionValid() : pianoRoll.IsSelectCapture)
-            {
-                if (newNoteTooltip.Length > 0)
-                    newNoteTooltip += " ";
-
-                var numSelected = pianoRoll.LegacySelectMode ? pianoRoll.SelectionMaxX - pianoRoll.SelectionMinX + 1 : pianoRoll.CaptureMarqueeMaxX - pianoRoll.CaptureMarqueeMinX + 1;
-
-                newNoteTooltip += $"{numSelected}{(Song.Project.UsesFamiTrackerTempo ? " note" : " frame")}" + (numSelected == 1 ? "" : "s") + " selected";
-            }
-
-            App.SetToolTip(tooltip);
-
-            if (noteTooltip != newNoteTooltip)
-                pianoRoll.SetNoteTooltip(newNoteTooltip);
+            pianoRoll.UpdateSelectionTooltip();
         }
 
         private int GetPixelXForAbsoluteNoteIndex(int n, bool scroll = true) => pianoRoll.GetPixelXForAbsoluteNoteIndex(n, scroll);

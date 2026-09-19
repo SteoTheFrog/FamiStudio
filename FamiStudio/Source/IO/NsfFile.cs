@@ -584,7 +584,9 @@ namespace FamiStudio
             }
 
             if (expansion == ExpansionType.Vrc6)
-                instrument.Vrc6SawMasterVolume = Vrc6SawMasterVolumeType.Full;
+            {
+                instrument.Vrc6SawFullVolume = true;
+            }
 
             return instrument;
         }
@@ -998,10 +1000,10 @@ namespace FamiStudio
                 var attack  = true;
                 var octave  = -1;
 
-                // VRC6 has a much larger volume range (6-bit) than our volume (4-bit).
+
                 if (channel.Type == ChannelType.Vrc6Saw)
                 {
-                    volume >>= 2;
+                    volume = Math.Min(Note.Vrc6SawVolumeMax, volume);
                 }
                 else if (channel.Type == ChannelType.FdsWave)
                 {

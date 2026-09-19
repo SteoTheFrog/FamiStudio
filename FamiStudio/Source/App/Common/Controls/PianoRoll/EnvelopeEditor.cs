@@ -268,7 +268,7 @@ namespace FamiStudio
             UpdateNoteTooltip(e);
         }
 
-        private void UpdateNoteTooltip(PointerEventArgs e)
+        public void UpdateNoteTooltip(PointerEventArgs e)
         {
             var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
             var newNoteTooltip = "";

@@ -113,7 +113,6 @@ namespace FamiStudio
         private bool usesPhaseReset = false;
         private bool usesFdsAutoMod = false;
         private bool usesVrc6SawFullVolume = false;
-        private bool usesFdsFullVolume = false;
         static readonly int[] epsmRegOrder = new[] { 0, 1, 2, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 25, 26, 27, 28, 29, 3, 10, 17, 24, 30 };
         static readonly byte[] fdsDacLevelMapping = 
         {
@@ -151,7 +150,7 @@ namespace FamiStudio
                     env = new Envelope(EnvelopeType.Volume);
                     instrument.Envelopes[EnvelopeType.Volume] = env;
                 }
-                var volumeMax = (sbyte)(instrument.IsFds ? Note.FdsVolumeMax : Note.VolumeMax);
+                var volumeMax = (sbyte)(instrument.IsFds ? Note.FdsVolumeMax : instrument.IsVrc6 && instrument.Vrc6SawFullVolume ? Note.Vrc6SawVolumeMax : Note.VolumeMax);
 
                 if (env.Length == 0 || env.AllValuesEqual(volumeMax))
                 {
@@ -1339,7 +1338,7 @@ namespace FamiStudio
 
                         if (note.HasVolume)
                         {
-                            var isVrc6SawFull = channel.IsVrc6SawChannel && note.Instrument != null && note.Instrument.Vrc6SawFullVolume;
+                            var isVrc6SawFull = channel.IsVrc6SawChannel && sawFullVolume;
 
                             if (note.Volume != lastVolume)
                             {
@@ -2418,8 +2417,6 @@ namespace FamiStudio
                 flags.Add("FDS auto-modulation is used on at least 1 instrument, you must set FAMISTUDIO_USE_FDS_AUTOMOD = 1.");
             if (usesVrc6SawFullVolume)
                 flags.Add("VRC6 saw 64-step (6-bit) volume is used on at least 1 instrument, you must set FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME = 1.");
-            if (usesFdsFullVolume)
-                flags.Add("FDS 32-step volume is used on at least 1 instrument (odd number(s)), you must set FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME = 1, or your volumes will be quantized to even numbers.");
             if (project.SoundEngineUsesDpcmBankSwitching)
                 flags.Add("Project has DPCM bank-switching enabled in the project settings, you must set FAMISTUDIO_USE_DPCM_BANKSWITCHING = 1 and implement bank switching.");
             else if (project.SoundEngineUsesExtendedDpcm)

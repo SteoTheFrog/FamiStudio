@@ -2065,7 +2065,7 @@ famistudio_get_note_pitch_vrc6_saw:
 ; [in] no input params.
 ;======================================================================================================================
 
-.macro famistudio_update_channel_sound idx, env_offset, pulse_prev, reg_hi, reg_lo, reg_vol, reg_sweep, phase_reset_mask, ?.nocut, ?.set_volume, ?.phase_reset_done, ?.compute_volume, ?.no_noise_slide, ?.vrc6_saw_full_volume
+.macro famistudio_update_channel_sound idx, env_offset, pulse_prev, reg_hi, reg_lo, reg_vol, reg_sweep, phase_reset_mask, ?.nocut, ?.set_volume, ?.phase_reset_done, ?.compute_volume, ?.no_noise_slide, ?.vrc6_saw_full_volume, ?.env_clamped
 
     .local .tmp
     .local .pitch
@@ -2248,7 +2248,20 @@ famistudio_get_note_pitch_vrc6_saw:
             ; During a slide, the lower 4 bits are fraction.
             and #0xf0
         .endif
-        ora famistudio_env_value+env_offset+FAMISTUDIO_ENV_VOLUME_OFF
+        sta *.tmp
+        lda famistudio_env_value+env_offset+FAMISTUDIO_ENV_VOLUME_OFF
+
+        ; Clamp VRC6 square volume within valid range if instrument has 64-step saw volume.
+        .if FAMISTUDIO_EXP_VRC6 & FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME
+        .ifne idx - FAMISTUDIO_VRC6_CH2_IDX
+            cmp #16
+            bcc .env_clamped
+            lda #15
+        .env_clamped:
+        .endif
+        .endif
+
+        ora *.tmp
         tax
         lda famistudio_volume_table, x 
     .else

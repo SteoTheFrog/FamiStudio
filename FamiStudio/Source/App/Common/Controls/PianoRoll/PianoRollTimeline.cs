@@ -353,6 +353,13 @@ namespace FamiStudio
                 pianoRoll.EndTimelinePan();
             }
 
+            if (editMode == EditMode.Dpcm)
+                pianoRoll.WaveEditor.UpdateNoteTooltip();
+            else if (editMode == EditMode.Envelope || editMode == EditMode.Arpeggio)
+                pianoRoll.EnvelopeEditor.UpdateNoteTooltip(e);
+            else
+                pianoRoll.UpdateSelectionTooltip();
+
             UpdateCursor();
         }
 
@@ -367,6 +374,16 @@ namespace FamiStudio
             if (pianoRoll.IsTimelineEnvelopeCapture || pianoRoll.IsTimelineColumnSelectionCapture || pianoRoll.IsTimelineSeekCapture)
             {
                 pianoRoll.UpdateTimelineCapture(p.X, p.Y);
+
+                if (pianoRoll.IsTimelineColumnSelectionCapture)
+                {
+                    if (editMode == EditMode.Dpcm)
+                        pianoRoll.WaveEditor.UpdateNoteTooltip();
+                    else if (editMode == EditMode.Envelope || editMode == EditMode.Arpeggio)
+                        pianoRoll.EnvelopeEditor.UpdateNoteTooltip(e);
+                    else
+                        pianoRoll.UpdateSelectionTooltip();
+                }
             }
             else if (pianoRoll.IsTimelinePanCapture)
             {

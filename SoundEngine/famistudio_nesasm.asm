@@ -2208,7 +2208,18 @@ reg_sweep\@ = \7
             ; During a slide, the lower 4 bits are fraction.
             and #$f0
         .endif
-        ora famistudio_env_value+env_offset\@+FAMISTUDIO_ENV_VOLUME_OFF
+        sta <.tmp\@
+        lda famistudio_env_value+env_offset\@+FAMISTUDIO_ENV_VOLUME_OFF
+
+        ; Clamp VRC6 square volume within valid range if instrument has 64-step saw volume.
+        .if (FAMISTUDIO_EXP_VRC6 != 0) & (FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME != 0) & (idx\@ < FAMISTUDIO_VRC6_CH2_IDX)
+            cmp #16
+            bcc .env_clamped\@
+            lda #15
+        .env_clamped\@:
+        .endif
+
+        ora <.tmp\@
         tax
         lda famistudio_volume_table, x
     .else

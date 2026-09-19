@@ -614,6 +614,11 @@ namespace FamiStudio
                 instrument.Envelopes[EnvelopeType.DutyCycle].Values[0] = (sbyte)duty;
             }
 
+            if (expansion == ExpansionType.Vrc6)
+            {
+                instrument.Vrc6SawFullVolume = true;
+            }
+
             return instrument;
         }
 
@@ -1280,7 +1285,11 @@ namespace FamiStudio
                 var attack = true;
                 var octave = -1;
 
-                if (channel.Type == ChannelType.FdsWave)
+                if (channel.Type == ChannelType.Vrc6Saw)
+                {
+                    volume = Math.Min(Note.Vrc6SawVolumeMax, volume);
+                }
+                else if (channel.Type == ChannelType.FdsWave)
                 {
                     volume = Math.Min(Note.FdsVolumeMax, volume);
                 }

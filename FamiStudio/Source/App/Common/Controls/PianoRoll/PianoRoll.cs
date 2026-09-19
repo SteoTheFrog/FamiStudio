@@ -348,7 +348,7 @@ namespace FamiStudio
         int dragFrameMax = -1;
         int dragLastNoteValue = -1;
         SortedList<int, Note> dragNotes = new SortedList<int, Note>();
-        SortedList<int, int> dragEffects = new SortedList<int, int>();
+        SortedList<int, Dictionary<int, int>> dragEffects = new SortedList<int, Dictionary<int, int>>();
 
         // 2D selection for note and effects area.
         bool legacySelectMode = Settings.UseLegacySelectionMode;
@@ -566,7 +566,8 @@ namespace FamiStudio
         public TextureAtlasRef BmpEffectRepeat  => bmpEffectRepeat;
         public TextureAtlasRef[] BmpEffects     => bmpEffects;
 
-        public WaveEditor WaveEditor => waveEditor;
+        public EnvelopeEditor EnvelopeEditor => envelopeEditor;
+        public WaveEditor WaveEditor         => waveEditor;
 
         public float NoteSizeX          => noteSizeX;
         public float Zoom               => zoom;
@@ -644,7 +645,7 @@ namespace FamiStudio
         internal HashSet<int> SelectedEffectIndicesSet => selectedEffectIndices;
 
         internal SortedList<int, Note> DragNotes { get => dragNotes; set => dragNotes = value; }
-        internal SortedList<int, int> DragEffects      => dragEffects;
+        internal SortedList<int, Dictionary<int, int>> DragEffects => dragEffects;
         internal int DragFrameMin { get => dragFrameMin; set => dragFrameMin = value; }
         internal int DragFrameMax { get => dragFrameMax; set => dragFrameMax = value; }
         internal int DragLastNoteValue { get => dragLastNoteValue; set => dragLastNoteValue = value; }
@@ -891,6 +892,20 @@ namespace FamiStudio
                 mode = EffectPanel.PanelMode.Notes;
 
             effectPanel.SetPanelMode(mode);
+        }
+
+        public void UpdateSelectionTooltip()
+        {
+            var tooltip = "";
+
+            if (legacySelectMode ? IsSelectionValid() : IsSelectCapture)
+            {
+                var numSelected = legacySelectMode ? selectionMaxX - selectionMinX + 1 : captureMarqueeMaxX - captureMarqueeMinX + 1;
+                tooltip = $"{numSelected}{(Song.Project.UsesFamiTrackerTempo ? " note" : " frame")}" + (numSelected == 1 ? "" : "s") + " selected";
+            }
+
+            if (noteTooltip != tooltip)
+                SetNoteTooltip(tooltip);
         }
 
         public void StartTimelineOrEffectPan(int x, int y)
@@ -2756,10 +2771,18 @@ namespace FamiStudio
                 {
                     var effectLocation = NoteLocation.FromAbsoluteNoteIndex(Song, absoluteIdx);
                     var effectNote = channel.GetNoteAt(effectLocation);
-
-                    if (effectNote != null && effectNote.HasValidEffectValue(selectedEffectIdx))
+                    if (effectNote != null)
                     {
-                        dragEffects[absoluteIdx] = effectNote.GetEffectValue(selectedEffectIdx);
+                        var effects = new Dictionary<int, int>();
+
+                        foreach (var effectIdx in SupportedEffects)
+                        {
+                            if (effectNote.HasValidEffectValue(effectIdx))
+                                effects[effectIdx] = effectNote.GetEffectValue(effectIdx);
+                        }
+
+                        if (effects.Count > 0)
+                            dragEffects[absoluteIdx] = effects;
                     }
                 }
             }
@@ -2973,7 +2996,7 @@ namespace FamiStudio
             MarkDirty();
         }
 
-        void StartChangeEnvelopeRepeatValue(int x, int y)
+        public void StartChangeEnvelopeRepeatValue(int x, int y)
         {
             StartCaptureOperation(x, y, CaptureOperation.ChangeEnvelopeRepeatValue, false, GetAbsoluteNoteIndexForPixelX(x - pianoSizeX) / EditEnvelope.ChunkLength);
             App.UndoRedoManager.BeginTransaction(TransactionScope.Instrument, editInstrument.Id);
@@ -3586,16 +3609,21 @@ namespace FamiStudio
             return IsSelectionValid() && Song.PatternIndexFromAbsoluteNoteIndex(selectionMinX) != Song.PatternIndexFromAbsoluteNoteIndex(selectionMaxX);
         }
 
-        private void ClearEffects(Channel channel, SortedList<int, int> effects)
+        private void ClearEffects(Channel channel, SortedList<int, Dictionary<int, int>> effects)
         {
             foreach (var kv in effects)
             {
                 var location = NoteLocation.FromAbsoluteNoteIndex(Song, kv.Key);
-                channel.GetNoteAt(location)?.ClearEffectValue(selectedEffectIdx);
+                var note = channel.GetNoteAt(location);
+                if (note == null)
+                    continue;
+
+                foreach (var effect in kv.Value)
+                    note.ClearEffectValue(effect.Key);
             }
         }
 
-        private void PlaceEffects(Channel channel, SortedList<int, int> effects, int amount)
+        private void PlaceEffects(Channel channel, SortedList<int, Dictionary<int, int>> effects, int amount)
         {
             var songEnd = Song.GetPatternStartAbsoluteNoteIndex(Song.Length);
 
@@ -3606,12 +3634,14 @@ namespace FamiStudio
                     continue;
 
                 var location = NoteLocation.FromAbsoluteNoteIndex(Song, frame);
-                var pattern  = channel.PatternInstances[location.PatternIndex];
+                var pattern = channel.PatternInstances[location.PatternIndex];
 
                 pattern ??= channel.CreatePatternAndInstance(location.PatternIndex);
 
                 var note = pattern.GetOrCreateNoteAt(location.NoteIndex);
-                note.SetEffectValue(selectedEffectIdx, kv.Value);
+
+                foreach (var effect in kv.Value)
+                    note.SetEffectValue(effect.Key, effect.Value);
             }
         }
 
@@ -3754,7 +3784,7 @@ namespace FamiStudio
                 return note;
             });
 
-            var selectedEffects = new SortedList<int, int>();
+            var selectedEffects = new SortedList<int, Dictionary<int, int>>();
 
             if (selectedEffectIdx >= 0)
             {
@@ -3764,10 +3794,19 @@ namespace FamiStudio
                 for (var it = channel.GetSparseNoteIterator(minLocation, maxLocation, Note.GetFilterForEffect(selectedEffectIdx)); !it.Done; it.Next())
                 {
                     var absoluteIdx = it.Location.ToAbsoluteNoteIndex(Song);
-
-                    if (selectedEffectIndices.Contains(absoluteIdx) && it.Note.HasValidEffectValue(selectedEffectIdx))
+                    
+                    if (selectedEffectIndices.Contains(absoluteIdx))
                     {
-                        selectedEffects[absoluteIdx] = it.Note.GetEffectValue(selectedEffectIdx);
+                        var effects = new Dictionary<int, int>();
+
+                        foreach (var effectIdx in SupportedEffects)
+                        {
+                            if (it.Note.HasValidEffectValue(effectIdx))
+                                effects[effectIdx] = it.Note.GetEffectValue(effectIdx);
+                        }
+
+                        if (effects.Count > 0)
+                            selectedEffects[absoluteIdx] = effects;
                     }
                 }
             }
@@ -7796,8 +7835,7 @@ namespace FamiStudio
             var pt = ScreenToControl(CursorPosition);
 
             if (captureOperation == CaptureOperation.ChangeEffectValue ||
-                captureOperation == CaptureOperation.ChangeEnvelopeRepeatValue ||
-                HasRepeatEnvelope() && IsPointInEffectPanel(pt.X, pt.Y))
+                captureOperation == CaptureOperation.ChangeEnvelopeRepeatValue)
             {
                 Cursor = Cursors.SizeNS;
             }
@@ -8123,8 +8161,6 @@ namespace FamiStudio
 
         public override void OnContainerMouseWheelNotify(Control control, PointerEventArgs e)
         {
-            // e's coordinates are relative to whichever child control (NoteArea, a button in
-            // EffectPanel, etc.) actually received the wheel event, not to PianoRoll itself.
             var pos = WindowToControl(control.ControlToWindow(e.Position));
             var buttons = (e.Left ? PointerEventArgs.ButtonLeft : 0) | (e.Right ? PointerEventArgs.ButtonRight : 0) | (e.Middle ? PointerEventArgs.ButtonMiddle : 0);
             var translated = new PointerEventArgs(buttons, pos.X, pos.Y, false, e.ScrollX, e.ScrollY);

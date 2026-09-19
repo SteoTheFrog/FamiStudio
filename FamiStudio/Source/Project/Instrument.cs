@@ -386,7 +386,17 @@ namespace FamiStudio
         public bool Vrc6SawFullVolume
         {
             get { return vrc6SawFullVolume; }
-            set { vrc6SawFullVolume = value; }
+            set
+            {
+                if (value != vrc6SawFullVolume && IsEnvelopeEmpty(EnvelopeType.Volume))
+                {
+                    var env = VolumeEnvelope;
+                    for (int i = 0; i < env.Length; i++)
+                        env.Values[i] = (sbyte)(value ? Note.Vrc6SawVolumeMax : Note.VolumeMax);
+                }
+
+                vrc6SawFullVolume = value;
+            }
         }
 
         public byte Vrc7Patch

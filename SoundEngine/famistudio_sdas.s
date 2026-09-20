@@ -2253,11 +2253,13 @@ famistudio_get_note_pitch_vrc6_saw:
 
         ; Clamp VRC6 square volume within valid range if instrument has 64-step saw volume.
         .if FAMISTUDIO_EXP_VRC6 & FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME
-        .ifne idx - FAMISTUDIO_VRC6_CH2_IDX
+        .ifge idx - FAMISTUDIO_VRC6_CH0_IDX
+        .iflt idx - FAMISTUDIO_VRC6_CH2_IDX
             cmp #16
             bcc .env_clamped
             lda #15
         .env_clamped:
+        .endif
         .endif
         .endif
 

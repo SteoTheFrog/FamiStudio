@@ -1328,7 +1328,7 @@ namespace FamiStudio
                             if (sawFullVolume)
                             {
                                 channelData.Add($"{hexp}{(byte)(OpcodeVolumeBits | (resyncVolume >> 2)):x2}+");
-                                channelData.Add($"{hexp}{(byte)(resyncVolume & 0x03):x2}+");
+                                channelData.Add($"{hexp}{(byte)(resyncVolume & 0x03):x2}");
                             }
                             else
                             {
@@ -1345,7 +1345,7 @@ namespace FamiStudio
                                 if (channel.IsFdsChannel || isVrc6SawFull)
                                 {
                                     channelData.Add($"{hexp}{(byte)(OpcodeVolumeBits | (note.Volume >> 2)):x2}+");
-                                    channelData.Add($"{hexp}{(byte)(note.Volume & 0x03):x2}+");
+                                    channelData.Add($"{hexp}{(byte)(note.Volume & 0x03):x2}");
                                 }
                                 else
                                 {

@@ -2242,7 +2242,7 @@ famistudio_get_note_pitch_vrc6_saw:
         lda famistudio_env_value+env_offset+FAMISTUDIO_ENV_VOLUME_OFF
 
         ; Clamp VRC6 square volume within valid range if instrument has 64-step saw volume.
-        .if FAMISTUDIO_EXP_VRC6 && FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME && idx < FAMISTUDIO_VRC6_CH2_IDX
+        .if FAMISTUDIO_EXP_VRC6 && FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME && (idx = FAMISTUDIO_VRC6_CH0_IDX || idx = FAMISTUDIO_VRC6_CH1_IDX)
             cmp #16
             bcc @env_clamped
             lda #15

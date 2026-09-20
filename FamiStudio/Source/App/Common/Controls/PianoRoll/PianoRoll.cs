@@ -360,6 +360,8 @@ namespace FamiStudio
         // Envelope selections.
         HashSet<int> selectedEnvelopeIndices = new HashSet<int>();
         HashSet<int> captureSelectedEnvelopeIndices = new HashSet<int>();
+        HashSet<int> selectedEnvelopeRepeatIndices = new HashSet<int>();
+        HashSet<int> captureSelectedEnvelopeRepeatIndices = new HashSet<int>();
 
         // Pattern edit mode.
         int editChannel = -1;
@@ -2306,33 +2308,15 @@ namespace FamiStudio
             return selectedEnvelopeIndices.Contains(idx);
         }
 
-        private bool GetRepeatEnvelopeSelectionMinMax(out int min, out int max)
-        {
-            min = -1;
-            max = -1;
-
-            var rep = EditRepeatEnvelope;
-            var env = EditEnvelope;
-
-            if (IsSelectionValid() && rep != null)
-            {
-                min = selectionMinX / env.ChunkLength;
-                max = selectionMaxX / env.ChunkLength;
-
-                return true;
-            }
-
-            return false;
-        }
-
         public bool IsEnvelopeRepeatValueSelected(int idx)
         {
-            if (GetRepeatEnvelopeSelectionMinMax(out var min, out var max))
-            {
-                return idx >= min && idx <= max;
-            }
+            if (!IsSelectionValid())
+                return false;
 
-            return false;
+            if (legacySelectMode)
+                return idx >= selectionMinX / EditEnvelope.ChunkLength && idx <= selectionMaxX / EditEnvelope.ChunkLength;
+
+            return selectedEnvelopeRepeatIndices.Contains(idx);
         }
 
         internal void DrawSelectionRect(CommandList c, int height, bool effectsPanel = false, bool header = false)
@@ -2357,6 +2341,9 @@ namespace FamiStudio
 
             if (!legacySelectMode && (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio))
             {
+                if (captureSelectionFromEffectPanel != effectsPanel)
+                    return;
+
                 c.FillRectangle(
                     GetPixelXForAbsoluteNoteIndex(captureMarqueeMinX) + 1,  0,
                     GetPixelXForAbsoluteNoteIndex(captureMarqueeMaxX  + 1), height,
@@ -3029,10 +3016,16 @@ namespace FamiStudio
 
             if (IsSelectionValid() && IsEnvelopeRepeatValueSelected(idx))
             {
-                GetRepeatEnvelopeSelectionMinMax(out var min, out var max);
+                var repMin = selectionMinX / env.ChunkLength;
+                var repMax = selectionMaxX / env.ChunkLength;
 
-                for (int i = min; i <= max; i++)
+                for (int i = repMin; i <= repMax; i++)
+                {
+                    if (!legacySelectMode && !IsEnvelopeRepeatValueSelected(i))
+                        continue;
+
                     rep.Values[i] = (sbyte)Utils.Clamp(rep.Values[i] + delta, minRepeat, maxRepeat);
+                }
             }
             else
             {
@@ -6312,6 +6305,9 @@ namespace FamiStudio
 
             selectedEnvelopeIndices.Clear();
             captureSelectedEnvelopeIndices.Clear();
+
+            selectedEnvelopeRepeatIndices.Clear();
+            captureSelectedEnvelopeRepeatIndices.Clear();
         }
 
         internal void SetMobileHighlightedNote(int absNoteIndex)
@@ -6435,12 +6431,22 @@ namespace FamiStudio
                     captureSelectedEffectIndices.Add(idx);
             }
 
+            var isEnvelopeRepeatSelection = (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio) && captureSelectionFromEffectPanel && HasRepeatEnvelope();
+
             captureSelectedEnvelopeIndices.Clear();
 
-            if (keepLast && (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio))
+            if (keepLast && (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio) && !isEnvelopeRepeatSelection)
             {
                 foreach (var idx in selectedEnvelopeIndices)
                     captureSelectedEnvelopeIndices.Add(idx);
+            }
+
+            captureSelectedEnvelopeRepeatIndices.Clear();
+
+            if (keepLast && isEnvelopeRepeatSelection)
+            {
+                foreach (var idx in selectedEnvelopeRepeatIndices)
+                    captureSelectedEnvelopeRepeatIndices.Add(idx);
             }
 
             StartCaptureOperation(x, y, CaptureOperation.Select, false, capturePointer: capturePointer);
@@ -6490,6 +6496,40 @@ namespace FamiStudio
             // Envelope and arpeggio selection supports using CTRL for separate selections.
             if (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio)
             {
+                if (captureSelectionFromEffectPanel && HasRepeatEnvelope())
+                {
+                    var chunkLen = EditEnvelope.ChunkLength;
+                    var rep = EditRepeatEnvelope;
+
+                    var repMin = Utils.Clamp(marqueeMinX / chunkLen, 0, rep.Length - 1);
+                    var repMax = Utils.Clamp(marqueeMaxX / chunkLen, 0, rep.Length - 1);
+
+                    var repResult = keepLast ? new HashSet<int>(captureSelectedEnvelopeRepeatIndices) : new HashSet<int>();
+
+                    for (var i = repMin; i <= repMax; i++)
+                        repResult.Add(i);
+
+                    selectedEnvelopeIndices.Clear();
+                    selectedEnvelopeRepeatIndices.Clear();
+
+                    if (repResult.Count > 0)
+                    {
+                        foreach (var idx in repResult)
+                            selectedEnvelopeRepeatIndices.Add(idx);
+
+                        selectionMinX = repResult.Min() * chunkLen;
+                        selectionMaxX = (repResult.Max() + 1) * chunkLen - 1;
+                    }
+                    else
+                    {
+                        selectionMinX = marqueeMinX;
+                        selectionMaxX = marqueeMaxX;
+                    }
+
+                    MarkDirty();
+                    return;
+                }
+
                 var result = keepLast ? new HashSet<int>(captureSelectedEnvelopeIndices) : new HashSet<int>();
 
                 var min = Math.Max(marqueeMinX, 0);
@@ -6499,6 +6539,7 @@ namespace FamiStudio
                     result.Add(i);
 
                 selectedEnvelopeIndices.Clear();
+                selectedEnvelopeRepeatIndices.Clear();
 
                 if (result.Count > 0)
                 {
@@ -6511,6 +6552,14 @@ namespace FamiStudio
 
                         selectionMinX = Math.Min(selectionMinX, idx);
                         selectionMaxX = Math.Max(selectionMaxX, idx);
+                    }
+
+                    if (HasRepeatEnvelope())
+                    {
+                        var chunkLen = EditEnvelope.ChunkLength;
+
+                        foreach (var idx in result)
+                            selectedEnvelopeRepeatIndices.Add(idx / chunkLen);
                     }
                 }
                 else

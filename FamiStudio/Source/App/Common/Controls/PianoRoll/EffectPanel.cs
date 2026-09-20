@@ -238,10 +238,19 @@ namespace FamiStudio
             if (panelMode == PanelMode.Wave && pianoRoll.HandleMouseDownDPCMVolumeEnvelope(e))
                 return;
 
-            if (e.Left && panelMode == PanelMode.Notes && pianoRoll.HasRepeatEnvelope() && pianoRoll.IsPointInEffectPanel(e.X, e.Y))
+            if (panelMode == PanelMode.Notes && pianoRoll.HasRepeatEnvelope() && pianoRoll.IsPointInEffectPanel(e.X, e.Y))
             {
-                pianoRoll.StartChangeEnvelopeRepeatValue(e.X, e.Y);
-                return;
+                if (e.Left)
+                {
+                    pianoRoll.StartChangeEnvelopeRepeatValue(e.X, e.Y);
+                    return;
+                }
+
+                if (e.Right)
+                {
+                    e.DelayRightClick(); // Wait to see if its a selection drag.
+                    return;
+                }
             }
 
             var isChannelEffects = panelMode == PanelMode.Notes && !pianoRoll.HasRepeatEnvelope();
@@ -296,6 +305,12 @@ namespace FamiStudio
         protected override void OnPointerDownDelayed(PointerEventArgs e)
         {
             base.OnPointerDownDelayed(e);
+
+            if (e.Right && panelMode == PanelMode.Notes && pianoRoll.HasRepeatEnvelope() && pianoRoll.IsPointInEffectPanel(e.X, e.Y))
+            {
+                pianoRoll.StartSelection(e.X, e.Y);
+                return;
+            }
 
             if (e.Right && panelMode == PanelMode.Notes && !pianoRoll.HasRepeatEnvelope() &&
                 pianoRoll.SelectedEffectIdx >= 0 && pianoRoll.IsPointInEffectPanel(e.X, e.Y) &&
@@ -661,12 +676,7 @@ namespace FamiStudio
             var rep = pianoRoll.EditRepeatEnvelope;
             var editInstrument = pianoRoll.EditInstrument;
 
-            if (pianoRoll.IsSelectionValid())
-            {
-                c.FillRectangle(
-                    pianoRoll.GetPixelXForAbsoluteNoteIndex(pianoRoll.SelectionMinX + 0) + 1, 0,
-                    pianoRoll.GetPixelXForAbsoluteNoteIndex(pianoRoll.SelectionMaxX + 1), Height, pianoRoll.IsActiveControl ? pianoRoll.SelectionBgVisibleColor : pianoRoll.SelectionBgInvisibleColor);
-            }
+            pianoRoll.DrawSelectionRect(c, effectPanelSizeY, true);
 
             var highlightIndex = -1;
 

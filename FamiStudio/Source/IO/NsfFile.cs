@@ -597,6 +597,7 @@ namespace FamiStudio
             {
                 if (inst.IsFds)
                 {
+                    inst.FdsFullVolume = true;
                     if (inst.FdsMasterVolume == masterVolume &&
                         wavEnv.SequenceEqual(inst.Envelopes[EnvelopeType.FdsWaveform].Values.Take(64)) &&
                         modEnv.SequenceEqual(inst.Envelopes[EnvelopeType.FdsModulation].Values.Take(32)))

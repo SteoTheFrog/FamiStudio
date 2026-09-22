@@ -836,8 +836,8 @@ namespace FamiStudio
         {
             switch (fx)
             {
-                case EffectVolume         : return channel.IsFdsChannel ? FdsVolumeMax : ChannelType.IsVrc6SawChannel(channel.Type) ? Vrc6SawVolumeMax : VolumeMax;
-                case EffectVolumeSlide    : return channel.IsFdsChannel ? FdsVolumeMax : ChannelType.IsVrc6SawChannel(channel.Type) ? Vrc6SawVolumeMax : VolumeMax;
+                case EffectVolume         : return channel.IsFdsChannel ? (instrument != null && !instrument.FdsFullVolume ? VolumeMax : FdsVolumeMax) : ChannelType.IsVrc6SawChannel(channel.Type) ? Vrc6SawVolumeMax : VolumeMax;
+                case EffectVolumeSlide    : return channel.IsFdsChannel ? (instrument != null && !instrument.FdsFullVolume ? VolumeMax : FdsVolumeMax) : ChannelType.IsVrc6SawChannel(channel.Type) ? Vrc6SawVolumeMax : VolumeMax;
                 case EffectVibratoDepth   : return VibratoDepthMax;
                 case EffectVibratoSpeed   : return VibratoSpeedMax;
                 case EffectFinePitch      : return FinePitchMax;
@@ -867,7 +867,7 @@ namespace FamiStudio
         {
             switch (fx)
             {
-                case EffectVolume : return channel.IsFdsChannel ? FdsVolumeMax : ChannelType.IsVrc6SawChannel(channel.Type) ? Vrc6SawVolumeMax : VolumeMax;
+                case EffectVolume : return channel.IsFdsChannel ? (instrument != null && !instrument.FdsFullVolume ? VolumeMax : FdsVolumeMax) : ChannelType.IsVrc6SawChannel(channel.Type) ? Vrc6SawVolumeMax : VolumeMax;
                 case EffectSpeed  : return song.FamitrackerSpeed;
             }
 

@@ -642,7 +642,7 @@ namespace FamiStudio
             if (type == EnvelopeType.Volume)
             {
                 min = 0;
-                max = instrument.IsFds ? Note.FdsVolumeMax : instrument.IsVrc6 && instrument.Vrc6SawFullVolume ? Note.Vrc6SawVolumeMax : Note.VolumeMax;
+                max = instrument.IsFds && instrument.FdsFullVolume ? Note.FdsVolumeMax : instrument.IsVrc6 && instrument.Vrc6SawFullVolume ? Note.Vrc6SawVolumeMax : Note.VolumeMax;
             }
             else if (type == EnvelopeType.N163Waveform)
             {

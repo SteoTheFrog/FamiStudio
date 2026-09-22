@@ -994,7 +994,7 @@ famistudio_mmc5_pulse2_prev:      .ds 1
 .endif
 
 .if FAMISTUDIO_EXP_FDS
-famistudio_fds_master_volume:     .ds 1 ; Bit 7 = hold wave and last volume rather than writing 0.
+famistudio_fds_master_volume:     .ds 1 ; Bit 7 = hold volume, bit 6 = full range volume.
 famistudio_fds_mod_envelope:      .ds 2
 famistudio_fds_mod_speed:         .ds 2
 famistudio_fds_mod_depth:         .ds 1
@@ -2474,7 +2474,7 @@ famistudio_update_fds_channel_sound:
     lda #0x80
     sta FAMISTUDIO_FDS_MOD_HI
     sta FAMISTUDIO_FDS_SWEEP_ENV
-    lda famistudio_fds_master_volume ; Bit 7 here means we will hold the wave and volume. This can reduce popping in some cases.
+    lda famistudio_fds_master_volume
     bpl .skip_hold
     sta FAMISTUDIO_FDS_VOL
     rts
@@ -2566,38 +2566,54 @@ famistudio_update_fds_channel_sound:
 .compute_volume:
     .if FAMISTUDIO_USE_VOLUME_TRACK
 
-        ; A = volume envelope: FDS DAC is 6-bit, but clamped to 32.
-        lda famistudio_env_value+FAMISTUDIO_FDS_CH0_ENVS+FAMISTUDIO_ENV_VOLUME_OFF
-        sta *.pitch+0
-        lda #0
-        sta *.pitch+1
+        bit famistudio_fds_master_volume ; V = bit 6 (full range flag).
+        bvc .compute_volume_4bit
 
-        ; FDS volume track: 0..32
-        lda famistudio_chn_volume_track+FAMISTUDIO_FDS_CH0_IDX
-        sta *.mul
+        .compute_volume_full:
+            ; A = volume envelope: FDS DAC is 6-bit, but clamped to 32.
+            lda famistudio_env_value+FAMISTUDIO_FDS_CH0_ENVS+FAMISTUDIO_ENV_VOLUME_OFF
+            sta *.pitch+0
+            lda #0
+            sta *.pitch+1
 
-        ; 16-bit result = envelope * track
-        jsr famistudio_mul
-        stx *.pitch+0
-        sty *.pitch+1
+            ; FDS volume track: 0..32
+            lda famistudio_chn_volume_track+FAMISTUDIO_FDS_CH0_IDX
+            sta *.mul
 
-        ; Shift right 5 times (divide by 32).
-        lsr *.pitch+1
-        ror *.pitch+0
-        lsr *.pitch+1
-        ror *.pitch+0
-        lsr *.pitch+1
-        ror *.pitch+0
-        lsr *.pitch+1
-        ror *.pitch+0
-        lsr *.pitch+1
-        ror *.pitch+0
+            ; 16-bit result = envelope * track
+            jsr famistudio_mul
+            stx *.pitch+0
+            sty *.pitch+1
 
-        lda *.pitch+0
+            ; Shift right 5 times (divide by 32).
+            lsr *.pitch+1
+            ror *.pitch+0
+            lsr *.pitch+1
+            ror *.pitch+0
+            lsr *.pitch+1
+            ror *.pitch+0
+            lsr *.pitch+1
+            ror *.pitch+0
+            lsr *.pitch+1
+            ror *.pitch+0
+
+            lda *.pitch+0
+            jmp .set_volume
+
+        .compute_volume_4bit:
+            lda famistudio_chn_volume_track+FAMISTUDIO_FDS_CH0_IDX
+            and #0xf0
+            ora famistudio_env_value+FAMISTUDIO_FDS_CH0_ENVS+FAMISTUDIO_ENV_VOLUME_OFF
+            tax
+            lda famistudio_volume_table,x
+            asl
 
     .else
 
         lda famistudio_env_value+FAMISTUDIO_FDS_CH0_ENVS+FAMISTUDIO_ENV_VOLUME_OFF
+        bit famistudio_fds_master_volume ; V = bit 6 (full range flag).
+        bvs .set_volume
+        asl
 
     .endif
 
@@ -5576,10 +5592,8 @@ famistudio_set_epsm_instrument:
 famistudio_update_fds_wave:
     .local .ptr
     .local .wave_ptr
-    .local .tmp_enable
     .ptr        = famistudio_ptr1
     .wave_ptr   = famistudio_ptr0
-    .tmp_enable = famistudio_r3
 
     ; See if the wave index has changed.
     lda famistudio_env_value+FAMISTUDIO_FDS_CH0_ENVS+FAMISTUDIO_ENV_FDS_WAVE_IDX_OFF
@@ -5598,10 +5612,10 @@ famistudio_update_fds_wave:
     lda [*.ptr],y
     and #3 ; Bits 0 and 1 are master volume
     tax    ; Store master volume to x
-    ora #0x80 
-    sta *.tmp_enable ; Store maaster volume with write enable
+    ora #0x80
+    sta .patch_enable+1 ; Self-modify the immediate operand below. Saves a cycle each iteration (~32 cycles).
     iny
-    
+
     ; Load the wave table pointer.
     lda [*.ptr],y
     sta *.wave_ptr+0
@@ -5622,7 +5636,8 @@ famistudio_update_fds_wave:
     ; FDS Waveform (toggle write each iteration for smooth transitions)
     ldy #63
     .wave_loop:
-        lda *.tmp_enable
+        .patch_enable:
+            lda #0x00 ; Operand patched above every time the wave changes.
         sta FAMISTUDIO_FDS_VOL ; Enable RAM write.
         lda [*.ptr],y
         sta FAMISTUDIO_FDS_WAV_START,y  ; Write 2 samples between each write toggle (saves ~500 CPU cycles, sounds identical)
@@ -5632,7 +5647,7 @@ famistudio_update_fds_wave:
         stx FAMISTUDIO_FDS_VOL ; Disable RAM write.
         dey
         bpl .wave_loop
-        
+
     .famistudio_update_fds_wave_done:
     rts
     
@@ -5725,17 +5740,27 @@ famistudio_set_fds_instrument:
 
     .famistudio_set_fds_instrument_load_mod_param:
         iny
+        lda [*.ptr],y
+
+        tax ; Preserve byte in X (bits 0-4 reused below as automod numer-1 or manual mod speed lo-nibble). Bit 7 = automod, bit 6 = hold volume, bit 5 = full range volume.
+        asl ; Shift left for correct flags in volume. Bit 7 (automod) ends up in carry.
+        and #0xc0
+        ora famistudio_fds_master_volume
+        sta famistudio_fds_master_volume
+
         .if FAMISTUDIO_USE_FDS_AUTOMOD
-            lda [*.ptr],y
-            bpl .famistudio_set_fds_instrument_check_mod_speed ; Skip auto mod if bit 7 is clear
+            bcc .famistudio_set_fds_instrument_check_mod_speed
 
             .famistudio_set_fds_instrument_auto_mod:
-                and #0x7f ; Clear bit 7 before setting
+                txa
+                and #0x1f
+                clc
+                adc #1 ; We save a bit for the above flags and add 1 (range is 1-32).
                 sta famistudio_fds_automod_numer
                 iny
                 lda [*.ptr],y
                 sta famistudio_fds_automod_denom
-                bne .famistudio_set_fds_instrument_check_mod_depth
+                bne .famistudio_set_fds_instrument_load_mod_delay
         .endif
 
         .famistudio_set_fds_instrument_check_mod_speed:
@@ -5743,15 +5768,6 @@ famistudio_set_fds_instrument:
                 lda #0
                 sta famistudio_fds_automod_numer
             .endif
-            lda [*.ptr],y ; Extract bit 6 to test for volume hold.
-            tax
-            and #0x40
-            beq .famistudio_set_fds_instrument_check_speed_override
-
-            .famistudio_set_fds_instrument_set_hold:
-                lda famistudio_fds_master_volume
-                ora #0x80
-                sta famistudio_fds_master_volume
 
             .famistudio_set_fds_instrument_check_speed_override:
                 bit famistudio_fds_override_flags
@@ -5764,27 +5780,33 @@ famistudio_set_fds_instrument:
                 iny
                 lda [*.ptr],y
                 sta famistudio_fds_mod_speed+1
-                jmp .famistudio_set_fds_instrument_check_mod_depth
+                jmp .famistudio_set_fds_instrument_load_mod_delay
 
             .famistudio_set_fds_instrument_mod_speed_overriden:
                 iny
+
+        .famistudio_set_fds_instrument_load_mod_delay:
+            iny
+            lda [*.ptr],y
+            sta famistudio_fds_mod_delay
 
         .famistudio_set_fds_instrument_check_mod_depth:
             bit famistudio_fds_override_flags
             bvs .famistudio_set_fds_instrument_mod_depth_overriden
 
             .famistudio_set_fds_instrument_load_mod_depth:
-                tya ; Use depth that was stored earlier
-                tax
-                lda *.tmp_mod_depth 
+                lda *.tmp_mod_depth
                 sta famistudio_fds_mod_depth
-                txa
-                tay
 
             .famistudio_set_fds_instrument_mod_depth_overriden:
-                iny
-                lda [*.ptr],y
-                sta famistudio_fds_mod_delay
+            .if FAMISTUDIO_USE_VOLUME_TRACK
+                lda #32
+                bit famistudio_fds_master_volume ; Check if we are using full range volume.
+                bvs .famistudio_set_fds_instrument_write_volume_track
+                lda #0xf0
+                .famistudio_set_fds_instrument_write_volume_track:
+                sta famistudio_chn_volume_track+FAMISTUDIO_FDS_CH0_IDX
+            .endif
     rts
 
 .endif
@@ -6007,7 +6029,7 @@ famistudio_advance_channel:
 ;   0x7x
 ;   volume = x << 4
 ;
-; FDS, or VRC6 saw when the active instrument uses 64-step (6-bit) volume:
+; FDS, or VRC6 saw when the active instrument uses 32 / 64-step (6-bit) volume:
 ;   0x7x + 0xyy
 ;   volume = ((x & 0x0f) << 2) | (0xyy & 0x03)
 ;
@@ -6021,17 +6043,20 @@ famistudio_advance_channel:
 
     .if FAMISTUDIO_EXP_FDS
 
-    ; FDS uses 6-bit volume.
+    ; FDS uses 6-bit volume when the active instrument is 32-step.
     lda *.chan_idx
     cmp #FAMISTUDIO_FDS_CH0_IDX
-    beq .volume_track_6bit
+    bne .volume_track_not_fds
+    bit famistudio_fds_master_volume
+    bvs .volume_track_6bit
+
+    .volume_track_not_fds:
 
     .endif
 
     .if FAMISTUDIO_EXP_VRC6 & FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME
 
-    ; VRC6 saw also uses 6-bit volume when the active instrument is 64-step (runtime check,
-    ; since unlike FDS this isn't fixed per channel -- see famistudio_vrc6_saw_full_volume).
+    ; VRC6 saw uses 6-bit volume when the active instrument is 64-step.
     lda *.chan_idx
     cmp #FAMISTUDIO_VRC6_CH2_IDX
     bne .volume_track_4bit

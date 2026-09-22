@@ -133,6 +133,7 @@ namespace FamiStudio
                             instrumentLine += GenerateAttribute("FdsAutoModDenom", instrument.FdsAutoModDenom);
                             instrumentLine += GenerateAttribute("FdsAutoModNumer", instrument.FdsAutoModNumer);
                         }
+                        if (instrument.FdsFullVolume) instrumentLine += GenerateAttribute("FdsFullVolume", instrument.FdsFullVolume);
                         if (instrument.FdsHoldVolume) instrumentLine += GenerateAttribute("FdsHoldVolume", instrument.FdsHoldVolume);
                         if (instrument.FdsFixDac)     instrumentLine += GenerateAttribute("FdsFixDac",     instrument.FdsFixDac);
                     }
@@ -533,6 +534,7 @@ namespace FamiStudio
                                     if (parameters.TryGetValue("FdsAutoModNumer", out var fdsAutoModNumerStr)) instrument.FdsAutoModNumer = byte.Parse(fdsAutoModNumerStr);
                                 }
                                 if (parameters.TryGetValue("FdsWaveCount",  out var wavCountStr))      instrument.FdsWaveCount  = byte.Parse(wavCountStr);
+                                if (parameters.TryGetValue("FdsFullVolume", out var fdsFullVolumeStr)) instrument.FdsFullVolume = bool.Parse(fdsFullVolumeStr);
                                 if (parameters.TryGetValue("FdsHoldVolume", out var fdsHoldVolumeStr)) instrument.FdsHoldVolume = bool.Parse(fdsHoldVolumeStr);
                                 if (parameters.TryGetValue("FdsFixDac",     out var FdsFixDacStr))     instrument.FdsFixDac     = bool.Parse(FdsFixDacStr);
                             }

@@ -816,7 +816,7 @@ namespace FamiStudio
             if (editMode == EditionMode.Envelope && editInstrument != null)
             {
                 envelopeValueZoom =
-                    (editEnvelope == EnvelopeType.Volume && !editInstrument.IsFds && !(editInstrument.IsVrc6 && editInstrument.Vrc6SawFullVolume)) ||
+                    (editEnvelope == EnvelopeType.Volume && !(editInstrument.IsFds && editInstrument.FdsFullVolume) && !(editInstrument.IsVrc6 && editInstrument.Vrc6SawFullVolume)) ||
                     editEnvelope == EnvelopeType.DutyCycle ||
                     editEnvelope == EnvelopeType.N163Waveform ? 2 : 1;
             }

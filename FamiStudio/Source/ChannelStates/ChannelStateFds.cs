@@ -86,12 +86,12 @@ namespace FamiStudio
 
                         // Toggle write every 2 iterations. ASM does this for smooth cycling between
                         // waveforms. We write twice between write toggling and iterate half the times 
-                        // to save CPU cycles. 38 skipped cycles to mimic ASM loop (37 if BPL exits loop).
-                        SkipCycles(3); // Read volume.
+                        // to save CPU cycles. 37 skipped cycles to mimic ASM loop (36 if BPL exits loop).
+                        SkipCycles(2); // Read volume.
                         WriteRegister(NesApu.FDS_VOL, 0x80 | masterVolume, 4);
                         WriteRegister(NesApu.FDS_WAV_START + i,     s0 & 0xff, 12); // +7 for LDA and DEY
                         WriteRegister(NesApu.FDS_WAV_START + i - 1, s1 & 0xff, 10); // +5 for LDA
-                        WriteRegister(NesApu.FDS_VOL, masterVolume, i > 1 ? 9 : 8);      // +5 for DEY and BPL (4 on BPL exit)
+                        WriteRegister(NesApu.FDS_VOL, masterVolume, i > 1 ? 9 : 8); // +5 for DEY and BPL (4 on BPL exit)
                     }
 
                     waveIndex = newWaveIndex;
@@ -152,13 +152,14 @@ namespace FamiStudio
                 var period = GetPeriod();
                 var volume = GetVolume();
                 var instrument = note.Instrument;
+                var shift = instrument != null && instrument.FdsFullVolume ? 0 : 1;
 
                 var periodHi = (period >> 8) & 0x0f;
                 prevPeriodHi = periodHi;
 
                 WriteRegister(NesApu.FDS_FREQ_HI, periodHi);
                 WriteRegister(NesApu.FDS_FREQ_LO, (period >> 0) & 0xff);
-                WriteRegister(NesApu.FDS_VOL_ENV, 0x80 | volume);
+                WriteRegister(NesApu.FDS_VOL_ENV, 0x80 | (volume << shift));
                 WriteRegister(NesApu.FDS_VOL, masterVolume); // Ensure we clear this if the last volume was held.
 
                 if (noteTriggered)

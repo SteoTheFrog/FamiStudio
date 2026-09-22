@@ -112,6 +112,7 @@ namespace FamiStudio
         private bool usesReleaseNotes = false;
         private bool usesPhaseReset = false;
         private bool usesFdsAutoMod = false;
+        private bool usesFdsFullVolume = false;
         private bool usesVrc6SawFullVolume = false;
         static readonly int[] epsmRegOrder = new[] { 0, 1, 2, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 25, 26, 27, 28, 29, 3, 10, 17, 24, 30 };
         static readonly byte[] fdsDacLevelMapping = 
@@ -150,7 +151,7 @@ namespace FamiStudio
                     env = new Envelope(EnvelopeType.Volume);
                     instrument.Envelopes[EnvelopeType.Volume] = env;
                 }
-                var volumeMax = (sbyte)(instrument.IsFds ? Note.FdsVolumeMax : instrument.IsVrc6 && instrument.Vrc6SawFullVolume ? Note.Vrc6SawVolumeMax : Note.VolumeMax);
+                var volumeMax = (sbyte)(instrument.IsFds && instrument.FdsFullVolume ? Note.FdsVolumeMax : instrument.IsVrc6 && instrument.Vrc6SawFullVolume ? Note.Vrc6SawVolumeMax : Note.VolumeMax);
 
                 if (env.Length == 0 || env.AllValuesEqual(volumeMax))
                 {
@@ -723,20 +724,26 @@ namespace FamiStudio
                             lines.Add($"\t{dw} {llp}fds_inst{instrumentCountExp}_waves");
                             lines.Add($"\t{dw} {llp}env{fdsModEnvIdx}");
 
+                            var flags = 0x00;
+                            if (instrument.FdsAutoMod)    flags |= 0x80; // Bit 7: Automod.
+                            if (instrument.FdsHoldVolume) flags |= 0x40; // Bit 6: Hold volume.
+                            if (instrument.FdsFullVolume) flags |= 0x20; // Bit 5: Full range volume.
+
                             if (instrument.FdsAutoMod)
                             {
                                 var numer = (int)instrument.FdsAutoModNumer;
                                 var denom = (int)instrument.FdsAutoModDenom;
                                 Utils.SimplifyFraction(ref numer, ref denom); // 2/4 is same as 1/2
                                 
-                                // Set bit 7 of numer for automod enabled, and bit 6 for hold volume.
-                                lines.Add($"\t{db} {(instrument.FdsHoldVolume ? 0xC0 : 0x80) | numer}, {denom}");
+                                // Subtract one from numer to save a bit for full volume range.
+                                // It will be added back in asm (0-31 becomes 1-32).
+                                // We don't need to save in denom, speed uses the byte regardless.
+                                lines.Add($"\t{db} {flags | (numer - 1)}, {denom}");
                                 usesFdsAutoMod = true;
                             }
                             else
                             {
-                                // Bit 7 of the first byte will be clear here (no automod). Bit 6 will be set if hold volume is enabled.
-                                lines.Add($"\t{dw} {(instrument.FdsHoldVolume ? 0x40 : 0x00) | instrument.FdsModSpeed}");
+                                lines.Add($"\t{db} {flags | (instrument.FdsModSpeed & 0x0f)}, {(instrument.FdsModSpeed >> 4) & 0xff}");
                             }
 
                             lines.Add($"\t{db} {instrument.FdsModDelay}");
@@ -1302,7 +1309,7 @@ namespace FamiStudio
                         }
 
                         // Change VRC6 saw volume/full-volume-mode.
-                        if (channel.IsVrc6SawChannel && note.Instrument != null && !channel.IsDpcmChannel &&
+                        if (channel.IsVrc6SawChannel && note.Instrument != null &&
                             (sawVolume != note.Instrument.Vrc6SawMasterVolume || sawFullVolume != note.Instrument.Vrc6SawFullVolume))
                         {
                             sawVolume     = note.Instrument.Vrc6SawMasterVolume;
@@ -1333,59 +1340,6 @@ namespace FamiStudio
                             else
                             {
                                 channelData.Add($"{hexp}{(byte)(OpcodeVolumeBits | (resyncVolume >> 2)):x2}+");
-                            }
-                        }
-
-                        if (note.HasVolume)
-                        {
-                            var isVrc6SawFull = channel.IsVrc6SawChannel && sawFullVolume;
-
-                            if (note.Volume != lastVolume)
-                            {
-                                if (channel.IsFdsChannel || isVrc6SawFull)
-                                {
-                                    channelData.Add($"{hexp}{(byte)(OpcodeVolumeBits | (note.Volume >> 2)):x2}+");
-                                    channelData.Add($"{hexp}{(byte)(note.Volume & 0x03):x2}");
-                                }
-                                else
-                                {
-                                    var vol = channel.IsVrc6SawChannel ? note.Volume >> 2 : note.Volume;
-                                    channelData.Add($"{hexp}{(byte)(OpcodeVolumeBits | vol):x2}+");
-                                }
-
-                                lastVolume = note.Volume;
-                            }
-
-                            usesVolumeTrack = true;
-
-                            if (note.HasVolumeSlide)
-                            {
-                                // We keep the FDS/VRC6-saw-64-step fraction in its own byte in the sound engine since it's 6-bit.
-                                var fractionBits = (channel.IsFdsChannel || isVrc6SawFull) ? 8 : 4;
-
-                                // VRC6 saw packs a truncated 0-15 value into the track byte if not using 64-step mode.
-                                var volumeShift = channel.IsVrc6SawChannel && !isVrc6SawFull ? 2 : 0;
-
-                                channel.ComputeVolumeSlideNoteParams(note, location, currentSpeed, false, out var stepSizeNtsc, out var _, fractionBits, volumeShift);
-                                channel.ComputeVolumeSlideNoteParams(note, location, currentSpeed, false, out var stepSizePal, out var _, fractionBits, volumeShift);
-
-                                if (machine == MachineType.NTSC)
-                                    stepSizePal = stepSizeNtsc;
-                                else if (machine == MachineType.PAL)
-                                    stepSizeNtsc = stepSizePal;
-
-                                var stepSize = Math.Max(Math.Abs(stepSizeNtsc), Math.Abs(stepSizePal)) * Math.Sign(stepSizeNtsc);
-                                channelData.Add($"{hexp}{OpcodeVolumeSlide:x2}+");
-                                channelData.Add($"{hexp}{(byte)stepSize:x2}");
-
-                                var slideTargetByte =
-                                    channel.IsFdsChannel || isVrc6SawFull ? note.VolumeSlideTarget :
-                                    channel.IsVrc6SawChannel ? (note.VolumeSlideTarget >> 2) << 4 :
-                                    note.VolumeSlideTarget << 4;
-                                channelData.Add($"{hexp}{(byte)slideTargetByte:x2}");
-
-                                lastVolume = note.VolumeSlideTarget;
-                                usesVolumeSlide = true;
                             }
                         }
 
@@ -1579,6 +1533,57 @@ namespace FamiStudio
                                     }
 
                                     instrument = note.Instrument;
+                                }
+                            }
+
+                            if (note.HasVolume)
+                            {
+                                var isVrc6SawFull = channel.IsVrc6SawChannel && sawFullVolume;
+                                var isFdsFull     = channel.IsFdsChannel && note.Instrument != null && note.Instrument.FdsFullVolume;
+
+                                if (note.Volume != lastVolume)
+                                {
+                                    if (isFdsFull || isVrc6SawFull)
+                                    {
+                                        channelData.Add($"{hexp}{(byte)(OpcodeVolumeBits | (note.Volume >> 2)):x2}+");
+                                        channelData.Add($"{hexp}{(byte)(note.Volume & 0x03):x2}");
+                                    }
+                                    else
+                                    {
+                                        var vol = channel.IsVrc6SawChannel ? note.Volume >> 2 : note.Volume;
+                                        channelData.Add($"{hexp}{(byte)(OpcodeVolumeBits | vol):x2}+");
+                                    }
+
+                                    lastVolume = note.Volume;
+                                }
+
+                                usesVolumeTrack = true;
+
+                                if (note.HasVolumeSlide)
+                                {
+                                    var fractionBits = (isFdsFull || isVrc6SawFull) ? 8 : 4;
+                                    var volumeShift  = channel.IsVrc6SawChannel && !isVrc6SawFull ? 2 : 0;
+
+                                    channel.ComputeVolumeSlideNoteParams(note, location, currentSpeed, false, out var stepSizeNtsc, out var _, fractionBits, volumeShift);
+                                    channel.ComputeVolumeSlideNoteParams(note, location, currentSpeed, false, out var stepSizePal, out var _, fractionBits, volumeShift);
+
+                                    if (machine == MachineType.NTSC)
+                                        stepSizePal = stepSizeNtsc;
+                                    else if (machine == MachineType.PAL)
+                                        stepSizeNtsc = stepSizePal;
+
+                                    var stepSize = Math.Max(Math.Abs(stepSizeNtsc), Math.Abs(stepSizePal)) * Math.Sign(stepSizeNtsc);
+                                    channelData.Add($"{hexp}{OpcodeVolumeSlide:x2}+");
+                                    channelData.Add($"{hexp}{(byte)stepSize:x2}");
+
+                                    var slideTargetByte =
+                                        isFdsFull || isVrc6SawFull ? note.VolumeSlideTarget :
+                                        channel.IsVrc6SawChannel ? (note.VolumeSlideTarget >> 2) << 4 :
+                                        note.VolumeSlideTarget << 4;
+                                    channelData.Add($"{hexp}{(byte)slideTargetByte:x2}");
+
+                                    lastVolume = note.VolumeSlideTarget;
+                                    usesVolumeSlide = true;
                                 }
                             }
 

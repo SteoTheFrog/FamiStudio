@@ -25,6 +25,7 @@ namespace FamiStudio
         private byte    fdsModDelay;
         private byte    fdsWaveCount = 1;
         private bool    fdsAutoMod;
+        private bool    fdsFullVolume = true;
         private bool    fdsHoldVolume;
         private bool    fdsFixDac;
         private byte    fdsAutoModDenom = 1;
@@ -194,7 +195,7 @@ namespace FamiStudio
 
         public bool IsEnvelopeEmpty(int envelopeType)
         {
-            return envelopes[envelopeType].IsEmpty(envelopeType, IsFds);
+            return envelopes[envelopeType].IsEmpty(envelopeType, IsFds && fdsFullVolume, IsVrc6 && vrc6SawFullVolume);
         }
 
         public static bool EnvelopeHasRepeat(int envelopeType)
@@ -388,14 +389,84 @@ namespace FamiStudio
             get { return vrc6SawFullVolume; }
             set
             {
-                if (value != vrc6SawFullVolume && IsEnvelopeEmpty(EnvelopeType.Volume))
+                var mult = vrc6SawMasterVolume == Vrc6SawMasterVolumeType.Full ? 4 : vrc6SawMasterVolume == Vrc6SawMasterVolumeType.Half ? 2 : 1;
+                if (value != vrc6SawFullVolume)
                 {
                     var env = VolumeEnvelope;
-                    for (int i = 0; i < env.Length; i++)
-                        env.Values[i] = (sbyte)(value ? Note.Vrc6SawVolumeMax : Note.VolumeMax);
-                }
+                    if (Vrc6SawMasterVolume == Vrc6SawMasterVolumeType.Full && IsEnvelopeEmpty(EnvelopeType.Volume))
+                    {
+                        for (var i = 0; i < env.Values.Length; i++)
+                            env.Values[i] = (sbyte)(value ? Note.Vrc6SawVolumeMax : Note.VolumeMax);
+                    }
+                    else if (Vrc6SawMasterVolume != Vrc6SawMasterVolumeType.Quarter)
+                    {
+                        for (var i = 0; i < env.Values.Length; i++)
+                            env.Values[i] = (sbyte)(int)Math.Round(env.Values[i] * (value ? mult : 1.0f / mult));
+                    }
 
-                vrc6SawFullVolume = value;
+                    vrc6SawFullVolume = value;
+                }
+            }
+        }
+
+        public bool FdsFullVolume
+        {
+            get { return fdsFullVolume; }
+            set
+            {
+                if (value != fdsFullVolume)
+                {
+                    var env = VolumeEnvelope;
+                    if (IsEnvelopeEmpty(EnvelopeType.Volume))
+                    {
+                        for (var i = 0; i < env.Values.Length; i++)
+                            env.Values[i] = (sbyte)(value ? Note.FdsVolumeMax : Note.VolumeMax);
+                    }
+                    else
+                    {
+                        for (var i = 0; i < env.Values.Length; i++)
+                            env.Values[i] = (sbyte)(int)Math.Round(env.Values[i] * (value ? 2 : 0.5f));
+                    }
+
+                    fdsFullVolume = value;
+                    RescaleVolumeTrackEffects(value ? 2.0f : 0.5f);
+                }
+            }
+        }
+
+        private void RescaleVolumeTrackEffects(float mult)
+        {
+            if (project == null)
+                return;
+
+            foreach (var song in project.Songs)
+            {
+                foreach (var channel in song.Channels)
+                {
+                    if (!channel.IsFdsChannel)
+                        continue;
+
+                    foreach (var pattern in channel.Patterns)
+                    {
+                        foreach (var kv in pattern.Notes)
+                        {
+                            var note = kv.Value;
+                            if (note == null || note.Instrument != this)
+                                continue;
+
+                            foreach (var i in new[] { Note.EffectVolume, Note.EffectVolumeSlide })
+                            {
+                                if (note.HasValidEffectValue(i))
+                                {
+                                    var val = (int)Math.Round(note.GetEffectValue(i) * mult);
+                                    var min = Note.GetEffectMinValue(song, channel, i);
+                                    var max = Note.GetEffectMaxValue(song, channel, i, this);
+                                    note.SetEffectValue(i, Utils.Clamp(val, min, max));
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -970,6 +1041,7 @@ namespace FamiStudio
                             // At version 20 (FamiStudio 4.6.0), we added volume holding and a DAC workaround for FDS.
                             if (buffer.Version >= 20)
                             {
+                                buffer.Serialize(ref fdsFullVolume);
                                 buffer.Serialize(ref fdsHoldVolume);
                                 buffer.Serialize(ref fdsFixDac);
                             }

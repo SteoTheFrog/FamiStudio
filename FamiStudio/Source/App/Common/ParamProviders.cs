@@ -97,6 +97,7 @@ namespace FamiStudio
 
         // FDS/N163 labels
         static LocalizedString MasterVolumeLabel;
+        static LocalizedString FullVolumeLabel;
         static LocalizedString HoldVolumeLabel;
         static LocalizedString FixDacLabel;
         static LocalizedString WavePresetLabel;
@@ -122,7 +123,7 @@ namespace FamiStudio
         static LocalizedString EnvelopeManualFreqLabel;
 
         // VRC6 labels
-        static LocalizedString UseFullVolumeLabel;
+        static LocalizedString SawFullVolumeLabel;
         static LocalizedString SawMasterVolumeLabel;
 
         // VRC7 labels
@@ -223,6 +224,8 @@ namespace FamiStudio
                 case ExpansionType.Fds:
                     paramInfos.Add(new InstrumentParamInfo(instrument, MasterVolumeLabel, 0, 3, 0, null, true)
                         { GetValue = () => { return instrument.FdsMasterVolume; }, GetValueString = () => { return FdsMasterVolumeType.Names[instrument.FdsMasterVolume]; }, SetValue = (v) => { instrument.FdsMasterVolume = (byte)v; } });
+                    paramInfos.Add(new InstrumentParamInfo(instrument, FullVolumeLabel, 0, 1, 1)
+                        { GetValue = () => { return instrument.FdsFullVolume ? 1 : 0; }, SetValue = (v) => { instrument.FdsFullVolume = v != 0; if (v == 0) instrument.Envelopes[EnvelopeType.Volume].ClampToValidRange(instrument, EnvelopeType.Volume); FamiStudio.StaticInstance.PianoRoll.UpdateRenderCoords(); } });
                     paramInfos.Add(new InstrumentParamInfo(instrument, HoldVolumeLabel, 0, 1, 0)
                         { GetValue = () => { return instrument.FdsHoldVolume ? 1 : 0; }, SetValue = (v) => { instrument.FdsHoldVolume = v != 0; } });
                     paramInfos.Add(new InstrumentParamInfo(instrument, FixDacLabel, 0, 1, 0)
@@ -284,7 +287,7 @@ namespace FamiStudio
                     break;
 
                 case ExpansionType.Vrc6:
-                    paramInfos.Add(new InstrumentParamInfo(instrument, UseFullVolumeLabel, 0, 1, 1)
+                    paramInfos.Add(new InstrumentParamInfo(instrument, SawFullVolumeLabel, 0, 1, 1)
                         { GetValue = () => { return instrument.Vrc6SawFullVolume ? 1 : 0; }, SetValue = (v) => { instrument.Vrc6SawFullVolume = v != 0; if (v == 0) instrument.Envelopes[EnvelopeType.Volume].ClampToValidRange(instrument, EnvelopeType.Volume); FamiStudio.StaticInstance.PianoRoll.UpdateRenderCoords(); } });
                     paramInfos.Add(new InstrumentParamInfo(instrument, SawMasterVolumeLabel, 0, 2, 0, null, true)
                         { GetValue = ()  => { return instrument.Vrc6SawMasterVolume; }, GetValueString = () => { return Vrc6SawMasterVolumeType.Names[instrument.Vrc6SawMasterVolume]; }, SetValue = (v) => { instrument.Vrc6SawMasterVolume = (byte)v; }, IsEnabled = () => !instrument.Vrc6SawFullVolume });

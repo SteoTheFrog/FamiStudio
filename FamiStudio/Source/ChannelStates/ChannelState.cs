@@ -41,12 +41,13 @@ namespace FamiStudio
         protected int volume = Note.VolumeMax << 4;
         protected int volumeSlideStep = 0;
         protected int volumeSlideTarget = 0;
+        protected int lastVolumeMax = Note.VolumeMax;
         protected byte noteValueBeforeSlide = 0;
         protected IPlayerInterface player;
 
         public int InnerChannelType => channelType;
         protected int VolumeMax =>
-            ChannelType.IsFdsChannel(channelType) ? Note.FdsVolumeMax :
+            ChannelType.IsFdsChannel(channelType)     && note.Instrument != null && note.Instrument.FdsFullVolume     ? Note.FdsVolumeMax :
             ChannelType.IsVrc6SawChannel(channelType) && note.Instrument != null && note.Instrument.Vrc6SawFullVolume ? Note.Vrc6SawVolumeMax :
             Note.VolumeMax;
 
@@ -56,6 +57,7 @@ namespace FamiStudio
             apuIdx = apu;
             channelType = type;
             volume = VolumeMax << 4;
+            lastVolumeMax = VolumeMax;
             palPlayback = pal;
             instrumentPlayer = apuIdx == NesApu.APU_INSTRUMENT; // HACK : Pass a flag for this.
             maximumPeriod = NesApu.GetPitchLimitForChannelType(channelType);
@@ -355,8 +357,7 @@ namespace FamiStudio
                     LoadInstrument(note.Instrument);
                     forceInstrumentReload = false;
 
-                    if (ChannelType.IsVrc6SawChannel(channelType))
-                        volume = VolumeMax << 4;
+                    RescaleVolumeForNewMax(VolumeMax);
                 }
             }
             else
@@ -383,6 +384,7 @@ namespace FamiStudio
             {
                 volume = GetVolumeTrackValue(note.Volume) << 4;
                 volumeSlideStep = 0;
+                lastVolumeMax = VolumeMax;
             }
 
             if (note.HasVolumeSlide)
@@ -433,11 +435,31 @@ namespace FamiStudio
 
         public void Update()
         {
+            UpdateVolumeMaxChange();
             UpdateDelayedNote();
             UpdateEnvelopes();
             UpdateSlide();
             UpdateVolumeSlide();
             UpdateAPU();
+        }
+
+        private void UpdateVolumeMaxChange()
+        {
+            RescaleVolumeForNewMax(VolumeMax);
+        }
+
+        private void RescaleVolumeForNewMax(int newVolumeMax)
+        {
+            if (newVolumeMax != lastVolumeMax)
+            {
+                if (lastVolumeMax > 0)
+                {
+                    volume = (int)Math.Round(volume * (newVolumeMax / (float)lastVolumeMax));
+                    volumeSlideTarget = (int)Math.Round(volumeSlideTarget * (newVolumeMax / (float)lastVolumeMax));
+                }
+
+                lastVolumeMax = newVolumeMax;
+            }
         }
 
         private void UpdateEnvelopes()
@@ -447,13 +469,14 @@ namespace FamiStudio
                 for (int j = 0; j < EnvelopeType.Count; j++)
                 {
                     var isVrc6SawFullVolume = ChannelType.IsVrc6SawChannel(channelType) && note.Instrument.Vrc6SawFullVolume;
+                    var isFdsFullVolume     = ChannelType.IsFdsChannel(channelType)     && note.Instrument.FdsFullVolume;
 
                     if (envelopes[j] == null ||
-                        (!instrumentPlayer && envelopes[j].IsEmpty(j, ChannelType.IsFdsChannel(channelType), isVrc6SawFullVolume)) ||
+                        (!instrumentPlayer && envelopes[j].IsEmpty(j, isFdsFullVolume, isVrc6SawFullVolume)) ||
                         ( instrumentPlayer && envelopes[j].Length == 0))
                     {
                         if (j != EnvelopeType.DutyCycle)
-                            envelopeValues[j] = Envelope.GetEnvelopeDefaultValue(j, ChannelType.IsFdsChannel(channelType), isVrc6SawFullVolume);
+                            envelopeValues[j] = Envelope.GetEnvelopeDefaultValue(j, isFdsFullVolume, isVrc6SawFullVolume);
                         continue;
                     }
 
@@ -596,6 +619,13 @@ namespace FamiStudio
                 return product == 0 ? 0 : (product >> 6) + 1;
             }
 
+            // FDS full-range volume is 0-32.
+            if (ChannelType.IsFdsChannel(channelType) && VolumeMax == Note.FdsVolumeMax)
+            {
+                var product = v0 * v1;
+                return product == 0 ? 0 : Math.Max(1, product >> 5);
+            }
+
             // For anything over 4-bit, we don't want to incorrectly mix volume tracks.
             if (v1 > VolumeMax)
                 return v0;
@@ -608,7 +638,17 @@ namespace FamiStudio
 
         private int GetVolumeTrackValue(int noteValue)
         {
-            return ChannelType.IsVrc6SawChannel(channelType) && VolumeMax == Note.VolumeMax ? noteValue >> 2 : noteValue;
+            if (VolumeMax != Note.VolumeMax)
+                return noteValue;
+
+            // VRC6 saw's raw volume-column storage always tops out at 63 (Note.GetEffectMaxValue
+            // is unconditional there), so narrow mode still needs to compress it down.
+            if (ChannelType.IsVrc6SawChannel(channelType))
+                return noteValue >> 2;
+
+            // FDS's raw storage is mode-relative (Note.GetEffectMaxValue returns 15 for narrow
+            // instruments), so noteValue is already on the correct 0-15 scale here -- no shift needed.
+            return noteValue;
         }
 
         protected virtual void LoadInstrument(Instrument instrument)

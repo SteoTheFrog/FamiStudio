@@ -585,6 +585,7 @@ namespace FamiStudio
 
             if (expansion == ExpansionType.Vrc6)
             {
+                instrument.Vrc6SawMasterVolume = Vrc6SawMasterVolumeType.Full;
                 instrument.Vrc6SawFullVolume = true;
             }
 

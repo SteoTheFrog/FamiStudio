@@ -42,6 +42,8 @@ namespace FamiStudio
         protected int volumeSlideStep = 0;
         protected int volumeSlideTarget = 0;
         protected int lastVolumeMax = Note.VolumeMax;
+        protected int volumeWide = Note.VolumeMax;
+        protected int volumeSlideTargetWide = 0;
         protected byte noteValueBeforeSlide = 0;
         protected IPlayerInterface player;
 
@@ -51,6 +53,11 @@ namespace FamiStudio
             ChannelType.IsVrc6SawChannel(channelType) && note.Instrument != null && note.Instrument.Vrc6SawFullVolume ? Note.Vrc6SawVolumeMax :
             Note.VolumeMax;
 
+        private int VolumeMaxWide =>
+            ChannelType.IsFdsChannel(channelType)     ? Note.FdsVolumeMax :
+            ChannelType.IsVrc6SawChannel(channelType) ? Note.Vrc6SawVolumeMax :
+            Note.VolumeMax;
+
         public ChannelState(IPlayerInterface play, int apu, int type, int tuning, bool pal = false, int numN163Channels = 1)
         {
             player = play;
@@ -58,6 +65,7 @@ namespace FamiStudio
             channelType = type;
             volume = VolumeMax << 4;
             lastVolumeMax = VolumeMax;
+            volumeWide = VolumeMaxWide;
             palPlayback = pal;
             instrumentPlayer = apuIdx == NesApu.APU_INSTRUMENT; // HACK : Pass a flag for this.
             maximumPeriod = NesApu.GetPitchLimitForChannelType(channelType);
@@ -193,7 +201,10 @@ namespace FamiStudio
                 if (newNote.HasVolumeSlide)
                 {
                     var slideInstrument = newNote.Instrument ?? note.Instrument;
-                    var volumeShift = ChannelType.IsVrc6SawChannel(channelType) && (slideInstrument == null || !slideInstrument.Vrc6SawFullVolume) ? 2 : 0;
+                    var volumeShift =
+                        ChannelType.IsVrc6SawChannel(channelType) && (slideInstrument == null || !slideInstrument.Vrc6SawFullVolume) ? 2 :
+                        ChannelType.IsFdsChannel(channelType)     && (slideInstrument == null || !slideInstrument.FdsFullVolume)     ? 1 :
+                        0;
                     channel.ComputeVolumeSlideNoteParams(newNote, location, famitrackerSpeed, palPlayback, out volumeSlideStep, out _, 4, volumeShift, short.MaxValue);
                 }
 
@@ -382,14 +393,16 @@ namespace FamiStudio
 
             if (note.HasVolume)
             {
-                volume = GetVolumeTrackValue(note.Volume) << 4;
+                volumeWide = note.Volume;
+                volume = GetVolumeTrackValue(volumeWide) << 4;
                 volumeSlideStep = 0;
                 lastVolumeMax = VolumeMax;
             }
 
             if (note.HasVolumeSlide)
             {
-                volumeSlideTarget = GetVolumeTrackValue(note.VolumeSlideTarget) << 4;
+                volumeSlideTargetWide = note.VolumeSlideTarget;
+                volumeSlideTarget = GetVolumeTrackValue(volumeSlideTargetWide) << 4;
                 volumeSlideStep = noteVolumeSlideStep;
             }
 
@@ -452,11 +465,8 @@ namespace FamiStudio
         {
             if (newVolumeMax != lastVolumeMax)
             {
-                if (lastVolumeMax > 0)
-                {
-                    volume = (int)Math.Round(volume * (newVolumeMax / (float)lastVolumeMax));
-                    volumeSlideTarget = (int)Math.Round(volumeSlideTarget * (newVolumeMax / (float)lastVolumeMax));
-                }
+                volume = GetVolumeTrackValue(volumeWide) << 4;
+                volumeSlideTarget = GetVolumeTrackValue(volumeSlideTargetWide) << 4;
 
                 lastVolumeMax = newVolumeMax;
             }
@@ -642,12 +652,14 @@ namespace FamiStudio
                 return noteValue;
 
             // VRC6 saw's raw volume-column storage always tops out at 63 (Note.GetEffectMaxValue
-            // is unconditional there), so narrow mode still needs to compress it down.
+            // is unconditional there).
             if (ChannelType.IsVrc6SawChannel(channelType))
                 return noteValue >> 2;
 
-            // FDS's raw storage is mode-relative (Note.GetEffectMaxValue returns 15 for narrow
-            // instruments), so noteValue is already on the correct 0-15 scale here -- no shift needed.
+            // FDS's raw storage is always the wide 0-32 scale, same as VRC6 above.
+            if (ChannelType.IsFdsChannel(channelType))
+                return Math.Min(15, (noteValue + 1) / 2);
+
             return noteValue;
         }
 

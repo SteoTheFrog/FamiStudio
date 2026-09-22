@@ -4463,8 +4463,8 @@ famistudio_update::
 ;             volume = target
 ;             step = 0
 ;
-; FDS (always) and VRC6 saw (when the active instrument is 64-step) are exceptions
-; (see .unpacked_volume_slide below)
+; FDS and VRC6 saw are exceptions when the active instrument uses full range
+; (32 / 64-step) volume (see .unpacked_volume_slide below)
 
 .update_volume_slides:
     ldx #0
@@ -4477,7 +4477,12 @@ famistudio_update::
 
     .if FAMISTUDIO_EXP_FDS
         cpx #FAMISTUDIO_FDS_CH0_IDX
-        beq .unpacked_volume_slide
+        bne .not_fds_full_slide
+        bit famistudio_fds_master_volume ; V = bit 6 (full range flag).
+        bvc .not_fds_full_slide
+        lda famistudio_chn_volume_slide_step,x
+        jmp .unpacked_volume_slide
+    .not_fds_full_slide:
     .endif
 
     .if FAMISTUDIO_EXP_VRC6 & FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME
@@ -4536,8 +4541,8 @@ famistudio_update::
 
     .if FAMISTUDIO_EXP_FDS | (FAMISTUDIO_EXP_VRC6 & FAMISTUDIO_USE_VRC6_SAW_FULL_VOLUME)
 
-    ; Shared by FDS (always) and VRC6 saw (when the active instrument is 64-step): the volume
-    ; track is a plain, unpacked byte (no spare bits for a fraction), so the slide fraction
+    ; Shared by FDS and VRC6 saw when the active instrument uses full range (32 / 64-step)
+    ; volume: the volume track is a plain, unpacked byte (no spare bits for a fraction), so the slide fraction
     ; lives in its own per-channel byte and is carried into the volume with a signed 8-bit add,
     ; similar to the pitch slide fixed-point accumulator above. A already holds
     ; famistudio_chn_volume_slide_step,x from .volume_side_process.
@@ -5743,7 +5748,7 @@ famistudio_set_fds_instrument:
         iny
         lda [*.ptr],y
 
-        tax ; Preserve byte in X (bits 0-4 reused below as automod numer-1 or manual mod speed lo-nibble). Bit 7 = automod, bit 6 = hold volume, bit 5 = full range volume.
+        tax ; Bit 7 = automod, bit 6 = hold volume, bit 5 = full range volume. Bits 0-4 = automod numer or manual mod speed.
         asl ; Shift left for correct flags in volume. Bit 7 (automod) ends up in carry.
         and #0xc0
         ora famistudio_fds_master_volume
@@ -5800,14 +5805,6 @@ famistudio_set_fds_instrument:
                 sta famistudio_fds_mod_depth
 
             .famistudio_set_fds_instrument_mod_depth_overriden:
-            .if FAMISTUDIO_USE_VOLUME_TRACK
-                lda #32
-                bit famistudio_fds_master_volume ; Check if we are using full range volume.
-                bvs .famistudio_set_fds_instrument_write_volume_track
-                lda #0xf0
-                .famistudio_set_fds_instrument_write_volume_track:
-                sta famistudio_chn_volume_track+FAMISTUDIO_FDS_CH0_IDX
-            .endif
     rts
 
 .endif

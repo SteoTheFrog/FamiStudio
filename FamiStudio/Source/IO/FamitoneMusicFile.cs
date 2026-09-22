@@ -1539,7 +1539,7 @@ namespace FamiStudio
                             if (note.HasVolume)
                             {
                                 var isVrc6SawFull = channel.IsVrc6SawChannel && sawFullVolume;
-                                var isFdsFull     = channel.IsFdsChannel && note.Instrument != null && note.Instrument.FdsFullVolume;
+                                var isFdsFull     = channel.IsFdsChannel && instrument != null && instrument.FdsFullVolume;
 
                                 if (note.Volume != lastVolume)
                                 {
@@ -1550,7 +1550,7 @@ namespace FamiStudio
                                     }
                                     else
                                     {
-                                        var vol = channel.IsVrc6SawChannel ? note.Volume >> 2 : note.Volume;
+                                        var vol = channel.IsVrc6SawChannel ? note.Volume >> 2 : channel.IsFdsChannel ? Math.Min(15, (note.Volume + 1) / 2) : note.Volume;
                                         channelData.Add($"{hexp}{(byte)(OpcodeVolumeBits | vol):x2}+");
                                     }
 
@@ -1562,7 +1562,7 @@ namespace FamiStudio
                                 if (note.HasVolumeSlide)
                                 {
                                     var fractionBits = (isFdsFull || isVrc6SawFull) ? 8 : 4;
-                                    var volumeShift  = channel.IsVrc6SawChannel && !isVrc6SawFull ? 2 : 0;
+                                    var volumeShift  = channel.IsVrc6SawChannel && !isVrc6SawFull ? 2 : channel.IsFdsChannel && !isFdsFull ? 1 : 0;
 
                                     channel.ComputeVolumeSlideNoteParams(note, location, currentSpeed, false, out var stepSizeNtsc, out var _, fractionBits, volumeShift);
                                     channel.ComputeVolumeSlideNoteParams(note, location, currentSpeed, false, out var stepSizePal, out var _, fractionBits, volumeShift);
@@ -1579,6 +1579,7 @@ namespace FamiStudio
                                     var slideTargetByte =
                                         isFdsFull || isVrc6SawFull ? note.VolumeSlideTarget :
                                         channel.IsVrc6SawChannel ? (note.VolumeSlideTarget >> 2) << 4 :
+                                        channel.IsFdsChannel ? Math.Min(15, (note.VolumeSlideTarget + 1) / 2) << 4 :
                                         note.VolumeSlideTarget << 4;
                                     channelData.Add($"{hexp}{(byte)slideTargetByte:x2}");
 

@@ -429,43 +429,6 @@ namespace FamiStudio
                     }
 
                     fdsFullVolume = value;
-                    RescaleVolumeTrackEffects(value ? 2.0f : 0.5f);
-                }
-            }
-        }
-
-        private void RescaleVolumeTrackEffects(float mult)
-        {
-            if (project == null)
-                return;
-
-            foreach (var song in project.Songs)
-            {
-                foreach (var channel in song.Channels)
-                {
-                    if (!channel.IsFdsChannel)
-                        continue;
-
-                    foreach (var pattern in channel.Patterns)
-                    {
-                        foreach (var kv in pattern.Notes)
-                        {
-                            var note = kv.Value;
-                            if (note == null || note.Instrument != this)
-                                continue;
-
-                            foreach (var i in new[] { Note.EffectVolume, Note.EffectVolumeSlide })
-                            {
-                                if (note.HasValidEffectValue(i))
-                                {
-                                    var val = (int)Math.Round(note.GetEffectValue(i) * mult);
-                                    var min = Note.GetEffectMinValue(song, channel, i);
-                                    var max = Note.GetEffectMaxValue(song, channel, i, this);
-                                    note.SetEffectValue(i, Utils.Clamp(val, min, max));
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }

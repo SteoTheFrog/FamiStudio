@@ -1001,7 +1001,7 @@ namespace FamiStudio
                 var release = false;
                 var attack  = true;
                 var octave  = -1;
-
+                var fdsHeld = channel.Type == ChannelType.FdsWave && NotSoFatso.NsfGetState(nsf, channel.Type, NotSoFatso.STATE_FDSHOLD, 0) != 0;
 
                 if (channel.Type == ChannelType.Vrc6Saw)
                 {
@@ -1111,8 +1111,7 @@ namespace FamiStudio
                 }
                 else
                 {
-                    var newState = volume != 0 && (channel.Type == ChannelType.Noise || period != invalidPeriodValue) ? ChannelState.Triggered : ChannelState.Stopped;
-
+                    var newState = volume != 0 && !fdsHeld && (channel.Type == ChannelType.Noise || period != invalidPeriodValue) ? ChannelState.Triggered : ChannelState.Stopped;
                     if (newState != state.state)
                     {
                         stop = newState == ChannelState.Stopped;
@@ -1151,6 +1150,9 @@ namespace FamiStudio
                     var masterVolume = (byte)NotSoFatso.NsfGetState(nsf, channel.Type, NotSoFatso.STATE_FDSMASTERVOLUME, 0);
 
                     instrument = GetFdsInstrument(wavEnv, modEnv, masterVolume);
+
+                    if (fdsHeld)
+                        instrument.FdsHoldVolume = true;
                 }
                 else if (channel.Type >= ChannelType.N163Wave1 &&
                          channel.Type <= ChannelType.N163Wave8)

@@ -159,23 +159,24 @@ struct NSF_ADVANCEDOPTIONS
 #define STATE_FDSMODULATIONDEPTH 13
 #define STATE_FDSMODULATIONSPEED 14
 #define STATE_FDSMASTERVOLUME    15
-#define STATE_VRC7PATCH          16
-#define STATE_FMPATCHREG         17
-#define STATE_FMOCTAVE           18
-#define STATE_FMTRIGGER          19
-#define STATE_FMTRIGGERCHANGE    20
-#define STATE_FMSUSTAIN          21
-#define STATE_N163WAVEPOS        22
-#define STATE_N163WAVESIZE       23
-#define STATE_N163WAVE           24
-#define STATE_N163NUMCHANNELS    25
-#define STATE_S5BMIXER           26
-#define STATE_S5BNOISEFREQUENCY  27
-#define STATE_S5BENVFREQUENCY    28
-#define STATE_S5BENVSHAPE        29
-#define STATE_S5BENVTRIGGER      30
-#define STATE_S5BENVENABLED      31
-#define STATE_STEREO             32
+#define STATE_FDSHOLD            16
+#define STATE_VRC7PATCH          17
+#define STATE_FMPATCHREG         18
+#define STATE_FMOCTAVE           19
+#define STATE_FMTRIGGER          20
+#define STATE_FMTRIGGERCHANGE    21
+#define STATE_FMSUSTAIN          22
+#define STATE_N163WAVEPOS        23
+#define STATE_N163WAVESIZE       24
+#define STATE_N163WAVE           25
+#define STATE_N163NUMCHANNELS    26
+#define STATE_S5BMIXER           27
+#define STATE_S5BNOISEFREQUENCY  28
+#define STATE_S5BENVFREQUENCY    29
+#define STATE_S5BENVSHAPE        30
+#define STATE_S5BENVTRIGGER      31
+#define STATE_S5BENVENABLED      32
+#define STATE_STEREO             33
 
 #include <math.h>
 

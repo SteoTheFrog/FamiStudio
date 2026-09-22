@@ -71,7 +71,7 @@ namespace FamiStudio
                 if (wav != null)
                 {
                     // We read the table from end to start to mimic the ASM code (saves cycles).
-                    SkipCycles(2); // LDY
+                    SkipCycles(3); // LDY
                     for (int i = 0x3F; i >= 0; i -= 2)
                     {
                         var s0 = wav[i];
@@ -86,7 +86,7 @@ namespace FamiStudio
 
                         // Toggle write every 2 iterations. ASM does this for smooth cycling between
                         // waveforms. We write twice between write toggling and iterate half the times 
-                        // to save CPU cycles. 37 skipped cycles to mimic ASM loop (36 if BPL exits loop).
+                        // to save CPU cycles. 38 skipped cycles to mimic ASM loop (37 if BPL exits loop).
                         SkipCycles(2); // Read volume.
                         WriteRegister(NesApu.FDS_VOL, 0x80 | masterVolume, 4);
                         WriteRegister(NesApu.FDS_WAV_START + i,     s0 & 0xff, 12); // +7 for LDA and DEY

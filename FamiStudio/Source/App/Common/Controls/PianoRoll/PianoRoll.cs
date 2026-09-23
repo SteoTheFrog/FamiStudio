@@ -617,6 +617,24 @@ namespace FamiStudio
         internal string NoteTooltip                        => noteTooltip;
         internal void SetNoteTooltip(string s) => noteTooltip = s;
 
+        internal bool IsLongPressBlockedByActiveCapture =>
+            captureOperation == CaptureOperation.DeleteNotes                ||
+            captureOperation == CaptureOperation.ChangeEnvelopeValue        ||
+            captureOperation == CaptureOperation.ChangeEffectValue          ||
+            captureOperation == CaptureOperation.ChangeSelectionEffectValue ||
+            captureOperation == CaptureOperation.ChangeEnvelopeRepeatValue  ||
+            captureOperation == CaptureOperation.ResizeNoteStart            ||
+            captureOperation == CaptureOperation.ResizeSelectionNoteStart   ||
+            captureOperation == CaptureOperation.ResizeNoteEnd              ||
+            captureOperation == CaptureOperation.ResizeSelectionNoteEnd     ||
+            captureOperation == CaptureOperation.DragSlideNoteTargetGizmo   ||
+            captureOperation == CaptureOperation.DragVolumeSlideTargetGizmo ||
+            captureOperation == CaptureOperation.MoveNoteRelease            ||
+            captureOperation == CaptureOperation.MoveSelectionNoteRelease;
+
+        internal bool RecentlyCreatedNote(double withinMilliseconds) => (DateTime.Now - lastNoteCreateTime).TotalMilliseconds < withinMilliseconds;
+        internal void ShowHoldFingersToDrawToast() => Platform.ShowToast(window, HoldFingersToDrawMessage);
+
         internal void SetPianoHoverNote(int note, int noteIndex, int noteCount)
         {
             piano.HoverNote = note;
@@ -5053,23 +5071,6 @@ namespace FamiStudio
             return HandleEffectsGizmos(x, y);
         }
 
-        private bool HandleTouchDownDragNote(int x, int y)
-        {
-            if (HasHighlightedNote() && IsPointInNoteArea(x, y))
-            {
-                var mouseNote = GetNoteForCoord(x, y, out _, out _, out var duration);
-                var highlightNote = GetHighlightedNote();
-
-                if (highlightNote != null && mouseNote == highlightNote)
-                {
-                    noteArea.StartNoteDrag(x, y, IsHighlightedNoteSelected() ? CaptureOperation.DragSelection : CaptureOperation.DragNote, NoteLocation.FromAbsoluteNoteIndex(Song, highlightNoteAbsIndex), highlightNote);
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         private void Timeline_SeekDragRequested(Control sender, PointerEventArgs e)
         {
             var p = WindowToControl(timeline.ControlToWindow(e.Position));
@@ -5298,7 +5299,7 @@ namespace FamiStudio
             return false;
         }
 
-        private bool HandleTouchDoubleClickChannelNote(int x, int y)
+        internal bool HandleTouchDoubleClickChannelNote(int x, int y)
         {
             if (GetLocationForCoord(x, y, out var mouseLocation, out byte noteValue))
             {
@@ -5603,18 +5604,13 @@ namespace FamiStudio
             return false;
         }
 
-        private bool HandleDoubleTapLongPressChannelNote(int x, int y)
+        internal bool HandleDoubleTapLongPressChannelNote(int x, int y)
         {
             HandleTouchDoubleClickChannelNote(x, y);
             StartCaptureOperation(x, y, CaptureOperation.DeleteNotes);
             Platform.VibrateClick();
             Platform.ShowToast(window, HoldFingersToEraseMessage);
             return true;
-        }
-
-        private bool HandleTouchLongPressChannelNote(int x, int y)
-        {
-            return HandleContextMenuChannelNote(x, y);
         }
 
         public bool HandleTimelineEnvelopeContextMenu(int x, int y)
@@ -5703,19 +5699,6 @@ namespace FamiStudio
         private bool HandleTouchLongPressEffectPanel(int x, int y)
         {
             return HandleContextMenuEffectPanel(x, y);
-        }
-
-        private bool HandleTouchLongPressDrawEnvelope(int x, int y)
-        {
-            if (IsPointInNoteArea(x, y) && EditEnvelope.Length > 0)
-            {
-                Platform.VibrateClick();
-                Platform.ShowToast(window, HoldFingersToDrawMessage);
-                StartDrawEnvelope(x, y);
-                return true;
-            }
-
-            return false;
         }
 
         private void SetEnvelopeLoopRelease(int x, int y, bool release)
@@ -5823,10 +5806,6 @@ namespace FamiStudio
             return false;
         }
 
-        private bool HandleTouchLongPressEnvelopeHeader(int x, int y)
-        {
-            return HandleContextMenuEnvelope(x, y);
-        }
 
         private void ResetVolumeEnvelope()
         {
@@ -5898,10 +5877,6 @@ namespace FamiStudio
             return true;
         }
 
-        private bool HandleTouchLongPressDPCMMapping(int x, int y)
-        {
-            return HandleContextMenuDPCMMapping(x, y);
-        }
 
         internal void StartMobileZoom(int x, int y, bool vertical)
         {
@@ -5922,25 +5897,12 @@ namespace FamiStudio
 
             if (editMode == EditionMode.Channel)
             {
-                if (HandleTouchLongPressChannelNote(x, y)) goto Handled;
                 if (HandleTouchLongPressEffectPanel(x, y)) goto Handled;
-            }
-
-            if (editMode == EditionMode.Envelope ||
-                editMode == EditionMode.Arpeggio)
-            {
-                if (HandleTouchLongPressDrawEnvelope(x, y)) goto Handled;
-                if (HandleTouchLongPressEnvelopeHeader(x, y)) goto Handled;
             }
 
             if (editMode == EditionMode.DPCM)
             {
                 if (HandleTouchLongPressWave(x, y)) goto Handled;
-            }
-
-            if (editMode == EditionMode.DPCMMapping)
-            {
-                if (HandleTouchLongPressDPCMMapping(x, y)) goto Handled;
             }
 
             return;
@@ -5967,7 +5929,6 @@ namespace FamiStudio
             if (editMode == EditionMode.Channel)
             {
                 if (HandleTouchDownNoteEffectsGizmos(x, y)) goto Handled;
-                if (HandleTouchDownDragNote(x, y)) goto Handled;
             }
 
             if (editMode == EditionMode.Envelope ||
@@ -6095,48 +6056,12 @@ namespace FamiStudio
             MarkDirty();
         }
 
-        protected override void OnTouchDoubleClick(PointerEventArgs e)
-        {
-            var x = e.X;
-            var y = e.Y;
-
-            SetMouseLastPos(x, y);
-
-            // Ignore double tap if we handled a single tap recently.
-            if (captureOperation != CaptureOperation.None || (DateTime.Now - lastNoteCreateTime).TotalMilliseconds < 500)
-            {
-                return;
-            }
-
-            if (editMode == EditionMode.Channel)
-            {
-                if (HandleTouchDoubleClickChannelNote(x, y)) goto Handled;
-            }
-
-            return;
-
-        Handled:
-            MarkDirty();
-        }
-
         protected override void OnTouchLongPress(PointerEventArgs e)
         {
             var x = e.X;
             var y = e.Y;
 
-            if (captureOperation == CaptureOperation.DeleteNotes                ||
-                captureOperation == CaptureOperation.ChangeEnvelopeValue        ||
-                captureOperation == CaptureOperation.ChangeEffectValue          ||
-                captureOperation == CaptureOperation.ChangeSelectionEffectValue ||
-                captureOperation == CaptureOperation.ChangeEnvelopeRepeatValue  ||
-                captureOperation == CaptureOperation.ResizeNoteStart            ||
-                captureOperation == CaptureOperation.ResizeSelectionNoteStart   ||
-                captureOperation == CaptureOperation.ResizeNoteEnd              ||
-                captureOperation == CaptureOperation.ResizeSelectionNoteEnd     ||
-                captureOperation == CaptureOperation.DragSlideNoteTargetGizmo   ||
-                captureOperation == CaptureOperation.DragVolumeSlideTargetGizmo ||
-                captureOperation == CaptureOperation.MoveNoteRelease            ||
-                captureOperation == CaptureOperation.MoveSelectionNoteRelease) 
+            if (IsLongPressBlockedByActiveCapture)
             {
                 return;
             }
@@ -6145,23 +6070,13 @@ namespace FamiStudio
 
             if (e.IsDoubleTapLongPress)
             {
-                if (editMode == EditionMode.Channel)
-                {
-                    if (HandleDoubleTapLongPressChannelNote(x, y)) goto Handled;
-                }
-
                 return;
             }
 
-            // Trigger context menu if using legacy selection mode or selecting a note. Otherwise, start a selection.
-            var validNoteArea = editMode == EditionMode.Channel && IsPointInNoteArea(x, y);
-            var note = validNoteArea ? GetNoteForCoord(x, y, out _, out _, out _) : null;
-
-            // Same idea for the effect panel: long press starts a selection, release pops a context menu if we didn't swipe.
             var validEffectArea = editMode == EditionMode.Channel && !HasRepeatEnvelope() &&
                 selectedEffectIdx >= 0 && IsPointInEffectPanel(x, y) && GetEffectNoteForCoord(x, y, out _);
 
-            if (!legacySelectMode && (validNoteArea && note == null || validEffectArea))
+            if (!legacySelectMode && validEffectArea)
             {
                 Platform.VibrateClick();
                 StartSelection(x, y);
@@ -6170,11 +6085,6 @@ namespace FamiStudio
             {
                 HandleTouchLongPressRelease(e);
             }
-            
-            return;
-
-        Handled:
-            MarkDirty();
         }
 
         public void LayoutChanged()
@@ -6326,16 +6236,6 @@ namespace FamiStudio
         internal bool HasHighlightedNote()
         {
             return highlightNoteAbsIndex >= 0;
-        }
-
-        private bool IsHighlightedNoteSelected()
-        {
-            return HasHighlightedNote() && IsNoteSelected(highlightNoteAbsIndex);
-        }
-
-        private Note GetHighlightedNote()
-        {
-            return HasHighlightedNote() ? Song.Channels[editChannel].GetNoteAt(NoteLocation.FromAbsoluteNoteIndex(Song, highlightNoteAbsIndex)) : null; 
         }
 
         private Note GetHighlightedNoteAndLocation(out NoteLocation location)

@@ -220,6 +220,25 @@ namespace FamiStudio
             }
         }
 
+        protected override void OnTouchLongPress(PointerEventArgs e)
+        {
+            base.OnTouchLongPress(e);
+
+            if (e.IsDoubleTapLongPress || pianoRoll.IsLongPressBlockedByActiveCapture)
+                return;
+
+            pianoRoll.AbortCaptureOperation();
+
+            if (pianoRoll.CurrentEditEnvelope.Length > 0)
+            {
+                Platform.VibrateClick();
+                pianoRoll.ShowHoldFingersToDrawToast();
+
+                var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+                pianoRoll.StartDrawEnvelope(p.X, p.Y);
+            }
+        }
+
         protected override void OnTouchFling(PointerEventArgs e)
         {
             var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));

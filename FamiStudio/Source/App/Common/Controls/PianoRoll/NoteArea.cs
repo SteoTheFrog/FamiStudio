@@ -796,14 +796,19 @@ namespace FamiStudio
                 return;
             }
 
-            // Touch handling here is scoped to note gizmos only for now (resize/move-release/slide).
-            // Touch-drag of a note's body, double-tap-delete and long-press are still owned by PianoRoll.
             if (e.IsTouchEvent)
             {
                 if (editMode == EditionMode.Channel)
                 {
                     var touchPos = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+
                     if (HandleNoteGizmos(touchPos.X, touchPos.Y))
+                    {
+                        MarkDirty();
+                        return;
+                    }
+
+                    if (HandleTouchDownDragNote(touchPos.X, touchPos.Y))
                         MarkDirty();
                 }
 
@@ -1018,6 +1023,69 @@ namespace FamiStudio
 
             if (HandleTouchClickChannelNote(pos.X, pos.Y))
                 MarkDirty();
+        }
+
+        protected override void OnTouchDoubleClick(PointerEventArgs e)
+        {
+            base.OnTouchDoubleClick(e);
+
+            if (editMode != EditionMode.Channel)
+                return;
+
+            // Ignore if a capture is already in progress, or if we just created a note via a single
+            // tap (avoids a double-tap being misread as create-then-delete).
+            if (!pianoRoll.IsNoCapture || pianoRoll.RecentlyCreatedNote(500))
+                return;
+
+            var pos = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+
+            if (pianoRoll.HandleTouchDoubleClickChannelNote(pos.X, pos.Y))
+                MarkDirty();
+        }
+
+        protected override void OnTouchLongPress(PointerEventArgs e)
+        {
+            base.OnTouchLongPress(e);
+
+            if (pianoRoll.IsLongPressBlockedByActiveCapture)
+                return;
+
+            var pos = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+
+            if (editMode == EditionMode.DPCMMapping)
+            {
+                pianoRoll.AbortCaptureOperation();
+
+                if (pianoRoll.HandleContextMenuDPCMMapping(pos.X, pos.Y))
+                    MarkDirty();
+
+                return;
+            }
+
+            if (editMode != EditionMode.Channel)
+                return;
+
+            pianoRoll.AbortCaptureOperation();
+
+            if (e.IsDoubleTapLongPress)
+            {
+                if (pianoRoll.HandleDoubleTapLongPressChannelNote(pos.X, pos.Y))
+                    MarkDirty();
+                return;
+            }
+
+            // Trigger context menu if using legacy selection mode or selecting a note. Otherwise, start a selection.
+            var note = GetNoteForCoord(pos.X, pos.Y, out _, out _, out _);
+
+            if (!legacySelectMode && note == null)
+            {
+                Platform.VibrateClick();
+                pianoRoll.StartSelection(pos.X, pos.Y);
+            }
+            else if (pianoRoll.HandleContextMenuChannelNote(pos.X, pos.Y))
+            {
+                MarkDirty();
+            }
         }
 
         protected override void OnMouseDoubleClick(PointerEventArgs e)
@@ -1344,6 +1412,23 @@ namespace FamiStudio
                         return true;
                     }
                 }
+            }
+
+            return false;
+        }
+
+        private bool HandleTouchDownDragNote(int x, int y)
+        {
+            if (!HasHighlightedNote())
+                return false;
+
+            var mouseNote = GetNoteForCoord(x, y, out _, out _, out _);
+            var highlightNote = Song.Channels[editChannel].GetNoteAt(NoteLocation.FromAbsoluteNoteIndex(Song, highlightNoteAbsIndex));
+
+            if (highlightNote != null && mouseNote == highlightNote)
+            {
+                StartNoteDrag(x, y, IsNoteSelected(highlightNoteAbsIndex) ? CaptureOperation.DragSelection : CaptureOperation.DragNote, NoteLocation.FromAbsoluteNoteIndex(Song, highlightNoteAbsIndex), highlightNote);
+                return true;
             }
 
             return false;

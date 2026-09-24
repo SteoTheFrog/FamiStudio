@@ -380,12 +380,27 @@ namespace FamiStudio
                     var initialPatternMaxIdx = Song.PatternIndexFromAbsoluteNoteIndex(dragFrameMax);
                     Debug.Assert(initialPatternMinIdx == initialPatternMaxIdx);
 
+                    var songEndIdx = Song.GetPatternStartAbsoluteNoteIndex(Song.Length) - 1;
+                    var maxReachPatternIdx = initialPatternMinIdx;
+
+                    foreach (var kv in dragNotes)
+                    {
+                        var dragNote = kv.Value;
+                        if (dragNote == null || !dragNote.IsMusical)
+                            continue;
+
+                        var duration = Math.Max(1, dragNote.Duration + deltaDuration);
+                        var sourceEndIdx = Utils.Clamp(kv.Key + duration - 1, 0, songEndIdx);
+                        var destEndIdx   = Utils.Clamp(kv.Key + deltaNoteIdx + duration - 1, 0, songEndIdx);
+
+                        maxReachPatternIdx = Math.Max(maxReachPatternIdx, Song.PatternIndexFromAbsoluteNoteIndex(sourceEndIdx));
+                        maxReachPatternIdx = Math.Max(maxReachPatternIdx, Song.PatternIndexFromAbsoluteNoteIndex(destEndIdx));
+                    }
+
                     var newPatternMinIdx = Song.PatternIndexFromAbsoluteNoteIndex(newDragFrameMin);
                     var newPatternMaxIdx = Song.PatternIndexFromAbsoluteNoteIndex(newDragFrameMax);
 
-                    bool multiplePatterns = newPatternMinIdx != initialPatternMinIdx ||
-                                            newPatternMaxIdx != initialPatternMinIdx;
-
+                    var multiplePatterns = newPatternMinIdx != initialPatternMinIdx || newPatternMaxIdx != initialPatternMinIdx || maxReachPatternIdx != initialPatternMinIdx;
                     if (multiplePatterns)
                         PromoteTransaction(TransactionScope.Channel, Song.Id, editChannel);
                 }
@@ -415,6 +430,8 @@ namespace FamiStudio
                 }
 
                 // Clear where the new notes are going to be.
+                var unselectedDragDuration = -1;
+
                 if (legacySelectMode)
                 {
                     channel.DeleteNotesBetween(newDragFrameMin, newDragFrameMax + 1, keepFx);
@@ -441,6 +458,15 @@ namespace FamiStudio
                             {
                                 var sourceLocation = NoteLocation.FromAbsoluteNoteIndex(Song, kv.Key);
                                 duration = GetVisualNoteDuration(sourceLocation, dragNote);
+
+                                if (captureOperation == CaptureOperation.DragNote)
+                                {
+                                    var destLocation = NoteLocation.FromAbsoluteNoteIndex(Song, frame);
+                                    var destGap = channel.GetDistanceToNextNote(destLocation);
+                                    if (destGap >= 0)
+                                        duration = Math.Max(1, Math.Min(duration, destGap));
+                                    unselectedDragDuration = duration;
+                                }
                             }
                         }
 
@@ -478,7 +504,7 @@ namespace FamiStudio
                             newNote.Arpeggio = oldNote.Arpeggio;
                             newNote.SlideNoteTarget = (byte)(oldNote.IsSlideNote ? Utils.Clamp(oldNote.SlideNoteTarget + deltaNoteValue, Note.MusicalNoteMin, Note.MusicalNoteMax) : 0);
                             newNote.Flags = oldNote.Flags;
-                            newNote.Duration = (ushort)Math.Max(1, oldNote.Duration + deltaDuration);
+                            newNote.Duration = (ushort)(unselectedDragDuration >= 0 ? unselectedDragDuration : Math.Max(1, oldNote.Duration + deltaDuration));
                             newNote.Release = oldNote.Release;
 
                             if (oldNote.HasRelease && !newNote.HasRelease && newNote.Duration > 1)

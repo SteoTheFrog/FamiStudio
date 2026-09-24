@@ -239,21 +239,7 @@ namespace FamiStudio
                 if (!legacySelectMode)
                 {
                     foreach (var kv in dragNotes)
-                    {
-                        var dragNote = kv.Value;
-                        if (dragNote != null && dragNote.IsMusical)
-                        {
-                            var sourceLocation = NoteLocation.FromAbsoluteNoteIndex(Song, kv.Key);
-                            var visualDuration = GetVisualNoteDuration(sourceLocation, dragNote);
-
-                            dragNote.Duration = (ushort)Math.Max(1, visualDuration);
-
-                            if (dragNote.HasRelease && dragNote.Release >= dragNote.Duration)
-                            {
-                                dragNote.Release =  Math.Max(0, dragNote.Duration - 1);
-                            }
-                        }
-                    }
+                        TruncateDragNoteToVisualDuration(kv.Key, kv.Value);
                 }
 
                 dragFrameMin = selectionMinX;
@@ -303,12 +289,28 @@ namespace FamiStudio
 
                 dragNotes.Clear();
                 dragNotes[absPrevNoteIdx] = note.Clone();
+
+                TruncateDragNoteToVisualDuration(absPrevNoteIdx, dragNotes[absPrevNoteIdx]);
             }
 
             dragLastNoteValue = -1;
 
             if (captureThresholdMet)
                 UpdateNoteDrag(x, y, false);
+        }
+
+        private void TruncateDragNoteToVisualDuration(int absoluteIdx, Note dragNote)
+        {
+            if (dragNote == null || !dragNote.IsMusical)
+                return;
+
+            var sourceLocation = NoteLocation.FromAbsoluteNoteIndex(Song, absoluteIdx);
+            var visualDuration = GetVisualNoteDuration(sourceLocation, dragNote);
+
+            dragNote.Duration = (ushort)Math.Max(1, visualDuration);
+
+            if (dragNote.HasRelease && dragNote.Release >= dragNote.Duration)
+                dragNote.Release = Math.Max(0, dragNote.Duration - 1);
         }
 
         internal void UpdateNoteDrag(int x, int y, bool final)
@@ -395,8 +397,7 @@ namespace FamiStudio
                 // If not copying, delete original notes.
                 if (!copy)
                 {
-                    // For modern selection mode, we need to move any selected effects.
-                    if (modernDrag)
+                    if (modernDrag || captureOperation == CaptureOperation.DragNote || resizeStart)
                     {
                         foreach (var kv in dragNotes)
                         {

@@ -59,8 +59,15 @@ namespace FamiStudio
             base.OnPointerMove(e);
             UpdateToolTip(e.X, e.Y);
 
+            var isChannelEffects = panelMode == PanelMode.Notes && !pianoRoll.HasRepeatEnvelope();
+
             if (panelMode == PanelMode.Notes && pianoRoll.HasRepeatEnvelope() &&
                 (pianoRoll.IsChangingEnvelopeRepeatValue || pianoRoll.IsPointInEffectPanel(e.X, e.Y)))
+            {
+                Cursor = Cursors.SizeNS;
+            }
+            else if (isChannelEffects && pianoRoll.IsPointInEffectPanel(e.X, e.Y) &&
+                     pianoRoll.GetHighlightedEffectCaptureOperationForCoord(e.X, e.Y) == PianoRoll.CaptureOperation.ChangeEffectValue)
             {
                 Cursor = Cursors.SizeNS;
             }
@@ -68,6 +75,8 @@ namespace FamiStudio
             {
                 Cursor = Cursors.Default;
             }
+
+            MarkDirty();
         }
 
         private void UpdateToolTip(int x, int y)
@@ -254,6 +263,9 @@ namespace FamiStudio
             }
 
             var isChannelEffects = panelMode == PanelMode.Notes && !pianoRoll.HasRepeatEnvelope();
+
+            if (isChannelEffects && pianoRoll.HandleMouseDownEffectGizmos(e))
+                return;
 
             if (isChannelEffects && e.Left)
             {

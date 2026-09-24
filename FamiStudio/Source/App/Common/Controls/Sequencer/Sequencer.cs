@@ -3070,6 +3070,7 @@ namespace FamiStudio
             UpdateCaptureOperation(mouseLastX, mouseLastY, 1.0f, true);
             UpdateFollowMode();
             TickFling(delta);
+            UpdateCursor();
         }
 
         public void SongModified()

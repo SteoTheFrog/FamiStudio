@@ -4857,7 +4857,7 @@ namespace FamiStudio
                 UpdateWaveSelection(x, y);
         }
 
-        private bool HandleMouseDownEffectGizmos(PointerEventArgs e)
+        internal bool HandleMouseDownEffectGizmos(PointerEventArgs e)
         {
             return e.Left && HandleEffectsGizmos(e.X, e.Y);
         }
@@ -4883,13 +4883,7 @@ namespace FamiStudio
             if (HandleMouseDownScrollbar(e)) goto Handled;
             if (HandleMouseDownAltZoom(e)) goto Handled;
 
-            if (editMode == EditionMode.Channel)
-            {
-                if (HandleMouseDownEffectGizmos(e)) goto Handled;
-            }
-
-            if (editMode == EditionMode.Envelope || 
-                editMode == EditionMode.Arpeggio)
+            if (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio)
             {
                 if (HandleMouseDownEnvelopeEffectPanel(e)) goto Handled;
                 if (HandleMouseDownEnvelopeSelection(e)) goto Handled;
@@ -7732,7 +7726,7 @@ namespace FamiStudio
             }
         }
 
-        private CaptureOperation GetHighlightedEffectCaptureOperationForCoord(int x, int y)
+        internal CaptureOperation GetHighlightedEffectCaptureOperationForCoord(int x, int y)
         {
             Debug.Assert(editMode == EditionMode.Channel);
 
@@ -8176,6 +8170,8 @@ namespace FamiStudio
             UpdateCaptureOperation(mouseLastX, mouseLastY, 1.0f, true);
             UpdateFollowMode();
             TickFling(delta);
+
+            noteArea.UpdateCursor();
         }
 
         public bool GetEffectNoteForCoord(int x, int y, out NoteLocation location)

@@ -389,10 +389,10 @@ namespace FamiStudio
                         if (dragNote == null || !dragNote.IsMusical)
                             continue;
 
-                        var duration = Math.Max(1, dragNote.Duration + deltaDuration);
-                        var sourceEndIdx = Utils.Clamp(kv.Key + duration - 1, 0, songEndIdx);
-                        var destEndIdx   = Utils.Clamp(kv.Key + deltaNoteIdx + duration - 1, 0, songEndIdx);
-
+                        var sourceDuration = Math.Max(1, dragNote.Duration);
+                        var destDuration   = Math.Max(1, dragNote.Duration + deltaDuration);
+                        var sourceEndIdx   = Utils.Clamp(kv.Key + sourceDuration - 1, 0, songEndIdx);
+                        var destEndIdx     = Utils.Clamp(kv.Key + deltaNoteIdx + destDuration - 1, 0, songEndIdx);
                         maxReachPatternIdx = Math.Max(maxReachPatternIdx, Song.PatternIndexFromAbsoluteNoteIndex(sourceEndIdx));
                         maxReachPatternIdx = Math.Max(maxReachPatternIdx, Song.PatternIndexFromAbsoluteNoteIndex(destEndIdx));
                     }
@@ -405,7 +405,7 @@ namespace FamiStudio
                         PromoteTransaction(TransactionScope.Channel, Song.Id, editChannel);
                 }
 
-                var copy = ModifierKeys.IsControlDown;
+                var copy       = ModifierKeys.IsControlDown;
                 var modernDrag = captureOperation == CaptureOperation.DragSelection && !legacySelectMode;
                 var keepFx     = captureOperation != CaptureOperation.DragSelection || modernDrag;
 
@@ -637,15 +637,26 @@ namespace FamiStudio
 
             if (final)
             {
-                int p0, p1;
+                var songEndIdx    = Song.GetPatternStartAbsoluteNoteIndex(Song.Length) - 1;
+                var minTouchedIdx = Math.Min(dragFrameMin, newDragFrameMin);
+                var maxTouchedIdx = Math.Max(dragFrameMax, newDragFrameMax);
 
-                p0 = Song.PatternIndexFromAbsoluteNoteIndex(dragFrameMin + 0);
-                p1 = Song.PatternIndexFromAbsoluteNoteIndex(dragFrameMax + 1);
-                for (int p = p0; p <= p1 && p < Song.Length; p++)
-                    pianoRoll.RaisePatternChanged(channel.PatternInstances[p]);
-                channel.InvalidateCumulativePatternCache(p0, p1);
-                p0 = Song.PatternIndexFromAbsoluteNoteIndex(dragFrameMin + deltaNoteIdx + 0);
-                p1 = Song.PatternIndexFromAbsoluteNoteIndex(dragFrameMax + deltaNoteIdx + 1);
+                foreach (var kv in dragNotes)
+                {
+                    var dragNote = kv.Value;
+                    var sourceDuration = dragNote != null && dragNote.IsMusical ? Math.Max(1, dragNote.Duration) : 1;
+                    var destDuration   = dragNote != null && dragNote.IsMusical ? Math.Max(1, dragNote.Duration + deltaDuration) : 1;
+
+                    maxTouchedIdx = Math.Max(maxTouchedIdx, kv.Key + sourceDuration - 1);
+                    maxTouchedIdx = Math.Max(maxTouchedIdx, kv.Key + deltaNoteIdx + destDuration - 1);
+                }
+
+                minTouchedIdx = Utils.Clamp(minTouchedIdx, 0, songEndIdx);
+                maxTouchedIdx = Utils.Clamp(maxTouchedIdx, 0, songEndIdx);
+
+                var p0 = Song.PatternIndexFromAbsoluteNoteIndex(minTouchedIdx);
+                var p1 = Song.PatternIndexFromAbsoluteNoteIndex(maxTouchedIdx);
+
                 for (int p = p0; p <= p1 && p < Song.Length; p++)
                     pianoRoll.RaisePatternChanged(channel.PatternInstances[p]);
                 channel.InvalidateCumulativePatternCache(p0, p1);

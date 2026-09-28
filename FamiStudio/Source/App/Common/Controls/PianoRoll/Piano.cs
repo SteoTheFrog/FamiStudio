@@ -83,10 +83,8 @@ namespace FamiStudio
             if (!Visible)
                 return;
 
-            var scrollThickness = IsVideoRecording ? 0 : pianoRoll.ScrollBarThickness;
-
             Move(0, HeaderAndEffectSizeY);
-            Resize(PianoSizeX, pianoRoll.Height - HeaderAndEffectSizeY - scrollThickness + 1);
+            Resize(PianoSizeX, pianoRoll.Height - HeaderAndEffectSizeY + 1);
         }
 
         private void GetVisibleOctaveRange(out int minOctave, out int maxOctave)

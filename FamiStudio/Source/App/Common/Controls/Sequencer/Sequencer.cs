@@ -858,6 +858,7 @@ namespace FamiStudio
                 if (verticalScrollBar == null)
                 {
                     verticalScrollBar = new ScrollBar();
+                    verticalScrollBar.LineColor = Color.Black;
                     verticalScrollBar.Scrolled += ScrollBar_Scrolled;
                     AddControl(verticalScrollBar);
                 }
@@ -865,6 +866,7 @@ namespace FamiStudio
                 if (horizontalScrollBar == null)
                 {
                     horizontalScrollBar = new ScrollBar(true);
+                    horizontalScrollBar.LineColor = Color.Black;
                     horizontalScrollBar.Scrolled += ScrollBar_Scrolled;
                     AddControl(horizontalScrollBar);
                 }
@@ -1000,8 +1002,6 @@ namespace FamiStudio
                 var y = ContentBottomY;
 
                 c.FillRectangle(x, y, Width, y + ScrollBarThickness, Theme.DarkGreyColor4);
-                c.DrawLine(x, y, x, y + ScrollBarThickness, Theme.BlackColor);
-                c.DrawLine(x, y, Width, y, Theme.BlackColor);
             }
         }
 

@@ -125,6 +125,8 @@ namespace FamiStudio
         LocalizedString OrTooltip;
         LocalizedString DeleteNoteTooltip;
         LocalizedString AddStopNoteTooltip;
+        LocalizedString AssignDPCMSampleTooltip;
+        LocalizedString SamplePropertiesTooltip;
         LocalizedString PanTooltip;
 
         public NoteArea(PianoRoll pianoRoll)
@@ -1304,8 +1306,51 @@ namespace FamiStudio
             App.SetToolTip("");
         }
 
+        private void UpdateDPCMMappingTooltip(PointerEventArgs e)
+        {
+            if (!pianoRoll.IsNoCapture)
+                return;
+
+            var pos = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+
+            var tooltip = "";
+            var newNoteTooltip = "";
+
+            if (GetNoteValueForCoord(pos.X, pos.Y, out byte noteValue))
+            {
+                newNoteTooltip = $"{Note.GetFriendlyName(noteValue)}";
+
+                var mapping = editInstrument.GetDPCMMapping(noteValue);
+                if (mapping == null)
+                {
+                    tooltip = $"<MouseLeft> {AssignDPCMSampleTooltip} - <MouseWheel> {PanTooltip}";
+                }
+                else
+                {
+                    tooltip = $"<MouseLeft><MouseLeft> {SamplePropertiesTooltip} - <MouseWheel> {PanTooltip}\n<MouseRight> {pianoRoll.PianoRollMoreOptionsTooltip}";
+
+                    if (mapping.Sample != null)
+                        newNoteTooltip += $" ({mapping.Sample.Name})";
+                }
+            }
+
+            App.SetToolTip(tooltip);
+
+            if (noteTooltip != newNoteTooltip)
+            {
+                pianoRoll.SetNoteTooltip(newNoteTooltip);
+                MarkDirty();
+            }
+        }
+
         private void UpdateNoteTooltip(PointerEventArgs e)
         {
+            if (editMode == EditionMode.DPCMMapping)
+            {
+                UpdateDPCMMappingTooltip(e);
+                return;
+            }
+
             if (editMode != EditionMode.Channel || !pianoRoll.IsNoCapture && !pianoRoll.IsSelectCapture)
                 return;
 
@@ -1390,7 +1435,26 @@ namespace FamiStudio
                 }
             }
 
-            pianoRoll.UpdateSelectionTooltip();
+            // We only display frames in modern select mode during selection, for means of measurement.
+            if (pianoRoll.LegacySelectMode ? pianoRoll.IsSelectionValid() : pianoRoll.IsSelectCapture)
+            {
+                if (newNoteTooltip.Length > 0)
+                    newNoteTooltip += " ";
+
+                var numSelected = pianoRoll.LegacySelectMode
+                    ? pianoRoll.SelectionMaxX - pianoRoll.SelectionMinX + 1
+                    : pianoRoll.CaptureMarqueeMaxX - pianoRoll.CaptureMarqueeMinX + 1;
+
+                newNoteTooltip += $"{numSelected}{(Song.Project.UsesFamiTrackerTempo ? " note" : " frame")}" + (numSelected == 1 ? "" : "s") + " selected";
+            }
+
+            App.SetToolTip(tooltip);
+
+            if (noteTooltip != newNoteTooltip)
+            {
+                pianoRoll.SetNoteTooltip(newNoteTooltip);
+                MarkDirty();
+            }
         }
 
         private int GetPixelXForAbsoluteNoteIndex(int n, bool scroll = true) => pianoRoll.GetPixelXForAbsoluteNoteIndex(n, scroll);

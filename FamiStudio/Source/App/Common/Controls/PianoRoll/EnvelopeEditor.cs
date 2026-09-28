@@ -47,6 +47,23 @@ namespace FamiStudio
         {
             base.OnPointerEnter(e);
             App.SetToolTip(tooltip);
+            UpdateHoverNote(ScreenToControl(CursorPosition).X);
+        }
+
+        protected override void OnPointerLeave(EventArgs e)
+        {
+            base.OnPointerLeave(e);
+            if (Platform.IsDesktop)
+                pianoRoll.ClearPianoHoverNote();
+        }
+
+        private void UpdateHoverNote(int localX)
+        {
+            if (!Platform.IsDesktop)
+                return;
+
+            var p = pianoRoll.WindowToControl(ControlToWindow(new Point(localX, 0)));
+            pianoRoll.SetPianoHoverNote(-1, pianoRoll.GetAbsoluteNoteIndexForPixelX(p.X - pianoRoll.PianoSizeX), 1);
         }
 
         private int GetPixelXForAbsoluteNoteIndex(int idx)
@@ -268,6 +285,8 @@ namespace FamiStudio
         {
             base.OnPointerMove(e);
             var p = pianoRoll.WindowToControl(ControlToWindow(e.Position));
+
+            UpdateHoverNote(e.X);
 
             if (pianoRoll.IsTimelineColumnSelectionCapture || pianoRoll.IsChangingEnvelopeValue || pianoRoll.IsDrawingEnvelope)
             {

@@ -665,7 +665,7 @@ namespace FamiStudio
                         for (int i = 0; i < numBeats; i++)
                             c.DrawText($"{p + 1}.{i + 1}", fonts.FontMedium, px + beatTextPosX + beatSizeX * i, 0, Theme.LightGreyColor1, TextFlags.Middle, 0, halfHeight - 1);
                     }
-                    else
+                    else if (sx > 0)
                     {
                         c.DrawText((p + 1).ToString(), fonts.FontMedium, px, 0, Theme.LightGreyColor1, TextFlags.MiddleCenter, sx, halfHeight - 1);
                     }

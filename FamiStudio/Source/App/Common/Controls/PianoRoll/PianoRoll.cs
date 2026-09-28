@@ -59,9 +59,6 @@ namespace FamiStudio
         const int DefaultEffectPanelTextPosY       = 10;
         const int DefaultDPCMTextPosX              = 2;
         const int DefaultAttackIconPosX            = 1;
-        const int DefaultScrollBarThickness1       = 10;
-        const int DefaultScrollBarThickness2       = 16;
-        const int DefaultMinScrollBarLength        = 64;
         const int DefaultNoteResizeMargin          = 8;
         const int DefaultMinPixelDistForLines      = 5;
         const int DefaultGizmoSize                 = 20;
@@ -92,8 +89,6 @@ namespace FamiStudio
         int dpcmTextPosX;
         int octaveSizeY;
         int virtualSizeY;
-        int scrollBarThickness;
-        int minScrollBarLength;
         int attackIconPosX;
         int scrollMargin;
         int noteResizeMargin;
@@ -166,8 +161,6 @@ namespace FamiStudio
             DragSample,
             DragSeekBar,
             DragWaveVolumeEnvelope,
-            ScrollBarX,
-            ScrollBarY,
             ResizeNoteStart,
             ResizeSelectionNoteStart,
             ResizeNoteEnd,
@@ -211,8 +204,6 @@ namespace FamiStudio
             ThesholdNormal,           // DragSample
             0,                        // DragSeekBar
             0,                        // DragWaveVolumeEnvelope
-            0,                        // ScrollBarX
-            0,                        // ScrollBarY
             ThesholdSmall,            // ResizeNoteStart
             ThesholdSmall,            // ResizeSelectionNoteStart
             ThesholdSmall,            // ResizeNoteEnd
@@ -251,8 +242,6 @@ namespace FamiStudio
             true,              // DragSample
             true,              // DragSeekBar
             false,             // DragWaveVolumeEnvelope
-            false,             // ScrollBarX
-            false,             // ScrollBarY
             true,              // ResizeNoteStart 
             true,              // ResizeSelectionNoteStart
             true,              // ResizeNoteEnd
@@ -280,6 +269,8 @@ namespace FamiStudio
         WaveEditor waveEditor;
         EffectPanel effectPanel;
         NoteArea noteArea;
+        ScrollBar horizontalScrollBar;
+        ScrollBar verticalScrollBar;
 
         int captureNoteAbsoluteIdx = 0;
         int captureMouseAbsoluteIdx = 0;
@@ -526,7 +517,7 @@ namespace FamiStudio
         public int BlackKeySizeY               => blackKeySizeY;
         public int PianoSizeX                  => pianoSizeX;
         public int HeaderAndEffectSizeY        => headerAndEffectSizeY;
-        public int ScrollBarThickness          => scrollBarThickness;
+        public int ScrollBarThickness          => verticalScrollBar?.ScrollBarThickness ?? 0;
         public int ViewScrollX                 => scrollX;
         public int EditChannel                 => editChannel;
         public int SelectionMinX               => selectionMinX;
@@ -794,7 +785,6 @@ namespace FamiStudio
         {
             var videoMode = editMode == EditionMode.VideoRecording;
             var headerScale = editMode == EditionMode.DPCMMapping || editMode == EditionMode.DPCM ? 1 : (editMode == EditionMode.VideoRecording ? 0 : 2);
-            var scrollBarSize = Settings.ScrollBars == 1 ? DefaultScrollBarThickness1 : (Settings.ScrollBars == 2 ? DefaultScrollBarThickness2 : 0);
             var effectIconsScale = Platform.IsMobile ? 0.5f : 1.0f;
 
             minZoom = editMode == EditionMode.Channel && Song != null && Song.UsesFamiStudioTempo ? MinZoomFamiStudio : MinZoomOther;
@@ -826,8 +816,6 @@ namespace FamiStudio
             effectPanelTextPosY       = DpiScaling.ScaleForFont(DefaultEffectPanelTextPosY);
             dpcmTextPosX              = DpiScaling.ScaleForFont(DefaultDPCMTextPosX);
             attackIconPosX            = DpiScaling.ScaleForWindow(DefaultAttackIconPosX);
-            scrollBarThickness        = DpiScaling.ScaleForWindow(scrollBarSize);
-            minScrollBarLength        = DpiScaling.ScaleForWindow(DefaultMinScrollBarLength);
             noteResizeMargin          = DpiScaling.ScaleForWindow(DefaultNoteResizeMargin);
             minPixelDistForLines      = DpiScaling.ScaleForWindow(DefaultMinPixelDistForLines);
 
@@ -897,7 +885,7 @@ namespace FamiStudio
                 UpdateEffectPanelMode();
 
             if (piano != null && timeline != null && envelopeEditor != null && waveEditor != null && effectPanel != null)
-                UpdateChildLayouts();
+                UpdateLayout();
         }
 
         private void UpdateEffectPanelMode()
@@ -1201,6 +1189,9 @@ namespace FamiStudio
             snap = Settings.SnapEnabled;
             snapEffects = Settings.SnapEnabled;
             legacySelectMode = Settings.UseLegacySelectionMode;
+            UpdateScrollBarControls();
+            UpdateRenderCoords();
+            ClampScroll();
             ClearSelection(); // In case selection mode was toggled.
         }
 
@@ -1355,7 +1346,7 @@ namespace FamiStudio
             return x;
         }
 
-        internal int GetPixelXForAbsoluteNoteIndex(float n, bool scroll = true)
+        public int GetPixelXForAbsoluteNoteIndex(float n, bool scroll = true)
         {
             var x = (int)Math.Round(n * noteSizeX);
 
@@ -1525,12 +1516,101 @@ namespace FamiStudio
                 effectBitmapScale = DpiScaling.ScaleForWindowFloat(0.25f);
             }
 
+            UpdateScrollBarControls();
+
             ConditionalUpdateNoteGeometries(g);
-            UpdateChildLayouts();
+            UpdateLayout();
         }
 
-        private void UpdateChildLayouts()
+        private void UpdateScrollBarControls()
         {
+            var wantsScrollBars = Settings.ScrollBars != 0;
+            if (wantsScrollBars)
+            {
+                if (verticalScrollBar == null)
+                {
+                    verticalScrollBar = new ScrollBar();
+                    verticalScrollBar.LineColor = Color.Black;
+                    verticalScrollBar.Scrolled += ScrollBar_Scrolled;
+                    AddControl(verticalScrollBar);
+                }
+
+                if (horizontalScrollBar == null)
+                {
+                    horizontalScrollBar = new ScrollBar(true);
+                    horizontalScrollBar.LineColor = Color.Black;
+                    horizontalScrollBar.Scrolled += ScrollBar_Scrolled;
+                    AddControl(horizontalScrollBar);
+                }
+
+                verticalScrollBar.UpdateThickness();
+                horizontalScrollBar.UpdateThickness();
+            }
+            else
+            {
+                if (verticalScrollBar != null)
+                {
+                    verticalScrollBar.Scrolled -= ScrollBar_Scrolled;
+                    RemoveControl(verticalScrollBar);
+                    verticalScrollBar = null;
+                }
+
+                if (horizontalScrollBar != null)
+                {
+                    horizontalScrollBar.Scrolled -= ScrollBar_Scrolled;
+                    RemoveControl(horizontalScrollBar);
+                    horizontalScrollBar = null;
+                }
+            }
+        }
+
+        private void ScrollBar_Scrolled(Control sender, int pos)
+        {
+            if (sender == verticalScrollBar)
+            {
+                scrollY = pos;
+            }
+            else
+            {
+                scrollX = pos;
+            }
+
+            ScrollChanged?.Invoke();
+            MarkDirty();
+        }
+
+        private void UpdateLayout()
+        {
+            if (ScrollBarThickness > 0)
+            {
+                GetMinMaxScroll(out _, out var minScrollY, out var maxScrollX, out var maxScrollY);
+
+                var videoMode = editMode == EditionMode.VideoRecording;
+
+                // Vertical.
+                verticalScrollBar.Visible = !videoMode && maxScrollY > minScrollY;
+
+                if (verticalScrollBar.Visible)
+                {
+                    var vSize = Height - ScrollBarThickness - headerAndEffectSizeY;
+
+                    verticalScrollBar.Move(Width - ScrollBarThickness, headerAndEffectSizeY);
+                    verticalScrollBar.Resize(ScrollBarThickness, vSize);
+                    verticalScrollBar.VirtualSize = maxScrollY + vSize;
+                    verticalScrollBar.SetScroll(scrollY, false);
+                }
+
+                // Horizontal.
+                horizontalScrollBar.Visible = !videoMode;
+
+                var hSize = Width - pianoSizeX - (verticalScrollBar.Visible ? ScrollBarThickness : 0) - 1;
+
+                horizontalScrollBar.Move(pianoSizeX, Height - ScrollBarThickness);
+                horizontalScrollBar.Resize(hSize, ScrollBarThickness);
+                horizontalScrollBar.VirtualSize = maxScrollX + hSize;
+                horizontalScrollBar.SetScroll(scrollX, false);
+            }
+
             piano.UpdateLayout();
             timeline.UpdateLayout();
             envelopeEditor.UpdateLayout();
@@ -2486,28 +2566,6 @@ namespace FamiStudio
             OnRender(g);
         }
 
-        private void RenderScrollBars(RenderInfo r)
-        {
-            if (Settings.ScrollBars != Settings.ScrollBarsNone && editMode != EditionMode.VideoRecording)
-            {
-                if (GetScrollBarParams(true, out var scrollBarThumbPosX, out var scrollBarThumbSizeX, out var scrollBarSizeX))
-                {
-                    r.c.PushTranslation(pianoSizeX - 1, 0);
-                    r.c.FillAndDrawRectangle(0, Height - scrollBarThickness, scrollBarSizeX, Height, Theme.DarkGreyColor4, Theme.BlackColor);
-                    r.c.FillAndDrawRectangle(scrollBarThumbPosX, Height - scrollBarThickness, scrollBarThumbPosX + scrollBarThumbSizeX, Height, Theme.MediumGreyColor1, Theme.BlackColor);
-                    r.c.PopTransform();
-                }
-
-                if (GetScrollBarParams(false, out var scrollBarThumbPosY, out var scrollBarThumbSizeY, out var scrollBarSizeY))
-                {
-                    r.c.PushTranslation(0, headerAndEffectSizeY - 1);
-                    r.c.FillAndDrawRectangle(Width - scrollBarThickness, 0, Width, scrollBarSizeY, Theme.DarkGreyColor4, Theme.BlackColor);
-                    r.c.FillAndDrawRectangle(Width - scrollBarThickness, scrollBarThumbPosY, Width, scrollBarThumbPosY + scrollBarThumbSizeY, Theme.MediumGreyColor1, Theme.BlackColor);
-                    r.c.PopTransform();
-                }
-            }
-        }
-
         private void RenderDebug(RenderInfo r)
         {
 #if DEBUG
@@ -2661,47 +2719,19 @@ namespace FamiStudio
                 //RenderWaveform(r);
             }
 
-            RenderScrollBars(r);
             RenderDebug(r);
 
             base.OnRender(g);
-        }
 
-        private bool GetScrollBarParams(bool horizontal, out int thumbPos, out int thumbSize, out int scrollSize)
-        {
-            thumbPos   = 0;
-            thumbSize  = 0;
-            scrollSize = 0;
-
-            if (scrollBarThickness > 0)
+            // Render a little square where scroll bars indersect if they're enabled.
+            if (verticalScrollBar?.Visible == true && horizontalScrollBar?.Visible == true)
             {
-                if (horizontal)
-                {
-                    GetMinMaxScroll(out var minScrollX, out _, out var maxScrollX, out _);
+                var c = g.DefaultCommandList;
+                var x = Width - ScrollBarThickness;
+                var y = Height - ScrollBarThickness;
 
-                    if (minScrollX == maxScrollX)
-                        return false;
-
-                    scrollSize = Width - pianoSizeX + 1;
-                    thumbSize = Math.Max(minScrollBarLength, (int)Math.Round(scrollSize * Math.Min(1.0f, scrollSize / (float)(maxScrollX + scrollSize))));
-                    thumbPos  = (int)Math.Round((scrollSize - thumbSize) * (scrollX / (float)maxScrollX));
-                    return true;
-                }
-                else
-                {
-                    GetMinMaxScroll(out _, out var minScrollY, out _, out var maxScrollY);
-
-                    if (minScrollY == maxScrollY)
-                        return false;
-
-                    scrollSize = Height - headerAndEffectSizeY - scrollBarThickness + 1;
-                    thumbSize = Math.Max(minScrollBarLength, (int)Math.Round(scrollSize * Math.Min(1.0f, scrollSize / (float)(maxScrollY + scrollSize))));
-                    thumbPos  = (int)Math.Round((scrollSize - thumbSize) * (scrollY / (float)maxScrollY));
-                    return true;
-                }
+                c.FillRectangle(x, y, Width, Height, Theme.DarkGreyColor4);
             }
-
-            return false;
         }
 
         void ResizeEnvelope(int x, int y, bool final)
@@ -3260,28 +3290,6 @@ namespace FamiStudio
                 highlightNoteAbsIndex = captureNoteAbsoluteIdx;
         }
 
-        private void UpdateScrollBarX(int x, int y)
-        {
-            GetScrollBarParams(true, out _, out var scrollBarThumbSizeX, out var scrollAreaSizeX);
-            GetMinMaxScroll(out _, out _, out var maxScrollX, out _);
-
-            scrollX = (int)Math.Round(captureScrollX + ((x - captureMouseX) / (float)(scrollAreaSizeX - scrollBarThumbSizeX) * maxScrollX));
-
-            ClampScroll();
-            MarkDirty();
-        }
-
-        private void UpdateScrollBarY(int x, int y)
-        {
-            GetScrollBarParams(false, out _, out var scrollBarThumbSizeY, out var scrollAreaSizeY);
-            GetMinMaxScroll(out _, out _, out _, out var maxScrollY);
-
-            scrollY = (int)Math.Round(captureScrollY + ((y - captureMouseY) / (float)(scrollAreaSizeY - scrollBarThumbSizeY) * maxScrollY));
-
-            ClampScroll();
-            MarkDirty();
-        }
-
         private void UpdateCaptureOperation(int x, int y, float scale = 1.0f, bool realTime = false)
         {  
             if (captureOperation != CaptureOperation.None && !captureThresholdMet)
@@ -3365,12 +3373,6 @@ namespace FamiStudio
                         break;
                     case CaptureOperation.ChangeEnvelopeValue:
                         UpdateChangeEnvelopeValue(x, y);
-                        break;
-                    case CaptureOperation.ScrollBarX:
-                        UpdateScrollBarX(x, y);
-                        break;
-                    case CaptureOperation.ScrollBarY:
-                        UpdateScrollBarY(x, y);
                         break;
                     case CaptureOperation.EditEffectSelection:
                         UpdateEditEffectSelection(x, y);
@@ -4686,57 +4688,6 @@ namespace FamiStudio
             return false;
         }
 
-        private bool HandleMouseDownScrollbar(PointerEventArgs e)
-        {
-            if (e.Left && scrollBarThickness > 0 && e.X > pianoSizeX && e.Y > headerAndEffectSizeY)
-            {
-                if (e.Y >= (Height - scrollBarThickness) && GetScrollBarParams(true, out var scrollBarThumbPosX, out var scrollBarThumbSizeX, out _))
-                {
-                    var x = e.X - pianoSizeX;
-                    if (x < scrollBarThumbPosX)
-                    {
-                        scrollX -= (Width - pianoSizeX);
-                        ClampScroll();
-                        MarkDirty();
-                    }
-                    else if (x > (scrollBarThumbPosX + scrollBarThumbSizeX))
-                    {
-                        scrollX += (Width - pianoSizeX);
-                        ClampScroll();
-                        MarkDirty();
-                    }
-                    else if (x >= scrollBarThumbPosX && x <= (scrollBarThumbPosX + scrollBarThumbSizeX))
-                    {
-                        StartCaptureOperation(e.X, e.Y, CaptureOperation.ScrollBarX);
-                    }
-                    return true;
-                }
-                if (e.X >= (Width - scrollBarThickness) && GetScrollBarParams(false, out var scrollBarThumbPosY, out var scrollBarThumbSizeY, out _))
-                {
-                    var y = e.Y - headerAndEffectSizeY;
-                    if (y < scrollBarThumbPosY)
-                    {
-                        scrollY -= (Height - headerAndEffectSizeY);
-                        ClampScroll();
-                        MarkDirty();
-                    }
-                    else if (y > (scrollBarThumbPosY + scrollBarThumbSizeY))
-                    {
-                        scrollX += (Height - headerAndEffectSizeY);
-                        ClampScroll();
-                        MarkDirty();
-                    }
-                    else if (y >= scrollBarThumbPosY && y <= (scrollBarThumbPosY + scrollBarThumbSizeY))
-                    {
-                        StartCaptureOperation(e.X, e.Y, CaptureOperation.ScrollBarY);
-                    }
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         private bool HandleMouseDownEnvelopeEffectPanel(PointerEventArgs e)
         {
             if (e.Left && HasRepeatEnvelope() && IsPointInEffectPanel(e.X, e.Y))
@@ -4880,7 +4831,6 @@ namespace FamiStudio
 
             // General stuff.
             if (HandleMouseDownPan(e)) goto Handled;
-            if (HandleMouseDownScrollbar(e)) goto Handled;
             if (HandleMouseDownAltZoom(e)) goto Handled;
 
             if (editMode == EditionMode.Envelope || editMode == EditionMode.Arpeggio)
@@ -6096,8 +6046,7 @@ namespace FamiStudio
             if (Platform.IsMobile && (editMode == EditionMode.Arpeggio || editMode == EditionMode.Envelope))
                 CenterEnvelopeScroll();
 
-            timeline.UpdateLayout();
-            piano.UpdateLayout();
+            UpdateLayout();
         }
 
         private void GetMinMaxScroll(out int minScrollX, out int minScrollY, out int maxScrollX, out int maxScrollY)
@@ -6106,6 +6055,9 @@ namespace FamiStudio
             minScrollY = 0;
             maxScrollX = 0;
             maxScrollY = Math.Max(virtualSizeY + headerAndEffectSizeY - Height, 0);
+
+            if (Song == null)
+                return;
 
             if (editMode == EditionMode.Channel ||
                 editMode == EditionMode.VideoRecording)
@@ -6135,10 +6087,13 @@ namespace FamiStudio
                 GetMinMaxScroll(out var minScrollX, out var minScrollY, out var maxScrollX, out var maxScrollY);
 
                 if (scrollX < minScrollX) { scrollX = minScrollX; scrolledX = false; }
-                if (scrollX > maxScrollX) { scrollX = maxScrollX; scrolledY = false; }
+                if (scrollX > maxScrollX) { scrollX = maxScrollX; scrolledX = false; }
                 if (scrollY < minScrollY) { scrollY = minScrollY; scrolledY = false; }
                 if (scrollY > maxScrollY) { scrollY = maxScrollY; scrolledY = false; }
             }
+
+            horizontalScrollBar?.SetScroll(scrollX, false);
+            verticalScrollBar?.SetScroll(scrollY, false);
 
             ScrollChanged?.Invoke();
 
@@ -7827,6 +7782,9 @@ namespace FamiStudio
         {
             base.OnContainerPointerMoveNotify(control, e);
 
+            if (control == verticalScrollBar || control == horizontalScrollBar)
+                return;
+
             var p = WindowToControl(control.ControlToWindow(e.Position));
 
             if (control == piano)
@@ -7857,7 +7815,7 @@ namespace FamiStudio
                 DoScroll(e.X - mouseLastX, e.Y - mouseLastY);
 
             SetMouseLastPos(e.X, e.Y);
-            MarkDirty(); // TODO : This is bad.
+            //MarkDirty(); // TODO : This is bad.
 
             App.SequencerShowExpansionIcons = false;
         }

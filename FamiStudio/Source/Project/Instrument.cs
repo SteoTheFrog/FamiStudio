@@ -1001,7 +1001,7 @@ namespace FamiStudio
                             buffer.Serialize(ref fdsModSpeed);
                             buffer.Serialize(ref fdsModDepth);
                             buffer.Serialize(ref fdsModDelay);
-                            // At version 20 (FamiStudio 4.6.0), we added volume holding and a DAC workaround for FDS.
+                            // At version 20 (FamiStudio 4.6.0), we added full range volume, volume holding, and a DAC workaround for FDS.
                             if (buffer.Version >= 20)
                             {
                                 buffer.Serialize(ref fdsFullVolume);

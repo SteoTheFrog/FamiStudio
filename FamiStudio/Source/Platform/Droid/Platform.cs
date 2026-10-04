@@ -20,6 +20,8 @@ namespace FamiStudio
     {
         public delegate void AudioDeviceChangedDelegate();
         public static event AudioDeviceChangedDelegate AudioDeviceChanged;
+
+        private static ClipboardManager ClipboardManager => (ClipboardManager)Application.Context.GetSystemService(Context.ClipboardService);
         
         public static bool IsCommandLine => false;
         public static bool CanExportToVideo => true;
@@ -254,15 +256,35 @@ namespace FamiStudio
 
         public static string GetClipboardString()
         {
-            return "";
+            var cm = ClipboardManager;
+            if (cm == null || !cm.HasPrimaryClip)
+                return "";
+
+            var clip = cm.PrimaryClip;
+            if (clip == null || clip.ItemCount == 0)
+                return "";
+
+            // CoerceToText also handles clips that hold a URI or intent rather than plain text.
+            return clip.GetItemAt(0)?.CoerceToText(Application.Context)?.ToString() ?? "";
         }
 
         public static void SetClipboardString(string s)
         {
+            var cm = ClipboardManager;
+            if (cm != null)
+                cm.PrimaryClip = ClipData.NewPlainText("FamiStudio", s ?? "");
         }
 
         public static void ClearClipboardString()
         {
+            var cm = ClipboardManager;
+            if (cm == null)
+                return;
+
+            if (Build.VERSION.SdkInt >= BuildVersionCodes.P)
+                cm.ClearPrimaryClip();
+            else
+                cm.PrimaryClip = ClipData.NewPlainText("", "");
         }
 
         private static void HackForThaiCalendar()

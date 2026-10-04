@@ -912,7 +912,7 @@ namespace FamiStudio
                             }
                         }
 
-                        if (Platform.IsDesktop && (inst.IsVrc7 || inst.IsEpsm))
+                        if (inst.IsVrc7 || inst.IsEpsm)
                         {
                             menu.Add(new ContextMenuOption("MenuCopy", CopyRegisterValueContext, () => { CopyRegisterValues(inst); }, ContextMenuSeparator.Before));
                             menu.Add(new ContextMenuOption("MenuPaste", PasteRegisterValueContext, () => { PasteRegisterValues(inst); }));

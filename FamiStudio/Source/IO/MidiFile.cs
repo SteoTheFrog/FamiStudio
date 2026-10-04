@@ -618,16 +618,10 @@ namespace FamiStudio
             }
 
             // System exclusive
-            else if (status == 0b11110000)
+            else if (status == 0b11110000 || status == 0b11110111)
             {
-                while (bytes[idx++] != 0b11110111)
-                {
-                    if (idx >= bytes.Length)
-                    {
-                        Log.LogMessage(LogSeverity.Error, $"Unexpected end of file. Aborting.");
-                        return false;
-                    }
-                }
+                idx += ReadVarLen();
+                status = 0;
             }
 
             // Unsupported/unknown.

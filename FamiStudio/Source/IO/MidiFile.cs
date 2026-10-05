@@ -620,7 +620,8 @@ namespace FamiStudio
             // System exclusive
             else if (status == 0b11110000 || status == 0b11110111)
             {
-                idx += ReadVarLen();
+                var len = ReadVarLen();
+                idx += len;
                 status = 0;
             }
 

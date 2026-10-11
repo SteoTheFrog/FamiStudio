@@ -803,6 +803,12 @@ namespace GLFWDotNet
             [UnmanagedFunctionPointer(CallingConvention.Cdecl), SuppressUnmanagedCodeSecurity]
             public delegate IntPtr glfwGetX11Display();
 
+			[UnmanagedFunctionPointer(CallingConvention.Cdecl), SuppressUnmanagedCodeSecurity]
+			public delegate IntPtr glfwGetWaylandWindow(IntPtr window);
+
+            [UnmanagedFunctionPointer(CallingConvention.Cdecl), SuppressUnmanagedCodeSecurity]
+            public delegate IntPtr glfwGetWaylandDisplay();
+
             [UnmanagedFunctionPointer(CallingConvention.Cdecl), SuppressUnmanagedCodeSecurity]
 			public delegate IntPtr glfwGetCocoaWindow(IntPtr window);
 
@@ -1054,7 +1060,11 @@ namespace GLFWDotNet
 
 		private static Delegates.glfwGetX11Window _glfwGetX11Window;
 
-        private static Delegates.glfwGetX11Display _glfwGetX11Display;        
+        private static Delegates.glfwGetX11Display _glfwGetX11Display;
+
+		private static Delegates.glfwGetWaylandWindow _glfwGetWaylandWindow;
+		
+        private static Delegates.glfwGetWaylandDisplay _glfwGetWaylandDisplay;
 
         private static Delegates.glfwGetCocoaWindow _glfwGetCocoaWindow;
 
@@ -1207,8 +1217,18 @@ namespace GLFWDotNet
 			}
 			catch { }
 			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) _glfwGetWin32Window = Marshal.GetDelegateForFunctionPointer<Delegates.glfwGetWin32Window>(getProcAddress("glfwGetWin32Window"));
-			if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) _glfwGetX11Window = Marshal.GetDelegateForFunctionPointer<Delegates.glfwGetX11Window>(getProcAddress("glfwGetX11Window"));
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) _glfwGetX11Display = Marshal.GetDelegateForFunctionPointer<Delegates.glfwGetX11Display>(getProcAddress("glfwGetX11Display"));
+			if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+			{
+				_glfwGetX11Window = Marshal.GetDelegateForFunctionPointer<Delegates.glfwGetX11Window>(getProcAddress("glfwGetX11Window"));
+            	_glfwGetX11Display = Marshal.GetDelegateForFunctionPointer<Delegates.glfwGetX11Display>(getProcAddress("glfwGetX11Display"));
+				try
+				{
+					// Only exists in GLFW 3.4, some linux distro ship with 3.3.
+					_glfwGetWaylandWindow = Marshal.GetDelegateForFunctionPointer<Delegates.glfwGetWaylandWindow>(getProcAddress("glfwGetWaylandWindow"));
+            		_glfwGetWaylandDisplay = Marshal.GetDelegateForFunctionPointer<Delegates.glfwGetWaylandDisplay>(getProcAddress("glfwGetWaylandDisplay"));
+				}
+				catch {}
+			}
             if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) _glfwGetCocoaWindow = Marshal.GetDelegateForFunctionPointer<Delegates.glfwGetCocoaWindow>(getProcAddress("glfwGetCocoaWindow"));
 		}
 
@@ -3800,6 +3820,34 @@ namespace GLFWDotNet
         public static IntPtr glfwGetX11Display()
         {
             return _glfwGetX11Display();
+        }
+
+		/// <summary>
+		/// 
+		/// </summary>
+		/// <remarks>
+		/// 
+		/// </remarks>
+		/// <param name="window">
+		/// 
+		/// </param>
+		public static IntPtr glfwGetWaylandWindow(IntPtr window)
+		{
+			return _glfwGetWaylandWindow(window);
+		}
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <remarks>
+        /// 
+        /// </remarks>
+        /// <param name="window">
+        /// 
+        /// </param>
+        public static IntPtr glfwGetWaylandDisplay()
+        {
+            return _glfwGetWaylandDisplay();
         }
 
         /// <summary>

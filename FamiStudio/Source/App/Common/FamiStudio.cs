@@ -189,7 +189,6 @@ namespace FamiStudio
             Sequencer.PatternModified    += Sequencer_PatternModified;
             Sequencer.SelectionChanged   += Sequencer_SelectionChanged;
             Sequencer.PatternsPasted     += Sequencer_PatternsPasted;
-            Sequencer.ShyChanged         += Sequencer_ShyChanged;
 
             PianoRoll.PatternChanged     += PianoRoll_PatternChanged;
             PianoRoll.ManyPatternChanged += PianoRoll_ManyPatternChanged;
@@ -447,11 +446,6 @@ namespace FamiStudio
         }
 
         private void PianoRoll_MaximizedChanged()
-        {
-            RefreshLayout();
-        }
-
-        private void Sequencer_ShyChanged()
         {
             RefreshLayout();
         }

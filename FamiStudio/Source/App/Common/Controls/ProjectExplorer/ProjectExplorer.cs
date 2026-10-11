@@ -2284,6 +2284,11 @@ namespace FamiStudio
         }
         */
 
+        protected override void OnPointerEnter(EventArgs e)
+        {
+            App.SetToolTip(tooltip);
+        }
+
         protected override void OnPointerLeave(EventArgs e)
         {
             App.SequencerShowExpansionIcons = false;
@@ -2398,6 +2403,14 @@ namespace FamiStudio
             }
         }
 
+        public override void OnContainerPointerEnterNotify(Control control, EventArgs e)
+        {
+            while (control != null && string.IsNullOrEmpty(control.ToolTip))
+                control = control.ParentContainer;
+
+            App.SetToolTip(control?.ToolTip ?? "");
+        }
+
         public override void OnContainerPointerMoveNotify(Control control, PointerEventArgs e)
         {
             var winPos = control.ControlToWindow(e.Position);
@@ -2406,11 +2419,6 @@ namespace FamiStudio
 
             if (ctrl != null)
             {
-                var tooltip = ctrl.ToolTip;
-                if (string.IsNullOrEmpty(tooltip))
-                    tooltip = ctrl.ParentContainer.ToolTip;
-                App.SetToolTip(tooltip);
-
                 if (!Platform.IsMobile)
                 {
                     App.SequencerShowExpansionIcons = (ctrl.UserData is Instrument) || (ctrl.ParentContainer.UserData is Instrument);

@@ -272,12 +272,14 @@ namespace FamiStudio
         protected override void OnPointerEnter(EventArgs e)
         {
             SetAndMarkDirty(ref hover, Platform.IsDesktop);
+            App.SetToolTip(!string.IsNullOrEmpty(tooltip) ? tooltip : "");
         }
 
         protected override void OnPointerLeave(EventArgs e)
         {
             SetAndMarkDirty(ref hover, false);
             SetAndMarkDirty(ref press, false);
+            App.SetToolTip("");
         }
 
         private void UpdateAtlasBitmap()

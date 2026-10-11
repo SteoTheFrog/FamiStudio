@@ -43,7 +43,7 @@ namespace FamiStudio
         public bool MobilePianoVisible { get => false; set => value = false; }
         public Point LastMousePosition => new Point(lastCursorX, lastCursorY);
         public Point LastContextMenuPosition => ScreenToWindow(contextMenuPoint);
-        public IntPtr Handle => glfwGetNativeWindow(window);
+        public IntPtr Handle => glfwGetNativeWindow(window, isWayland);
 
         private Control activeControl = null;
         private Control captureControl = null;
@@ -619,13 +619,17 @@ namespace FamiStudio
 
             if (hover != hoverControl)
             {
-                if (hoverControl != null && (!container.IsContextMenuActive || hoverControl == ContextMenu))
-                    hoverControl.SendPointerLeave(EventArgs.Empty);
+                // We need to ensure child elements of a container know whether the cursor is still inside.
+                for (var c = hoverControl; c != null; c = c.ParentContainer)
+                {
+                    if (c == hover || (c is Container cont && hover != null && hover.IsInContainer(cont)))
+                        break;
+
+                    c.SendPointerLeave(EventArgs.Empty);
+                }
 
                 hoverControl = hover;
-                
-                if (hoverControl != null && (!container.IsContextMenuActive || hoverControl == ContextMenu))
-                    hoverControl.SendPointerEnter(EventArgs.Empty);
+                hoverControl?.SendPointerEnter(EventArgs.Empty);
             }
         }
 

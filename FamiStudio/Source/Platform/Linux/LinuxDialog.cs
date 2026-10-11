@@ -39,7 +39,6 @@ namespace FamiStudio
 
         private static LinuxDialog dlgInstance;
         private static readonly DialogBackend dialogBackend = DialogBackend.None;
-        private static readonly string desktopEnvironment;
         private static readonly string xdgSessionType;
         private static readonly string gdkBackend;
         private static readonly bool isDisplayAvailable;
@@ -49,14 +48,16 @@ namespace FamiStudio
         private static readonly bool isRunningInFlatpak;
         private static readonly IntPtr x11DisplayHandle;
 
+        private static bool isWaylandTransient;
+
         public static bool IsDialogOpen => dlgInstance != null && dialogBackend != DialogBackend.None;
 
         static LinuxDialog()
         {
             isDisplayAvailable = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(DisplayEnvVar));
             isRunningInFlatpak = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(FlatpakIdEnvVar));
-            desktopEnvironment = Environment.GetEnvironmentVariable(XdgCurrentDesktopEnvVar);
             xdgSessionType     = Environment.GetEnvironmentVariable(XdgSessionTypeEnvVar);
+            gdkBackend         = Environment.GetEnvironmentVariable(GdkBackendEnvVar);
 
             isX11     = xdgSessionType?.ToLowerInvariant() == "x11";
             isWayland = !isX11;
@@ -73,7 +74,6 @@ namespace FamiStudio
             // NOTE: GDK_BACKEND must NOT be set to x11 when using Wayland, and vice versa. This will cause 
             // instability, such as intermittent crashing while initializing GTK or the first dialog.
             // We can workaround by skipping GTK if the backend doesn't match the session type.
-            gdkBackend = Environment.GetEnvironmentVariable(GdkBackendEnvVar);
             isGdkValid = gdkBackend == null || string.Equals(gdkBackend, xdgSessionType);
 
             if (isGdkValid && TryInitializeGtk())
@@ -121,7 +121,7 @@ namespace FamiStudio
         private string flatpakPath;
         private bool dialogMulti;
 
-        // Wayland GTK workarounds.
+        // GTK workarounds (when transient is not supported).
         private bool hasPresented;
         private bool shouldKeepAbove = true;
 
@@ -213,6 +213,9 @@ namespace FamiStudio
         [DllImport(GtkDllName, EntryPoint = "gtk_widget_get_window", CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr GtkWidgetGetWindow(IntPtr widget);
 
+        [DllImport(GtkDllName, EntryPoint = "gtk_widget_realize", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void GtkWidgetRealize(IntPtr widget);
+
         [DllImport(GtkDllName, EntryPoint = "gtk_window_is_active", CallingConvention = CallingConvention.Cdecl)]
         private static extern bool GtkWindowIsActive(IntPtr window);
 
@@ -293,6 +296,12 @@ namespace FamiStudio
 
         [DllImport(GdkDllName, EntryPoint = "gdk_x11_window_get_xid", CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr GdkX11WindowGetXid(IntPtr gdkWindow);
+
+        [DllImport(GdkDllName, EntryPoint = "gdk_wayland_window_set_transient_for_exported", CallingConvention = CallingConvention.Cdecl)]
+        private static extern bool GdkWaylandWindowSetTransientForExported(IntPtr gdkWindow, string parentHandleStr);
+
+        [DllImport(GdkDllName, EntryPoint = "gdk_wayland_surface_get_wl_surface", CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr GdkWaylandSurfaceGetWlSurface(IntPtr gdkWindow);
 
         [DllImport(GdkDllName, EntryPoint = "gdk_pixbuf_new_from_data", CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr GdkPixbufNewFromData(
@@ -408,6 +417,12 @@ namespace FamiStudio
             GtkButtonSetAlwaysShowImage(button, true);
         }
 
+        private void ShowErrorMessage()
+        {
+            var dlg = new MessageDialog(FamiStudioWindow.Instance, DialogErrorMessage, DialogErrorTitle, MessageBoxButtons.OK);
+            dlg.ShowDialog();
+        }
+
         private unsafe IntPtr CreateGtkWindowIcon()
         {
             var tga = TgaFile.LoadFromResource("FamiStudio.Resources.Icons.FamiStudio_32.tga");
@@ -473,13 +488,13 @@ namespace FamiStudio
             }
         }
 
-        private void SimulateTransientBehaviourWayland(IntPtr dialog)
+        private void TrySimulateTransientBehaviour(IntPtr dialog)
         {
             var isFsActive  = FamiStudioWindow.Instance.IsWindowInFocus;
             var isGtkActive = GtkWindowIsActive(dialog);
 
-            var shouldPresent  = isFsActive && !hasPresented;
-            var isActive       = isFsActive || isGtkActive;
+            var shouldPresent = isFsActive && !hasPresented;
+            var isActive      = isFsActive || isGtkActive;
 
             if (shouldPresent)
             {
@@ -503,90 +518,88 @@ namespace FamiStudio
 
         private string[] ShowFileDialog()
         {
-            if (!isDisplayAvailable)
-                return null;
-
-            string[] response = null;
-
-            // If we're using flatpak and are within the sandboxed "/app" path, the
-            // external process can't see it. We use the real system path to it instead.
-            // NOTE: GTK can see the real "/app" path and doesn't need this.
-            if (dialogBackend != DialogBackend.None)
+            if (isDisplayAvailable)
             {
-                // Loop until a valid response is provided. The loop will exit once
-                // the response is a valid path or null. Otherwise, the dialog is
-                // presented again.
-                while (true)
+                string[] response = null;
+
+                // If we're using flatpak and are within the sandboxed "/app" path, the
+                // external process can't see it. We use the real system path to it instead.
+                // NOTE: GTK can see the real "/app" path and doesn't need this.
+                if (dialogBackend != DialogBackend.None)
                 {
-                    switch (dialogBackend)
+                    // Loop until a valid response is provided. The loop will exit once
+                    // the response is a valid path or null. Otherwise, the dialog is
+                    // presented again.
+                    while (true)
                     {
-                        case DialogBackend.GTK:
-                            response = ShowGtkFileDialog();
-                            break;
-
-                        case DialogBackend.Kdialog:
-                            ConditionalSetFlatpakPaths();
-                            response = ShowKdialogFileDialog();
-                            break;
-
-                        case DialogBackend.Zenity:
-                            ConditionalSetFlatpakPaths();
-                            response = ShowZenityFileDialog();
-                            break;
-                    }
-
-                    if (response != null)
-                    {
-                        // Replace backslashes with forward slashes (Linux path separators).
-                        // I can't see why anyone would intentionally put "\" in the filename.
-                        for (int i = 0; i < response.Length; i++)
+                        switch (dialogBackend)
                         {
-                            response[i] = response[i].Replace('\\', Path.DirectorySeparatorChar);
+                            case DialogBackend.GTK:
+                                response = ShowGtkFileDialog();
+                                break;
+
+                            case DialogBackend.Kdialog:
+                                ConditionalSetFlatpakPaths();
+                                response = ShowKdialogFileDialog();
+                                break;
+
+                            case DialogBackend.Zenity:
+                                ConditionalSetFlatpakPaths();
+                                response = ShowZenityFileDialog();
+                                break;
                         }
 
-                        var responseDir = Path.GetDirectoryName(response[0]);
-
-                        // Safety: Ensure the path exists to prevent a possible crash. This
-                        // likely only applies to saving, but it's better to be safe.
-                        if (Path.Exists(responseDir))
+                        if (response != null)
                         {
-                            // Set the last known valid path. We can only read this after the
-                            // dialog exits, due to it being an external process.
-                            dialogPath = responseDir;
-
-                            // When saving, we need to ensure the path has write access.
-                            if (dialogMode == DialogMode.Save)
+                            // Replace backslashes with forward slashes (Linux path separators).
+                            // I can't see why anyone would intentionally put "\" in the filename.
+                            for (int i = 0; i < response.Length; i++)
                             {
-                                try
-                                {
-                                    // HACK: Create dummy file at target path to test write access.
-                                    using (FileStream fs = File.Create(response[0], 0, FileOptions.DeleteOnClose)) {}
+                                response[i] = response[i].Replace('\\', Path.DirectorySeparatorChar);
+                            }
 
+                            var responseDir = Path.GetDirectoryName(response[0]);
+
+                            // Safety: Ensure the path exists to prevent a possible crash. This
+                            // likely only applies to saving, but it's better to be safe.
+                            if (Path.Exists(responseDir))
+                            {
+                                // Set the last known valid path. We can only read this after the
+                                // dialog exits, due to it being an external process.
+                                dialogPath = responseDir;
+
+                                // When saving, we need to ensure the path has write access.
+                                if (dialogMode == DialogMode.Save)
+                                {
+                                    try
+                                    {
+                                        // HACK: Create dummy file at target path to test write access.
+                                        using (FileStream fs = File.Create(response[0], 0, FileOptions.DeleteOnClose)) {}
+
+                                        return response;
+                                    }
+                                    catch {}
+                                }
+                                else
+                                {
                                     return response;
                                 }
-                                catch {}
                             }
-                            else
-                            {
-                                return response;
-                            }
+
+                            response = null;
+                        }
+                        else
+                        {
+                            return null;
                         }
 
-                        response = null;
+                        // If response is invalid, represent the dialog (loop continues).
+                        Platform.Beep();
                     }
-                    else
-                    {
-                        return null;
-                    }
-
-                    // If response is invalid, represent the dialog (loop continues).
-                    Platform.Beep();
                 }
             }
 
-            var dlg = new MessageDialog(FamiStudioWindow.Instance, DialogErrorMessage, DialogErrorTitle, MessageBoxButtons.OK);
-            dlg.ShowDialog();
-
+            ShowErrorMessage();
             return null;
         }
 
@@ -683,9 +696,7 @@ namespace FamiStudio
             switch (dialogMode)
             {
                 case DialogMode.Open:
-                    args += dialogMulti
-                        ? $"--getopenfilename \"{dialogPath}\" \"{filters}\" --multiple --separate-output"
-                        : $"--getopenfilename \"{dialogPath}\" \"{filters}\"";
+                    args += $"--getopenfilename \"{dialogPath}\" \"{filters}{(dialogMulti ? " --multiple --separate-output" : "")}\"";
                     break;
 
                 case DialogMode.Save:
@@ -698,12 +709,7 @@ namespace FamiStudio
             }
 
             var result = ShowDialog("kdialog", args);
-
-            if (result.paths.Length == 0)
-                return null;
-
-            //dialogPath = dialogMode == DialogMode.Folder ? result.paths[0] : Path.GetDirectoryName(result.paths[0]);
-            return result.paths;
+            return result.paths.Length > 0 ? result.paths : null;
         }
 
         private string[] ShowZenityFileDialog()
@@ -737,29 +743,22 @@ namespace FamiStudio
             }
 
             var result = ShowDialog("zenity", args);
-
-            if (result.paths.Length == 0)
-                return null;
-
-            //dialogPath = dialogMode == DialogMode.Folder ? result.paths[0] : Path.GetDirectoryName(result.paths[0]);
-            return result.paths;
+            return result.paths.Length > 0 ? result.paths : null;
         }
 
         private DialogResult ShowMessageBoxDialog()
         {
-            if (!isDisplayAvailable)
-                return DialogResult.None;
-
-            switch (dialogBackend)
+            if (isDisplayAvailable)
             {
-                case DialogBackend.GTK:     return ShowGtkMessageBoxDialog();
-                case DialogBackend.Kdialog: return ShowKdialogMessageBoxDialog();
-                case DialogBackend.Zenity:  return ShowZenityMessageBoxDialog();
+                switch (dialogBackend)
+                {
+                    case DialogBackend.GTK:     return ShowGtkMessageBoxDialog();
+                    case DialogBackend.Kdialog: return ShowKdialogMessageBoxDialog();
+                    case DialogBackend.Zenity:  return ShowZenityMessageBoxDialog();
+                }
             }
 
-            var dlg = new MessageDialog(FamiStudioWindow.Instance, DialogErrorMessage, DialogErrorTitle, MessageBoxButtons.OK);
-            dlg.ShowDialog();
-
+            ShowErrorMessage();
             return DialogResult.None;
         }
 
@@ -884,10 +883,22 @@ namespace FamiStudio
             if (icon != IntPtr.Zero)
                 GtkWindowSetIcon(dialog, icon);
 
+            // Make dialog transient on Wayland. This is a bit more work than X11.
+            // It requires getting the window handle and it may only work on certain
+            // environments. Idea is to use it non-transient when it doesn't work.
+            if (isGdkValid && isWayland)
+            {
+                GtkWidgetRealize(dialog);
+
+                var h = WaylandForeign.Export(glfwGetWaylandDisplay(), FamiStudioWindow.Instance.Handle);
+                if (h != null)
+                    isWaylandTransient = GdkWaylandWindowSetTransientForExported(GtkWidgetGetWindow(dialog), h);
+            }
+
             GtkWidgetShowAll(dialog);
 
-            // X11 can be truly modal / transient.
-            if (isX11 && isGdkValid)
+            // X11 needs to set transient AFTER the dialog is created.
+            if (isGdkValid && isX11)
             {
                 IntPtr gtkX11Window = GdkX11WindowGetXid(GtkWidgetGetWindow(dialog));
 
@@ -946,11 +957,9 @@ namespace FamiStudio
 
                 FamiStudioWindow.Instance.RunEventLoop(true);
 
-                // Wayland can't be truly modal like X11, but we can "simulate" it in most environments.
-                if (isWayland || gdkBackend != xdgSessionType)
-                {
-                    SimulateTransientBehaviourWayland(dialog);
-                }
+                // Attempt to simulate transient behaviour if it isn't supported.
+                if ((isWayland && !isWaylandTransient) || !isGdkValid)
+                    TrySimulateTransientBehaviour(dialog);
             }
 
             callbackHandle.Free();
@@ -994,6 +1003,9 @@ namespace FamiStudio
                     GtkMainIteration();
             }
 
+            if (isWayland && isWaylandTransient)
+                WaylandForeign.Unexport();
+
             if (icon != IntPtr.Zero)
             {
                 GObjectUnref(icon);
@@ -1029,6 +1041,166 @@ namespace FamiStudio
             ConditionalRestoreFlatpakPaths(results);
             
             return (results, process.ExitCode);
+        }
+    }
+
+    public static unsafe class WaylandForeign
+    {
+        const string Lib = "libwayland-client.so.0";
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct WlMessage { public IntPtr name, signature, types; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct WlInterface { public IntPtr name; public int version, methodCount; public IntPtr methods; public int eventCount; public IntPtr events; }
+
+        [StructLayout(LayoutKind.Explicit)]
+        struct WlArgument
+        {
+            [FieldOffset(0)] public int i;
+            [FieldOffset(0)] public uint u;
+            [FieldOffset(0)] public IntPtr o;
+            [FieldOffset(0)] public IntPtr s;
+        }
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern IntPtr wl_display_create_queue(IntPtr display);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern int    wl_display_roundtrip_queue(IntPtr display, IntPtr queue);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern IntPtr wl_proxy_create_wrapper(IntPtr proxy);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern void   wl_proxy_wrapper_destroy(IntPtr wrapper);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern void   wl_proxy_set_queue(IntPtr proxy, IntPtr queue);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern int    wl_proxy_add_listener(IntPtr proxy, IntPtr impl, IntPtr data);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern void   wl_proxy_destroy(IntPtr proxy);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern void   wl_proxy_marshal_array(IntPtr proxy, uint opcode, WlArgument* args);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern IntPtr wl_proxy_marshal_array_constructor_versioned(IntPtr proxy, uint opcode, WlArgument* args, IntPtr iface, uint version);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void GlobalFn(IntPtr data, IntPtr registry, uint name, IntPtr iface, uint version);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void GlobalRemoveFn(IntPtr data, IntPtr registry, uint name);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void HandleFn(IntPtr data, IntPtr exported, IntPtr handle);
+
+        private static GlobalFn onGlobal;
+        private static GlobalRemoveFn onGlobalRemove;
+        private static HandleFn onHandle;
+
+        private static IntPtr exporterIface, exportedIface, surfaceIface, registryIface;
+        private static IntPtr queue, exporter, exported;
+        private static string handle;
+        private static bool initialized;
+
+        static IntPtr Str(string s) => Marshal.StringToCoTaskMemUTF8(s);
+
+        static IntPtr Messages(params (string name, string sig, IntPtr[] types)[] msgs)
+        {
+            var p = (WlMessage*)Marshal.AllocHGlobal(sizeof(WlMessage) * Math.Max(1, msgs.Length));
+            for (int i = 0; i < msgs.Length; i++)
+            {
+                var t = Marshal.AllocHGlobal(IntPtr.Size * Math.Max(1, msgs[i].types.Length));
+                Marshal.Copy(msgs[i].types, 0, t, msgs[i].types.Length);
+                p[i] = new WlMessage { name = Str(msgs[i].name), signature = Str(msgs[i].sig), types = t };
+            }
+            return (IntPtr)p;
+        }
+
+        static IntPtr MakeInterface(string name, int version, IntPtr methods, int nMethods, IntPtr events, int nEvents)
+        {
+            var p = (WlInterface*)Marshal.AllocHGlobal(sizeof(WlInterface));
+            *p = new WlInterface { name = Str(name), version = version, methodCount = nMethods, methods = methods, eventCount = nEvents, events = events };
+            return (IntPtr)p;
+        }
+
+        static void Init()
+        {
+            if (initialized) return;
+            var lib = NativeLibrary.Load(Lib);
+            registryIface = NativeLibrary.GetExport(lib, "wl_registry_interface");
+            surfaceIface  = NativeLibrary.GetExport(lib, "wl_surface_interface");
+
+            // zxdg_exported_v2: request destroy(), event handle(string)
+            exportedIface = MakeInterface("zxdg_exported_v2", 1, Messages(("destroy", "", new IntPtr[0])), 1,  Messages(("handle", "s", new[] { IntPtr.Zero })), 1);
+            // zxdg_exporter_v2: request destroy(), export_toplevel(new_id exported, object surface)
+            exporterIface = MakeInterface("zxdg_exporter_v2", 1, Messages(("destroy", "", new IntPtr[0]), ("export_toplevel", "no", new[] { exportedIface, surfaceIface })), 2, IntPtr.Zero, 0);
+
+            initialized = true;
+        }
+
+        static IntPtr MakeListener(params Delegate[] fns)
+        {
+            var mem = Marshal.AllocHGlobal(IntPtr.Size * fns.Length);
+            for (int i = 0; i < fns.Length; i++)
+                Marshal.WriteIntPtr(mem, i * IntPtr.Size, Marshal.GetFunctionPointerForDelegate(fns[i]));
+            return mem;
+        }
+
+        public static string Export(IntPtr display, IntPtr surface)
+        {
+            if (display == IntPtr.Zero || surface == IntPtr.Zero)
+                return null;
+            if (exported != IntPtr.Zero)
+                return handle;
+
+            try
+            {
+                Init();
+
+                if (queue == IntPtr.Zero)
+                    queue = wl_display_create_queue(display);
+
+                if (exporter == IntPtr.Zero)
+                {
+                    var wrapper = wl_proxy_create_wrapper(display);
+                    wl_proxy_set_queue(wrapper, queue);
+
+                    var args = stackalloc WlArgument[1];
+                    args[0].o = IntPtr.Zero; // new_id placeholder.
+                    // wl_display.get_registry is opcode 1.
+                    var registry = wl_proxy_marshal_array_constructor_versioned(wrapper, 1, args, registryIface, 1);
+                    wl_proxy_wrapper_destroy(wrapper);
+
+                    onGlobal = (d, reg, name, iface, ver) =>
+                    {
+                        if (Marshal.PtrToStringUTF8(iface) != "zxdg_exporter_v2") return;
+                        var a = stackalloc WlArgument[4];
+                        a[0].u = name;
+                        a[1].o = iface;
+                        a[2].u = 1;
+                        a[3].o = IntPtr.Zero;
+                        // wl_registry.bind is opcode 0.
+                        exporter = wl_proxy_marshal_array_constructor_versioned(reg, 0, a, exporterIface, 1);
+                    };
+                    onGlobalRemove = (d, reg, name) => { };
+                    wl_proxy_add_listener(registry, MakeListener(onGlobal, onGlobalRemove), IntPtr.Zero);
+
+                    wl_display_roundtrip_queue(display, queue);
+                    if (exporter == IntPtr.Zero)
+                        return null; // Compositor has no xdg-foreign. Transient will not work.
+                }
+                
+                var ea = stackalloc WlArgument[2];
+                ea[0].o = IntPtr.Zero;
+                ea[1].o = surface;
+                // zxdg_exporter_v2.export_toplevel is opcode 1.
+                exported = wl_proxy_marshal_array_constructor_versioned(exporter, 1, ea, exportedIface, 1);
+
+                handle = null;
+                onHandle = (d, e, h) => handle = Marshal.PtrToStringUTF8(h);
+                wl_proxy_add_listener(exported, MakeListener(onHandle), IntPtr.Zero);
+
+                wl_display_roundtrip_queue(display, queue);
+                return handle;
+            }
+            catch (Exception ex) when (ex is DllNotFoundException || ex is EntryPointNotFoundException)
+            {
+                return null;
+            }
+        }
+
+        public static void Unexport()
+        {
+            if (exported == IntPtr.Zero) return;
+            var a = stackalloc WlArgument[1];
+            wl_proxy_marshal_array(exported, 0, a); // Destroy request.
+            wl_proxy_destroy(exported);
+            exported = IntPtr.Zero;
+            handle = null;
         }
     }
 }

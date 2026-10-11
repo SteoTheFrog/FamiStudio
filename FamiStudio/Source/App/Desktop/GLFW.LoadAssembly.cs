@@ -77,7 +77,7 @@ namespace GLFWDotNet
             throw new NotImplementedException("Unsupported platform.");
         }
 
-        public static IntPtr glfwGetNativeWindow(IntPtr window)
+        public static IntPtr glfwGetNativeWindow(IntPtr window, bool wayland = false)
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
@@ -85,7 +85,7 @@ namespace GLFWDotNet
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
-                return glfwGetX11Window(window);
+                return wayland ? glfwGetWaylandWindow(window) : glfwGetX11Window(window);
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {

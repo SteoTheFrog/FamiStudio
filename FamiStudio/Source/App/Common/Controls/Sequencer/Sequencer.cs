@@ -17,11 +17,6 @@ namespace FamiStudio
         const int DefaultHeaderSizeY         = 17;
         const int DefaultPatternHeaderSizeY  = 13;
         const int DefaultBarTextPosY         = 2;
-        const int DefaultChannelIconPosX     = 2;
-        const int DefaultChannelIconPosY     = 3;
-        const int DefaultChannelNamePosX     = 21;
-        const int DefaultGhostNoteOffsetX    = 16;
-        const int DefaultGhostNoteOffsetY    = Platform.IsMobile ? 16 : 15;
         const int DefaultPatternNamePosX     = 2;
         const int DefaultHeaderIconPosX      = 3;
         const int DefaultHeaderIconPosY      = 3;
@@ -43,8 +38,6 @@ namespace FamiStudio
         int channelIconPosX;   
         int channelIconPosY;   
         int channelNamePosX;   
-        int ghostNoteOffsetX;
-        int ghostNoteOffsetY;
         int patternNamePosX;
         int headerIconPosX;
         int headerIconPosY;
@@ -105,15 +98,10 @@ namespace FamiStudio
         Color selectedPatternInvisibleColor = Color.FromArgb(16, Theme.LightGreyColor1);
 
         float[] seekGeometry;
-        TextureAtlasRef[] bmpExpansions;
-        TextureAtlasRef[] bmpChannels;
-        TextureAtlasRef bmpForceDisplay;
         TextureAtlasRef bmpLoopPoint;
         TextureAtlasRef bmpInstantiate;
         TextureAtlasRef bmpDuplicate;
         TextureAtlasRef bmpDuplicateMove;
-        TextureAtlasRef bmpShyOn;
-        TextureAtlasRef bmpShyOff;
         // TextureAtlasRef bmpMenuInstance;
 
         enum CaptureOperation
@@ -158,6 +146,8 @@ namespace FamiStudio
             false, // MobilePan,
         };
 
+        private ChannelNames channelNames;
+
         public delegate void PatternClickedDelegate(int channelIdx, int patternIdx, bool setActive);
         public delegate void ChannelDelegate(int channelIdx);
         public delegate void EmptyDelegate();
@@ -167,6 +157,20 @@ namespace FamiStudio
         public event EmptyDelegate PatternsPasted;
         public event EmptyDelegate SelectionChanged;
         public event EmptyDelegate ShyChanged;
+
+        public int ChannelIconPosX  => channelIconPosX;
+        public int ChannelIconPosY  => channelIconPosY;
+        public int ChannelNamePosX  => channelNamePosX;
+        public int ChannelNameSizeX => channelNameSizeX;
+        public int ChannelSizeY     => channelSizeY;
+        public int HeaderSizeY      => headerSizeY;
+        public int HoverRow         => hoverRow;
+
+        public float ChannelBitmapScale => channelBitmapScale;
+
+        public bool[] ChannelVisible => channelVisible;
+        public int[] ChannelToRow => channelToRow;
+        public int[] RowToChannel => rowToChannel;
 
         #region Localization
 
@@ -180,14 +184,8 @@ namespace FamiStudio
         LocalizedString MoreOptionsTooltip;
         LocalizedString MovePatternTooltip;
         LocalizedString ClonePatternTooltip;
-        LocalizedString ShyModeTooltip;
         LocalizedString SeekTooptip;
         LocalizedString SelectColumnTooltip;
-        LocalizedString MuteChannelTooltip;
-        LocalizedString SoloChannelTooltip;
-        LocalizedString ForceDisplayTooltip;
-        LocalizedString ForceDisplayAllChannelsTooltip;
-        LocalizedString MakeActiveTooltip;
 
         // Context menus
         LocalizedString ToggleMuteLabel;
@@ -265,18 +263,12 @@ namespace FamiStudio
             var scrollBarSize  = Settings.ScrollBars == 1 ? DefaultScrollBarThickness1 : (Settings.ScrollBars == 2 ? DefaultScrollBarThickness2 : 0);
             var patternZoom    = Song != null ? 128.0f / (float)Utils.NextPowerOfTwo(Song.PatternLength) : 1.0f;
 
-            RebuildChannelMap();
             ComputeDesiredSizeY(out var unscaledChannelSizeY, out allowVerticalScrolling);
 
             channelNameSizeX   = DpiScaling.ScaleForWindow(DefaultChannelNameSizeX);
             headerSizeY        = DpiScaling.ScaleForWindow(DefaultHeaderSizeY);
             channelSizeY       = DpiScaling.ScaleForWindow(unscaledChannelSizeY);
             barTextPosY        = DpiScaling.ScaleForWindow(DefaultBarTextPosY);
-            channelIconPosX    = DpiScaling.ScaleForWindow(DefaultChannelIconPosX);
-            channelIconPosY    = DpiScaling.ScaleForWindow(DefaultChannelIconPosY);
-            channelNamePosX    = DpiScaling.ScaleForWindow(DefaultChannelNamePosX);
-            ghostNoteOffsetX   = DpiScaling.ScaleForWindow(DefaultGhostNoteOffsetX);
-            ghostNoteOffsetY   = DpiScaling.ScaleForWindow(DefaultGhostNoteOffsetY);
             patternNamePosX    = DpiScaling.ScaleForWindow(DefaultPatternNamePosX);
             headerIconPosX     = DpiScaling.ScaleForWindow(DefaultHeaderIconPosX);
             headerIconPosY     = DpiScaling.ScaleForWindow(DefaultHeaderIconPosY);
@@ -291,6 +283,8 @@ namespace FamiStudio
                 patternHeaderSizeY = DpiScaling.ScaleForFont(DefaultPatternHeaderSizeY - 2);
             else
                 patternHeaderSizeY = DpiScaling.ScaleForFont(DefaultPatternHeaderSizeY);
+
+            RebuildChannelMap();
         }
 
         private int GetPixelForNote(int n, bool scroll = true)
@@ -437,6 +431,9 @@ namespace FamiStudio
                     rowToChannel[i] = i;
                 }
             }
+
+            channelNames?.Resize(channelNameSizeX, height);
+            channelNames?.UpdateLayout();
         }
 
         public void SetHideEmptyChannels(bool hide)
@@ -523,11 +520,13 @@ namespace FamiStudio
         {
             UpdateRenderCoords();
 
+            channelNames = new ChannelNames(this);
+            AddControl(channelNames);
+
+            base.OnAddedToContainer();
+
             var g = ParentWindow.Graphics;
             patternCache = new PatternBitmapCache(g);
-            bmpExpansions = g.GetTextureAtlasRefs(ExpansionType.Icons);
-            bmpChannels = g.GetTextureAtlasRefs(ChannelType.Icons);
-            bmpForceDisplay = g.GetTextureAtlasRef("GhostSmall");
             bmpLoopPoint = g.GetTextureAtlasRef("LoopSmallFill");
             bmpInstantiate = g.GetTextureAtlasRef("Instance");
             bmpDuplicate = g.GetTextureAtlasRef("Duplicate");
@@ -539,8 +538,6 @@ namespace FamiStudio
                 channelBitmapScale = DpiScaling.ScaleForWindowFloat(0.25f);
             }
 
-            bmpShyOn = g.GetTextureAtlasRef("ShyOn");
-            bmpShyOff = g.GetTextureAtlasRef("ShyOff");
             //bmpMenuInstance = g.GetTextureAtlasRef("MenuInstance");
 
             seekGeometry = new float[]
@@ -626,82 +623,6 @@ namespace FamiStudio
                 maxSelRow = -1;
                 return false;
             }
-        }
-
-        protected void RenderChannelNames(Graphics g)
-        {
-            var c = g.DefaultCommandList;
-
-            // Track name background
-            c.FillRectangle(0, 0, channelNameSizeX, height, Theme.DarkGreyColor2);
-            c.DrawLine(channelNameSizeX - 1, 0, channelNameSizeX - 1, height, Theme.BlackColor);
-            c.DrawLine(0, 0, channelNameSizeX, 0, Theme.BlackColor);
-            c.DrawLine(0, height - scrollBarThickness, channelNameSizeX, height - scrollBarThickness, Theme.BlackColor);
-            c.DrawLine(0, height - 1, channelNameSizeX, height - 1, Theme.BlackColor);
-            c.DrawLine(0, headerSizeY, channelNameSizeX, headerSizeY, Theme.BlackColor);
-
-            // Shy
-            c.DrawTextureAtlasCentered(hideEmptyChannels && !forceShyOff ? bmpShyOn : bmpShyOff, GetShyButtonRect(), bitmapScale, hoverShy ? Theme.LightGreyColor1 : Theme.LightGreyColor2);
-
-            // Vertical line seperating with the toolbar
-            if (Platform.IsMobile && IsLandscape)
-                c.DrawLine(0, 0, 0, height, Theme.BlackColor);
-
-            // Scrollable area.
-            c.PushClipRegion(0, headerSizeY + 1, channelNameSizeX, height - scrollBarThickness - headerSizeY - 1);
-            c.FillClipRegion(Theme.DarkGreyColor2);
-            c.DrawLine(channelNameSizeX - 1, 0, channelNameSizeX - 1, height, Theme.BlackColor);
-            c.DrawLine(0, height - 1, channelNameSizeX, height - 1, Theme.BlackColor);
-            c.PushTranslation(0, headerSizeY - scrollY);
-
-            // Horizontal lines seperating patterns.
-            for (int i = 0, y = 0; i <= rowToChannel.Length; i++, y += channelSizeY)
-                c.DrawLine(0, y, channelNameSizeX, y, Theme.BlackColor);
-
-            var showExpIcons = showExpansionIcons && Song.Project.UsesAnyExpansionAudio;
-            var atlas = showExpIcons ? bmpExpansions : bmpChannels;
-            var selectedChannelIndex = App.SelectedChannelIndex;
-            var selectedInstrument   = App.SelectedInstrument;
-
-            for (int i = 0, y = 0; i < Song.Channels.Length; i++)
-            {
-                if (channelVisible[i])
-                {
-                    // Dim unsupported channels if enabled in settings
-                    var dim = Settings.DimUnsupportedChannels && !Song.Channels[i].SupportsInstrument(selectedInstrument, false);
-
-                    // Icon
-                    var isHoverRow = hoverRow == channelToRow[i];
-                    var channel = Song.Channels[i];
-                    var bitmapIndex = showExpIcons ? channel.Expansion : channel.Type;
-                    var iconHoverOpacity = isHoverRow && (hoverIconMask & 1) != 0 ? 192 : 255;
-                    var iconFinalOpacity = Utils.ColorMultiply((App.ChannelMask & (1L << i)) != 0 ? 255 : 50, iconHoverOpacity);
-                    c.DrawTextureAtlas(atlas[bitmapIndex], channelIconPosX, y + channelIconPosY, channelBitmapScale, Theme.LightGreyColor1.Transparent(iconFinalOpacity));
-
-                    // Name
-                    var font = i == selectedChannelIndex ? Fonts.FontMediumBold : Fonts.FontMedium;
-                    var iconHeight = bmpChannels[0].ElementSize.Height * channelBitmapScale;
-                    c.DrawText(Song.Channels[i].LocalizedName, font, channelNamePosX, y + channelIconPosY, Theme.LightGreyColor2.Transparent(dim ? 80 : 255), TextFlags.MiddleLeft, 0, iconHeight);
-
-                    // Force display icon.
-                    var ghostHoverOpacity = isHoverRow && (hoverIconMask & 2) != 0 ? 192 : 255;
-                    var ghostFinalOpacity = Utils.ColorMultiply((App.ForceDisplayChannelMask & (1L << i)) != 0 ? 255 : 50, ghostHoverOpacity);
-                    c.DrawTextureAtlasCentered(bmpForceDisplay, GetRowGhostRect(channelToRow[i]).Offsetted(0, -headerSizeY + scrollY), channelBitmapScale, Theme.LightGreyColor1.Transparent(ghostFinalOpacity));
-
-                    // Hover
-                    if (isHoverRow)
-                        c.FillRectangle(0, y, channelNameSizeX, y + channelSizeY, Theme.MediumGreyColor1.Transparent(dim ? 192 : 255));
-
-                    // Darken unsupported channel backgrounds
-                    if (dim)
-                        c.FillRectangle(0, y, channelNameSizeX, y + channelSizeY, Theme.BlackColor.Transparent(80));
-
-                    y += channelSizeY;
-                }
-            }
-
-            c.PopTransform();
-            c.PopClipRegion();
         }
 
         protected void RenderPatternArea(Graphics g)
@@ -1013,7 +934,9 @@ namespace FamiStudio
             if (height <= 1)
                 return;
 
-            RenderChannelNames(g);
+            //RenderChannelNames(g);
+            base.OnRender(g);
+
             RenderPatternArea(g);
             RenderDebug(g);
         }
@@ -1173,6 +1096,8 @@ namespace FamiStudio
             if (scrollY < minScrollY) { scrollY = minScrollY; scrolledY = false; }
             if (scrollY > maxScrollY) { scrollY = maxScrollY; scrolledY = false; }
 
+            channelNames?.SetScroll(scrollY);
+
             return scrolledX || scrolledY;
         }
 
@@ -1234,25 +1159,24 @@ namespace FamiStudio
                 DpiScaling.ScaleForWindow(16));
         }
 
-        Rectangle GetRowGhostRect(int rowIdx)
+/*         Rectangle GetRowGhostRect(int rowIdx)
         {
             return new Rectangle(
                 channelNameSizeX - ghostNoteOffsetX, 
                 headerSizeY + (rowIdx + 1) * channelSizeY - ghostNoteOffsetY - scrollY - 1,
                 DpiScaling.ScaleForWindow(12),
                 DpiScaling.ScaleForWindow(12));
-        }
+        } */
 
-        Rectangle GetShyButtonRect()
-        {
-            var sx = DpiScaling.ScaleCustom(bmpShyOn.ElementSize.Width, bitmapScale);
-            return new Rectangle(channelNameSizeX - ghostNoteOffsetX, 0, sx, headerSizeY);
-        }
+        //Rectangle GetShyButtonRect()
+        //{
+            //var sx = DpiScaling.ScaleCustom(bmpShyOn.ElementSize.Width, bitmapScale);
+            //return new Rectangle(channelNameSizeX - ghostNoteOffsetX, 0, sx, headerSizeY);
+        //}
 
-        bool IsPointInShyButton(int x, int y)
-        {
-            return GetShyButtonRect().Contains(x, y);
-        }
+        //bool IsPointInShyButton(int x, int y)
+        //            return GetShyButtonRect().Contains(x, y);
+        //}
 
         bool IsPointInHeader(int x, int y)
         {
@@ -1404,33 +1328,6 @@ namespace FamiStudio
             return false;
         }
 
-        private bool HandleMouseDownChannelName(PointerEventArgs e)
-        {
-            if (e.Left && IsMouseInTrackName(e.X, e.Y))
-            { 
-                var chanIdx = GetChannelIndexFromIconPos(e.X, e.Y);
-                if (chanIdx >= 0)
-                {
-                    App.ToggleChannelActive(chanIdx);
-                    return true;
-                }
-
-                chanIdx = GetChannelIndexFromGhostIconPos(e.X, e.Y);
-                if (chanIdx >= 0)
-                {
-                    App.ToggleChannelForceDisplay(chanIdx);
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private bool HandleMouseDownShy(PointerEventArgs e)
-        {
-            return e.Left && HandleTouchClickShy(e.X, e.Y);
-        }
-
         private bool HandleMouseUpChannelName(PointerEventArgs e)
         {
             return e.Right && HandleContextMenuChannelName(e.X, e.Y);
@@ -1575,8 +1472,6 @@ namespace FamiStudio
 
             if (HandleMouseDownPan(e)) goto Handled;
             if (HandleMouseDownScrollbar(e)) goto Handled;
-            if (HandleMouseDownChannelName(e)) goto Handled;
-            if (HandleMouseDownShy(e)) goto Handled;
             if (HandleMouseDownSetLoopPoint(e)) goto Handled;
             if (HandleMouseDownSeekBar(e)) goto Handled;
             if (HandleMouseDownHeaderSelection(e)) goto Handled;
@@ -1625,7 +1520,7 @@ namespace FamiStudio
 
         private bool HandleTouchDownDragSeekBar(int x, int y)
         {
-            if (IsPointInHeader(x, y) && !IsPointInShyButton(x, y))
+            if (IsPointInHeader(x, y)) //&& !IsPointInShyButton(x, y))
             {
                 var seekX = GetPixelForNote(App.CurrentFrame) + channelNameSizeX;
 
@@ -1689,7 +1584,7 @@ namespace FamiStudio
             return false;
         }
 
-        private bool HandleTouchClickChannelChange(int x, int y)
+/*         private bool HandleTouchClickChannelChange(int x, int y)
         {
             if (IsPointInChannelArea(x, y))
             {
@@ -1698,7 +1593,7 @@ namespace FamiStudio
             }
 
             return false;
-        }
+        } */
 
         private bool HandleTouchClickPatternHeader(int x, int y)
         {
@@ -1740,54 +1635,6 @@ namespace FamiStudio
                 SetSelection(location, location);
 
                 return true;
-            }
-
-            return false;
-        }
-
-        private bool HandleTouchClickShy(int x, int y)
-        {
-            if (IsPointInShyButton(x, y))
-            {
-                SetHideEmptyChannels(!hideEmptyChannels);
-                ShyChanged?.Invoke();
-                return true;
-            }
-
-            return false;
-        }
-
-        private bool HandleTouchClickChannelName(int x, int y, bool doubleClick = false)
-        {
-            if (IsMouseInTrackName(x, y))
-            {
-                var chanIdx = GetChannelIndexFromIconPos(x, y);
-                if (chanIdx >= 0)
-                {
-                    if (doubleClick)
-                    {
-                        App.ToggleChannelSolo(chanIdx, true);
-                    }
-                    else
-                    {
-                        App.ToggleChannelActive(chanIdx);
-                    }
-                    return true;
-                }
-
-                chanIdx = GetChannelIndexFromGhostIconPos(x, y);
-                if (chanIdx >= 0)
-                {
-                    if (doubleClick) 
-                    { 
-                        App.ToggleChannelForceDisplayAll(chanIdx, true);
-                    }
-                    else
-                    {
-                        App.ToggleChannelForceDisplay(chanIdx);
-                    }
-                    return true;
-                }
             }
 
             return false;
@@ -2105,9 +1952,7 @@ namespace FamiStudio
             var x = e.X;
             var y = e.Y;
 
-            if (HandleTouchClickShy(x, y)) goto Handled;
-            if (HandleTouchClickChannelName(x, y)) goto Handled;
-            if (HandleTouchClickChannelChange(x, y)) goto Handled;
+            //if (HandleTouchClickChannelChange(x, y)) goto Handled;
             if (HandleTouchClickPatternHeader(x, y)) goto Handled;
             if (HandleTouchClickPatternArea(x, y)) goto Handled;
 
@@ -2131,8 +1976,6 @@ namespace FamiStudio
             }
 
             if (HandleTouchDoubleClickPatternArea(x, y)) goto Handled;
-            if (HandleTouchClickShy(x, y)) goto Handled;
-            if (HandleTouchClickChannelName(x, y, true)) goto Handled;
 
             return;
 
@@ -2942,17 +2785,6 @@ namespace FamiStudio
             return -1;
         }
 
-        private int GetChannelIndexFromGhostIconPos(int x, int y)
-        {
-            for (int i = 0; i < rowToChannel.Length; i++)
-            {
-                if (GetRowGhostRect(i).Contains(x, y))
-                    return rowToChannel[i];
-            }
-
-            return -1;
-        }
-
         private void UpdateToolTip(PointerEventArgs e)
         {
             if (e == null)
@@ -3003,36 +2835,9 @@ namespace FamiStudio
                     tooltip = string.Join(" - ", tooltipList);
                 }
             }
-            else if (IsPointInShyButton(e.X, e.Y))
-            {
-                tooltip = $"<MouseLeft> {ShyModeTooltip}";
-            }
             else if (IsMouseInHeader(e))
             {
                 tooltip = $"<MouseLeft> {SeekTooptip} - <MouseRight> {MoreOptionsTooltip} - <MouseRight><Drag> {SelectColumnTooltip}\n<L><MouseLeft> {SetLoopPointTooltip} - <MouseWheel><Drag> {PanTooltip}";
-            }
-            else if (IsMouseInTrackName(e.X, e.Y))
-            {
-                if (GetChannelIndexFromIconPos(e.X, e.Y) >= 0)
-                {
-                    tooltip = $"<MouseLeft> {MuteChannelTooltip} - <MouseLeft><MouseLeft> {SoloChannelTooltip}";
-                }
-                else if (GetChannelIndexFromGhostIconPos(e.X, e.Y) >= 0)
-                {
-                    tooltip = $"<MouseLeft> {ForceDisplayTooltip}\n<MouseLeft><MouseLeft> {ForceDisplayAllChannelsTooltip}";
-                    int idx = GetChannelIndexForCoord(e.Y);
-                    if (idx >= 0 && idx < Settings.DisplayChannelShortcuts.Length)
-                        tooltip += $" {Settings.DisplayChannelShortcuts[idx].TooltipString}";
-                }
-                else
-                {
-                    tooltip = $"<MouseLeft> {MakeActiveTooltip}";
-                    int idx = GetChannelIndexForCoord(e.Y);
-                    if (idx >= 0 && idx < Settings.ActiveChannelShortcuts.Length)
-                        tooltip += $" {Settings.ActiveChannelShortcuts[idx].TooltipString}";
-                }
-
-                tooltip += $" - <MouseRight> {MoreOptionsTooltip}";
             }
 
             App.SetToolTip(tooltip);
@@ -3154,15 +2959,8 @@ namespace FamiStudio
             {
                 SetAndMarkDirty(ref hoverRow, e.Y > headerSizeY ? GetRowIndexForCoord(e.Y) : -1);
                 SetAndMarkDirty(ref hoverPattern, GetPatternIndexForCoord(e.X));
-                SetAndMarkDirty(ref hoverShy, GetShyButtonRect().Contains(e.X, e.Y));
 
-                var newHoverIconMask = 0;
-                if (hoverRow >= 0)
-                {
-                    if (GetRowIconRect(hoverRow).Contains(e.X, e.Y)) newHoverIconMask |= 1;
-                    if (GetRowGhostRect(hoverRow).Contains(e.X, e.Y)) newHoverIconMask |= 2;
-                }
-                SetAndMarkDirty(ref hoverIconMask, newHoverIconMask);
+                channelNames?.UpdateHover(hoverRow);
             }
         }
 
@@ -3174,12 +2972,19 @@ namespace FamiStudio
                 SetAndMarkDirty(ref hoverPattern, -1);
                 SetAndMarkDirty(ref hoverShy, false);
                 SetAndMarkDirty(ref hoverIconMask, 0);
+                
+                channelNames?.UpdateHover(hoverRow);
             }
         }
 
         protected override void OnPointerLeave(EventArgs e)
         {
             ClearHover();
+        }
+
+        protected override void OnPointerEnter(EventArgs e)
+        {
+            channelNames?.UpdateHover(hoverRow);
         }
 
         // Custom pattern.
@@ -3297,14 +3102,8 @@ namespace FamiStudio
             return false;
         }
 
-        protected bool HandleMouseDoubleClickChannelName(PointerEventArgs e)
-        {
-            return e.Left && HandleTouchClickChannelName(e.X, e.Y, true);
-        }
-
         protected override void OnMouseDoubleClick(PointerEventArgs e)
         {
-            if (HandleMouseDoubleClickChannelName(e)) goto Handled;
             if (HandleMouseDoubleClickPatternArea(e)) goto Handled;
 
             return;
@@ -3433,18 +3232,6 @@ namespace FamiStudio
             }
         }
 
-        private void UpdateShyIcon()
-        {
-            if (hideEmptyChannels && numRows == 0)
-            {
-                SetAndMarkDirty(ref forceShyOff, Utils.Frac(Platform.TimeSeconds()) < 0.25f);
-            }
-            else
-            {
-                forceShyOff = false;
-            }
-        }
-
         public override void Tick(float delta)
         {
             if (App == null)
@@ -3452,7 +3239,7 @@ namespace FamiStudio
 
             UpdateCaptureOperation(mouseLastX, mouseLastY, 1.0f, true);
             UpdateFollowMode();
-            UpdateShyIcon();
+            //UpdateShyIcon();
             TickFling(delta);
         }
 

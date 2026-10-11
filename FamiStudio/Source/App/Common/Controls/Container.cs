@@ -36,6 +36,15 @@ namespace FamiStudio
         {
         }
 
+        public virtual void OnContainerPointerEnterNotify(Control control, EventArgs e)
+        {
+        }
+
+        public virtual void OnContainerPointerLeaveNotify(Control control, EventArgs e)
+        {
+        }
+
+
         public virtual void OnContainerPointerDownNotify(Control control, PointerEventArgs e)
         {
         }

@@ -987,7 +987,6 @@ namespace FamiStudio
             play.Click += (s) => App.PreviewDPCMSample(sample, false);
             play.RightClick += (s) => App.PreviewDPCMSample(sample, true);
             play.ClickOnMouseUp = true;
-            play.SetSupportsDoubleClick(true);
 
             var label = CreateLabel(panel, sample.Name, true, icon.Right + marginX, 0, play.Left - icon.Right - marginX * 2, true);
             label.MouseDoubleClick += (s, e) => EditDPCMSampleProperties(sample);
@@ -2405,10 +2404,16 @@ namespace FamiStudio
 
         public override void OnContainerPointerEnterNotify(Control control, EventArgs e)
         {
-            while (control != null && string.IsNullOrEmpty(control.ToolTip))
-                control = control.ParentContainer;
+            var winPos = ControlToWindow(mouseLastPos);
+            var ctrl = GetControlAt(winPos.X, winPos.Y, out _, out _);
 
-            App.SetToolTip(control?.ToolTip ?? "");
+            if (ctrl != null)
+            {
+                var tooltip = ctrl.ToolTip;
+                if (string.IsNullOrEmpty(tooltip))
+                    tooltip = ctrl.ParentContainer.ToolTip;
+                App.SetToolTip(tooltip);
+            }
         }
 
         public override void OnContainerPointerMoveNotify(Control control, PointerEventArgs e)

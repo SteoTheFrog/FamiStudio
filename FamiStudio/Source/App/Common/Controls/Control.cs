@@ -126,7 +126,7 @@ namespace FamiStudio
             else
             {
                 OnPointerDown(e);
-                OnPointerUp(e);
+                //OnPointerUp(e); // TODO: We send pointer up anyway when we release the click? Make sure of this.
             }
         }
 

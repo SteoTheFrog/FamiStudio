@@ -619,17 +619,13 @@ namespace FamiStudio
 
             if (hover != hoverControl)
             {
-                // We need to ensure child elements of a container know whether the cursor is still inside.
-                for (var c = hoverControl; c != null; c = c.ParentContainer)
-                {
-                    if (c == hover || (c is Container cont && hover != null && hover.IsInContainer(cont)))
-                        break;
-
-                    c.SendPointerLeave(EventArgs.Empty);
-                }
+                if (hoverControl != null && (!container.IsContextMenuActive || hoverControl == ContextMenu))
+                    hoverControl.SendPointerLeave(EventArgs.Empty);
 
                 hoverControl = hover;
-                hoverControl?.SendPointerEnter(EventArgs.Empty);
+                
+                if (hoverControl != null && (!container.IsContextMenuActive || hoverControl == ContextMenu))
+                    hoverControl.SendPointerEnter(EventArgs.Empty);
             }
         }
 

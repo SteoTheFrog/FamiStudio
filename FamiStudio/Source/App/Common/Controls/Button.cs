@@ -254,7 +254,8 @@ namespace FamiStudio
 
             if (Enabled && (!e.IsTouchEvent && e.Left || (e.Right && canRightClick)))
             {
-                if (clickOnMouseUp || e.IsTouchEvent)
+                // Press needs to be true here. This prevents double-click from misfiring.
+                if (e.IsTouchEvent || (clickOnMouseUp && press))
                     TriggerClickEvent(e, e.Left);
             }
 
@@ -272,14 +273,12 @@ namespace FamiStudio
         protected override void OnPointerEnter(EventArgs e)
         {
             SetAndMarkDirty(ref hover, Platform.IsDesktop);
-            App.SetToolTip(!string.IsNullOrEmpty(tooltip) ? tooltip : "");
         }
 
         protected override void OnPointerLeave(EventArgs e)
         {
             SetAndMarkDirty(ref hover, false);
             SetAndMarkDirty(ref press, false);
-            App.SetToolTip("");
         }
 
         private void UpdateAtlasBitmap()

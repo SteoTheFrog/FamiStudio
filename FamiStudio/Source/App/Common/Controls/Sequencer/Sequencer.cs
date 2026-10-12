@@ -77,7 +77,6 @@ namespace FamiStudio
         bool showExpansionIcons = false;
         bool timeOnlySelection = false;
         bool hideEmptyChannels = false;
-        bool forceShyOff;
         bool[] channelVisible;
         int[] channelToRow;
         int[] rowToChannel;
@@ -102,7 +101,7 @@ namespace FamiStudio
         TextureAtlasRef bmpInstantiate;
         TextureAtlasRef bmpDuplicate;
         TextureAtlasRef bmpDuplicateMove;
-        // TextureAtlasRef bmpMenuInstance;
+        TextureAtlasRef bmpMenuInstance;
 
         enum CaptureOperation
         {
@@ -156,7 +155,6 @@ namespace FamiStudio
         public event EmptyDelegate PatternModified;
         public event EmptyDelegate PatternsPasted;
         public event EmptyDelegate SelectionChanged;
-        public event EmptyDelegate ShyChanged;
 
         public int ChannelIconPosX  => channelIconPosX;
         public int ChannelIconPosY  => channelIconPosY;
@@ -168,9 +166,6 @@ namespace FamiStudio
 
         public float ChannelBitmapScale => channelBitmapScale;
 
-        public bool[] ChannelVisible => channelVisible;
-        public int[] ChannelToRow => channelToRow;
-        public int[] RowToChannel => rowToChannel;
 
         #region Localization
 
@@ -188,9 +183,6 @@ namespace FamiStudio
         LocalizedString SelectColumnTooltip;
 
         // Context menus
-        LocalizedString ToggleMuteLabel;
-        LocalizedString ToggleSoloLabel;
-        LocalizedString ForceDisplayLabel;
         LocalizedString ClearLoopPointLabel;
         LocalizedString SetLoopPointLabel;
         LocalizedString CustomPatternSettingsLabel;
@@ -436,6 +428,21 @@ namespace FamiStudio
             channelNames?.UpdateLayout();
         }
 
+        public bool GetChannelVisibleForIndex(int index)
+        {
+            return channelVisible != null && channelVisible?.Length > index && channelVisible[index];
+        }
+
+        public int GetChannelToRowForIndex(int index)
+        {
+            return channelToRow != null && channelToRow.Length > index ? channelToRow[index] : -1;
+        }
+
+        public int GetRowToChannelForIndex(int index)
+        {
+            return rowToChannel != null && rowToChannel.Length > index ? rowToChannel[index] : -1;
+        }
+
         public void SetHideEmptyChannels(bool hide)
         {
             hideEmptyChannels = hide;
@@ -538,7 +545,7 @@ namespace FamiStudio
                 channelBitmapScale = DpiScaling.ScaleForWindowFloat(0.25f);
             }
 
-            //bmpMenuInstance = g.GetTextureAtlasRef("MenuInstance");
+            bmpMenuInstance = g.GetTextureAtlasRef("MenuInstance");
 
             seekGeometry = new float[]
             {
@@ -629,6 +636,7 @@ namespace FamiStudio
         {
             var c = g.DefaultCommandList;
             var b = g.BackgroundCommandList;
+            var f = g.ForegroundCommandList;
 
             var seekX = GetPixelForNote(GetSeekFrameToDraw());
             var minVisibleNoteIdx = Math.Max(GetNoteForPixel(0), 0);
@@ -853,22 +861,21 @@ namespace FamiStudio
 
                             c.PopTransform();
 
-                            /* Uncomment in major version, along with declaration and initialization of bmpMenuInstance. 
                             // TODO: Cache bools of valid selection / drag capture operation once at beginning instead of running these every iteration of the loop.
+                            // A lot of this will probably change once we have a separate pattern area.
                             if (captureOperation != CaptureOperation.DragSelection && IsSelectionValid() && patternRefCounts.TryGetValue(pattern, out var count) && count > 1)
                             {
-                                var scale = bitmapScale * (Platform.IsMobile ? 0.25f : 1.0f);
+                                var scale = bitmapScale * (Platform.IsMobile ? DpiScaling.ScaleForWindow(0.25f) : 1.0f);
                                 var iconW = bmpMenuInstance.ElementSize.Width  * scale;
                                 var iconH = bmpMenuInstance.ElementSize.Height * scale;
                                 var iconX = sx / 2 - iconW / 2;
                                 var iconY = patternHeaderSizeY / 2 + channelSizeY / 2 - iconH / 2;
 
-                                // TODO: Change these to foreground so the icons render on top.
-                                c.PushTranslation(0, py);
-                                c.DrawTextureAtlas(bmpMenuInstance, iconX, iconY, scale, Theme.WhiteColor);
-                                c.PopTransform();
+                                f.PushTranslation(0, py);
+                                f.DrawTextureAtlas(bmpMenuInstance, iconX + 1, iconY + 1, scale, Theme.BlackColor);
+                                f.DrawTextureAtlas(bmpMenuInstance, iconX, iconY, scale, Theme.WhiteColor);
+                                f.PopTransform();
                             }
-                            */
                         }
 
                         if (Platform.IsMobile && highlightLocation == location)
@@ -1214,6 +1221,9 @@ namespace FamiStudio
             captureRealTimeUpdate = captureWantsRealTimeUpdate[(int)op];
             captureRowIdx = GetRowIndexForCoord(y);
             GetClampedPatternForCoord(x, y, out captureChannelIdx, out capturePatternIdx);
+
+            if (captureOperation == CaptureOperation.SelectRectangle)
+                patternRefCounts.Clear();
         }
 
         private void SetSelectedChannel(int idx)
@@ -1269,7 +1279,7 @@ namespace FamiStudio
         {
             bool middle = e.Middle || (e.Left && ModifierKeys.IsAltDown && Settings.AltLeftForMiddle);
 
-            if (middle)
+            if (middle && e.X > channelNameSizeX)
             {
                 panning = true;
                 CaptureMouse(e.X, e.Y);
@@ -1326,11 +1336,6 @@ namespace FamiStudio
             }
 
             return false;
-        }
-
-        private bool HandleMouseUpChannelName(PointerEventArgs e)
-        {
-            return e.Right && HandleContextMenuChannelName(e.X, e.Y);
         }
 
         private bool HandleMouseUpHeader(PointerEventArgs e)
@@ -1660,7 +1665,7 @@ namespace FamiStudio
             return false;
         }
 
-        private bool HandleContextMenuChannelName(int x, int y)
+/*         private bool HandleContextMenuChannelName(int x, int y)
         {
             if (IsPointInChannelArea(x, y))
             {
@@ -1677,12 +1682,12 @@ namespace FamiStudio
             }
 
             return false;
-        }
+        } */
 
-        private bool HandleTouchLongPressChannelName(int x, int y)
+/*         private bool HandleTouchLongPressChannelName(int x, int y)
         {
             return HandleContextMenuChannelName(x, y);
-        }
+        } */
 
         private bool HandleContextMenuHeader(int x, int y)
         {
@@ -2002,7 +2007,7 @@ namespace FamiStudio
 
             AbortCaptureOperation();
 
-            if (HandleTouchLongPressChannelName(x, y)) goto Handled;
+            //if (HandleTouchLongPressChannelName(x, y)) goto Handled;
             if (HandleTouchLongPressHeader(x, y)) goto Handled;
             if (HandleTouchLongPressPatternArea(x, y)) goto Handled;
 
@@ -2505,7 +2510,7 @@ namespace FamiStudio
 
             if (doMouseUp)
             {
-                if (HandleMouseUpChannelName(e)) goto Handled;
+                //if (HandleMouseUpChannelName(e)) goto Handled;
                 if (HandleMouseUpHeader(e)) goto Handled;
                 if (HandleMouseUpPatternArea(e)) goto Handled;
                 return;
@@ -2942,10 +2947,12 @@ namespace FamiStudio
             UpdateCursor();
             UpdateCaptureOperation(e.X, e.Y);
 
-            if (middle)
+            if (middle && panning)
                 DoScroll(e.X - mouseLastX, e.Y - mouseLastY);
-            else if (e.Right && patternRefCounts.Count > 0 && (captureOperation == CaptureOperation.SelectRectangle || captureOperation == CaptureOperation.SelectColumn))
-                patternRefCounts.Clear();
+
+            // TODO: This is the wrong place for this?
+            //else if (e.Right && patternRefCounts.Count > 0 && (captureOperation == CaptureOperation.SelectRectangle || captureOperation == CaptureOperation.SelectColumn))
+                //patternRefCounts.Clear();
 
             UpdateHover(e);
             UpdateToolTip(e);
@@ -2960,7 +2967,7 @@ namespace FamiStudio
                 SetAndMarkDirty(ref hoverRow, e.Y > headerSizeY ? GetRowIndexForCoord(e.Y) : -1);
                 SetAndMarkDirty(ref hoverPattern, GetPatternIndexForCoord(e.X));
 
-                channelNames?.UpdateHover(hoverRow);
+                channelNames?.SetHover(hoverRow);
             }
         }
 
@@ -2973,7 +2980,7 @@ namespace FamiStudio
                 SetAndMarkDirty(ref hoverShy, false);
                 SetAndMarkDirty(ref hoverIconMask, 0);
                 
-                channelNames?.UpdateHover(hoverRow);
+                channelNames?.SetHover(hoverRow);
             }
         }
 
@@ -2984,7 +2991,7 @@ namespace FamiStudio
 
         protected override void OnPointerEnter(EventArgs e)
         {
-            channelNames?.UpdateHover(hoverRow);
+            channelNames?.SetHover(hoverRow);
         }
 
         // Custom pattern.

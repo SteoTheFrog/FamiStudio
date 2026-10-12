@@ -326,8 +326,8 @@ namespace FamiStudio
             channelNamePosX = DpiScaling.ScaleForWindow(DefaultChannelNamePosX);
 
             var type = App.SelectedSong.Channels[nameIndex].Type;
-            var channelShortcut = Settings.ActiveChannelShortcuts[nameIndex].TooltipString;
-            var displayShortcut = Settings.DisplayChannelShortcuts[nameIndex].TooltipString;
+            var channelShortcut = nameIndex >= 0 && nameIndex < Settings.ActiveChannelShortcuts.Length ? $" {Settings.ActiveChannelShortcuts[nameIndex].TooltipString}" : "";
+            var displayShortcut = nameIndex >= 0 && nameIndex < Settings.ActiveChannelShortcuts.Length ? $" {Settings.DisplayChannelShortcuts[nameIndex].TooltipString}" : "";
 
             tooltip = $"<MouseLeft> {MakeActiveTooltip}{channelShortcut}";
 

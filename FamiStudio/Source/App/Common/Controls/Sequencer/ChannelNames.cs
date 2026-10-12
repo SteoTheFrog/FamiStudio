@@ -9,7 +9,6 @@ namespace FamiStudio
         private Container headerContainer;
         private Container namesContainer;
         private Button shyButton;
-        private Point mouseLastPos;
         private bool forceShyOff = false;
         private bool hideEmptyChannels = false;
         private int hoverIndex = -1;
@@ -174,28 +173,21 @@ namespace FamiStudio
             }
         }
 
-        public override void OnContainerPointerMoveNotify(Control control, PointerEventArgs e)
-        {
-            var winPos = control.ControlToWindow(e.Position);
-            var ctrlPos = WindowToControl(winPos);
-            mouseLastPos = ctrlPos;
-        }
-
         public override void OnContainerPointerEnterNotify(Control control, EventArgs e)
         {
-            var pos  = ControlToWindow(mouseLastPos);
-            var ctrl = GetControlAt(pos.X, pos.Y, out _, out _);
+            if (control == headerContainer)
+                SetHover(-1);
 
-            if (ctrl != null)
-            {
-                if (ctrl == headerContainer)
-                    SetHover(-1);
+            var tooltip = control.ToolTip;
+            if (string.IsNullOrEmpty(tooltip))
+                tooltip = control.ParentContainer.ToolTip;
+            App.SetToolTip(tooltip);
+        }
 
-                var tooltip = ctrl.ToolTip;
-                if (string.IsNullOrEmpty(tooltip))
-                    tooltip = ctrl.ParentContainer.ToolTip;
-                App.SetToolTip(tooltip);
-            }
+        public override void OnContainerPointerDownNotify(Control control, PointerEventArgs e)
+        {
+            if (control == headerContainer)
+                SetHover(-1);
         }
         
         protected override void OnRender(Graphics g)

@@ -2404,14 +2404,11 @@ namespace FamiStudio
 
         public override void OnContainerPointerEnterNotify(Control control, EventArgs e)
         {
-            var winPos = ControlToWindow(mouseLastPos);
-            var ctrl = GetControlAt(winPos.X, winPos.Y, out _, out _);
-
-            if (ctrl != null)
+            if (control != null)
             {
-                var tooltip = ctrl.ToolTip;
+                var tooltip = control.ToolTip;
                 if (string.IsNullOrEmpty(tooltip))
-                    tooltip = ctrl.ParentContainer.ToolTip;
+                    tooltip = control.ParentContainer.ToolTip;
                 App.SetToolTip(tooltip);
             }
         }

@@ -496,7 +496,7 @@ namespace FamiStudio
                     Math.Abs(lastClickX - lastCursorX) < 4 &&
                     Math.Abs(lastClickY - lastCursorY) < 4;
 
-                var doubleClick = multiClick && lastClickButton == button;
+                var doubleClick = multiClick && lastClickButton == button && button == GLFW_MOUSE_BUTTON_LEFT;
 
                 if (!doubleClick) 
                 {

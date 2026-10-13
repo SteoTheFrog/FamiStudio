@@ -50,6 +50,7 @@ namespace FamiStudio
         private bool qwertyPiano = false;
         private bool followMode = false;
         private bool suspended = false;
+        private bool scopeFlashing = false;
         private float stopInstrumentTimer = 0.0f;
         private short[] metronomeSound;
         private ConcurrentQueue<Tuple<int, bool>> midiNoteQueue = new ConcurrentQueue<Tuple<int, bool>>();
@@ -78,6 +79,7 @@ namespace FamiStudio
         public long  ChannelMask { get => songPlayer != null ? songPlayer.ChannelMask : -1; set => songPlayer.ChannelMask = value; }
         public int   PlayRate { get => songPlayer != null ? songPlayer.PlayRate : 1; set { songPlayer.PlayRate = value; } }
         public float AverageTickRate => averageTickRateMs;
+        public float OscilloscopeClipAmount => oscilloscope != null ? oscilloscope.ClipAmount : 0.0f;
         public int   EditEnvelopeType { get => PianoRoll.EditEnvelopeType; }
 
         public bool SnapEnabled                 { get => PianoRoll.SnapEnabled;         set => PianoRoll.SnapEnabled         = value; }
@@ -2399,14 +2401,18 @@ namespace FamiStudio
 
         private void ConditionalMarkControlsDirty()
         {
+            var flash = oscilloscope != null && oscilloscope.ClipAmount > 0.0f;
+
             if (AppNeedsRealTimeUpdate())
             {
                 MarkEverythingDirty();
             }
-            else if (oscilloscope != null && ToolBar.ShouldRefreshOscilloscope(oscilloscope.HasNonZeroSample))
+            else if (oscilloscope != null && (ToolBar.ShouldRefreshOscilloscope(oscilloscope.HasNonZeroSample) || flash || scopeFlashing))
             {
                 ToolBar.MarkDirty();
             }
+
+            scopeFlashing = flash;
         }
 
         private void HighlightPlayingInstrumentNote()

@@ -43,6 +43,7 @@ namespace FamiStudio
         protected bool stereo = false;
         protected bool accurateSeek = false;
         protected bool forceReadRegisterValues = false;
+        protected bool lastFrameClipped = false;
         protected volatile bool reachedEnd = false;
         protected int  tndMode = NesApu.TND_MODE_SINGLE;
         protected int  beatIndex = -1;
@@ -640,6 +641,8 @@ namespace FamiStudio
             {
                 NesApu.ReadSamples(apuIndex, new IntPtr(ptr), numTotalSamples);
             }
+
+            lastFrameClipped = NesApu.ConsumeClipCount(apuIndex) > 0;
 
             ReadBackRegisterValues();
 

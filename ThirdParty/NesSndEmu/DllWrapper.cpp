@@ -55,6 +55,11 @@ extern "C" void __stdcall NesApuEndFrame(int apuIdx)
 	apu[apuIdx].end_frame();
 }
 
+extern "C" int __stdcall NesApuConsumeClipCount(int apuIdx)
+{
+	return apu[apuIdx].consume_clip_count();
+}
+
 extern "C" void __stdcall NesApuReset(int apuIdx)
 {
 	apu[apuIdx].reset();

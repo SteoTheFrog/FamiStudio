@@ -21,9 +21,11 @@ namespace FamiStudio
             var sx = width;
             var sy = height;
 
-            c.FillAndDrawRectangle(0, 0, sx, sy, Theme.BlackColor, Theme.LightGreyColor2);
+            c.PushClipRegion(1, 1, sx - 1, sy - 1);
+            c.FillRectangle(0, 0, sx, sy, Theme.BlackColor);
 
             var oscilloscopeGeometry = App.GetOscilloscopeGeometry(out lastOscilloscopeHadNonZeroSample);
+            var waveColor = Color.Lerp(Theme.LightGreyColor2, Theme.DarkRedColor, App.OscilloscopeClipAmount);
 
             if (oscilloscopeGeometry != null && lastOscilloscopeHadNonZeroSample)
             {
@@ -31,13 +33,13 @@ namespace FamiStudio
                 float scaleY = sy / -2; // D3D is upside down compared to how we display waves typically.
 
                 c.PushTransform(0, sy / 2, scaleX, scaleY);
-                c.DrawNiceSmoothLine(oscilloscopeGeometry, Theme.LightGreyColor2);
+                c.DrawNiceSmoothLine(oscilloscopeGeometry, waveColor);
                 c.PopTransform();
             }
             else
             {
                 c.PushTranslation(0, sy / 2);
-                c.DrawLine(0, 0, sx, 0, Theme.LightGreyColor2);
+                c.DrawLine(0, 0, sx, 0, waveColor);
                 c.PopTransform();
             }
 
@@ -48,6 +50,9 @@ namespace FamiStudio
                 if (betaNumber > 0)
                     c.DrawText($"BETA {betaNumber}", Fonts.FontSmall, 4, 4, Theme.LightRedColor);
             }
+
+            c.PopClipRegion();
+            c.DrawRectangle(0, 0, sx, sy, Theme.LightGreyColor2);
         }
     }
 }

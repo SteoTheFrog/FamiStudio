@@ -8,6 +8,6 @@ namespace FamiStudio
 {
     public interface IOscilloscope
     {
-        void AddSamples(short[] samples, int trigger = NesApu.TRIGGER_NONE);
+        void AddSamples(short[] samples, int trigger = NesApu.TRIGGER_NONE, bool clipped = false);
     }
 }

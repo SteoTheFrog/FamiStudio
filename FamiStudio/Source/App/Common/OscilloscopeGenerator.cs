@@ -10,11 +10,13 @@ namespace FamiStudio
     public class OscilloscopeGenerator : IOscilloscope
     {
         private const float SampleScale = 1.9f; 
+        private const int ClipFlashMs = 200;
 
         private class SamplesAndTrigger
         {
             public short[] samples;
             public int trigger;
+            public bool clipped;
         };
 
         private Task task;
@@ -25,6 +27,7 @@ namespace FamiStudio
         private int lastTrigger = -1;
         private int lastSampleCount = 0;
         private int holdFrameCount = 0;
+        private long lastClipTime = -1000000;
         private bool stereo;
         private volatile float[] geometry;
         private volatile bool hasNonZeroData = false;
@@ -57,11 +60,11 @@ namespace FamiStudio
             }
         }
 
-        public void AddSamples(short[] samples, int trigger = -1)
+        public void AddSamples(short[] samples, int trigger = -1, bool clipped = false)
         {
             if (task != null)
             {
-                sampleQueue.Enqueue(new SamplesAndTrigger() { samples = samples, trigger = trigger });
+                sampleQueue.Enqueue(new SamplesAndTrigger() { samples = samples, trigger = trigger, clipped = clipped });
                 samplesEvent.Set();
             }
         }
@@ -70,6 +73,15 @@ namespace FamiStudio
         {
             outHasNonZeroSample = hasNonZeroData;
             return geometry;
+        }
+
+        public float ClipAmount
+        {
+            get
+            {
+                var elapsed = Environment.TickCount64 - Volatile.Read(ref lastClipTime);
+                return Math.Clamp(1.0f - elapsed / (float)ClipFlashMs, 0.0f, 1.0f);
+            }
         }
 
         public bool HasNonZeroSample => hasNonZeroData;
@@ -96,6 +108,9 @@ namespace FamiStudio
                     if (sampleQueue.TryDequeue(out var pair))
                     {
                         var samples = pair.samples;
+
+                        if (pair.clipped)
+                            Volatile.Write(ref lastClipTime, Environment.TickCount64);
 
                         // Mixdown stereo immediately.
                         if (stereo)

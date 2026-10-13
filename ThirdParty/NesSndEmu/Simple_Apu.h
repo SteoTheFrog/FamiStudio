@@ -82,6 +82,8 @@ public:
 	// End a 1/60 sound frame
 	void end_frame();
 	int skip_cycles(long cycles);
+
+	int consume_clip_count();
 	
 	// Resets
 	void reset();
@@ -125,6 +127,7 @@ private:
 	int fds_filter_accum;
 	int fds_filter_alpha;
 	int tnd_skip; // Initial skipped samples to avoid intitial triangle pop. Channels will not be affected, as it takes place before output.
+	int clip_count;
 	bool separate_tnd_channel_enabled[3];
 	long tnd_accum[3];
 	long sq_accum;

@@ -389,12 +389,20 @@ void Simple_Apu::end_frame()
 	}
 }
 
+int Simple_Apu::consume_clip_count()
+{
+    int c = clip_count;
+    clip_count = 0;
+    return c;
+}
+
 void Simple_Apu::reset()
 {
 	apu.enable_nonlinear(1.0);
 	tnd_volume = 1.0;
 	seeking = false;
 	tnd_skip = 12;
+	clip_count = 0;
 	prev_sq_mix = 0;
 	sq_accum = 0;
 	prev_nonlinear_tnd = 0;
@@ -458,6 +466,13 @@ inline float nonlinearize(float sample_float)
 inline float mix_squares(float sample_float)
 {
     return 95.52f / (8128.0f / (sample_float * sq_scale) + 100.0f);
+}
+
+inline int clamp_count(int v, int& counter)
+{
+    if (v > INT16_MAX) { counter++; return INT16_MAX; }
+    if (v < INT16_MIN) { counter++; return INT16_MIN; }
+    return v;
 }
 
 long Simple_Apu::read_samples( sample_t* out, long count )
@@ -589,8 +604,8 @@ long Simple_Apu::read_samples( sample_t* out, long count )
 					int s = lin.read() + nonlin.read();
 					lin.next(lin_bass);
 					nonlin.next(nonlin_bass);
-					*p++ = (blip_sample_t)clamp((int)(s + out_left[i]), -32768, 32767);
-					*p++ = (blip_sample_t)clamp((int)(s + out_right[i]), -32768, 32767);
+					*p++ = (blip_sample_t)clamp_count((int)(s + out_left[i]),  clip_count);
+					*p++ = (blip_sample_t)clamp_count((int)(s + out_right[i]), clip_count);
 				}
 			}
 			else
@@ -603,7 +618,10 @@ long Simple_Apu::read_samples( sample_t* out, long count )
 					*p++ = s;
 
 					if ((BOOST::int16_t)s != s)
+					{
 						p[-1] = 0x7FFF - (s >> 24);
+						clip_count++;
+					}
 				}
 			}
 
@@ -650,12 +668,12 @@ long Simple_Apu::read_samples( sample_t* out, long count )
 			{
 				if (expansions & expansion_mask_epsm)
 				{
-					out[i * 2 + 0] = (blip_sample_t)clamp(out[i * 2 + 0] + fds_filter_accum, -32768, 32767);
-					out[i * 2 + 1] = (blip_sample_t)clamp(out[i * 2 + 1] + fds_filter_accum, -32768, 32767);
+					out[i * 2 + 0] = (blip_sample_t)clamp_count(out[i * 2 + 0] + fds_filter_accum, clip_count);
+					out[i * 2 + 1] = (blip_sample_t)clamp_count(out[i * 2 + 1] + fds_filter_accum, clip_count);
 				}
 				else
 				{
-					out[i] = (blip_sample_t)clamp(out[i] + fds_filter_accum, -32768, 32767);
+					out[i] = (blip_sample_t)clamp_count(out[i] + fds_filter_accum, clip_count);
 				}
 			}
 		}
@@ -674,12 +692,12 @@ long Simple_Apu::read_samples( sample_t* out, long count )
 			{
 				if (expansions & expansion_mask_epsm)
 				{
-					out[i * 2 + 0] = (blip_sample_t)clamp(out[i * 2 + 0] + (long)buf_exp_samples[i], -32768, 32767);
-					out[i * 2 + 1] = (blip_sample_t)clamp(out[i * 2 + 1] + (long)buf_exp_samples[i], -32768, 32767);
+					out[i * 2 + 0] = (blip_sample_t)clamp_count(out[i * 2 + 0] + (long)buf_exp_samples[i], clip_count);
+					out[i * 2 + 1] = (blip_sample_t)clamp_count(out[i * 2 + 1] + (long)buf_exp_samples[i], clip_count);
 				}
 				else
 				{
-					out[i] = (blip_sample_t)clamp(out[i] + (long)buf_exp_samples[i], -32768, 32767);
+					out[i] = (blip_sample_t)clamp_count(out[i] + (long)buf_exp_samples[i], clip_count);
 				}
 			}
 		}

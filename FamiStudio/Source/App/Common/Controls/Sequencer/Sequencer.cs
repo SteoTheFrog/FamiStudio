@@ -864,8 +864,9 @@ namespace FamiStudio
 
                             if (isSelectionValid && patternRefCounts.TryGetValue(pattern, out var count) && count > 1)
                             {
-                                var scale = bitmapScale * (Platform.IsMobile ? DpiScaling.ScaleForWindow(0.25f) : 1.0f);
-                                var iconH = bmpMenuInstance.ElementSize.Height;
+                                // TODO: Get the correct icon instead of resizing. This is a placeholder.
+                                var scale = bitmapScale * (Platform.IsDesktop ? 1.0f : 0.25f);
+                                var iconH = bmpMenuInstance.ElementSize.Height * scale;
                                 var iconX = sx / 2 - iconH / 2;
                                 var iconY = patternHeaderSizeY / 2 + channelSizeY / 2 - iconH / 2;
 

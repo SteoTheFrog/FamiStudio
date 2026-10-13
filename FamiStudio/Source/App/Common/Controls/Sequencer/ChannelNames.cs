@@ -80,7 +80,7 @@ namespace FamiStudio
 
         public void SetHover(int index)
         {
-            if (hoverIndex != index)
+            if (Platform.IsDesktop && hoverIndex != index)
             {
                 hoverIndex = index;
                 UpdateHover();
@@ -282,6 +282,7 @@ namespace FamiStudio
             button.Move(x, Utils.DivideAndRoundUp(Height - button.Height, 2));
             button.RightClick += ShowContextMenu;
             button.MouseDoubleClick += HandleButtonDoubleClick;
+            button.TouchDoubleClick += HandleButtonDoubleClick;
             button.ClickOnMouseUp = true;
             button.SupportsDoubleClick = true;
 
@@ -425,7 +426,7 @@ namespace FamiStudio
             c.FillRectangle(0, 0, width, height, dim ? Theme.DarkGreyColor1 : Theme.DarkGreyColor2);
 
             // Hover
-            if (hovered)
+            if (Platform.IsDesktop && hovered)
                 c.FillRectangle(0, 0, width, height, Theme.MediumGreyColor1.Transparent(dim ? 192 : 255));
 
             // Separator lines.

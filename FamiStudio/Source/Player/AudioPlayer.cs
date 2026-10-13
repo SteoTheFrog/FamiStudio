@@ -14,6 +14,7 @@ namespace FamiStudio
         public class FrameAudioData
         {
             public short[] samples;
+            public bool  clipped;
             public int   playPosition;
             public int   triggerSample = NesApu.TRIGGER_NONE;
             public int   metronomePosition;
@@ -144,7 +145,7 @@ namespace FamiStudio
 
             // If we are driving the toolbar oscilloscope, provide samples.
             if (oscilloscope != null)
-                oscilloscope.AddSamples(data.samples, data.triggerSample);
+                oscilloscope.AddSamples(data.samples, data.triggerSample, data.clipped);
 
             // Mix in metronome if needed.
             if (data.metronomePosition >= 0)
@@ -203,6 +204,7 @@ namespace FamiStudio
             FrameAudioData data = new FrameAudioData();
 
             data.samples = base.EndFrame();
+            data.clipped = lastFrameClipped;
             data.metronomePosition = metronomePlayPosition;
             data.playPosition = playPosition;
 

@@ -11,7 +11,6 @@ namespace FamiStudio
         private Button shyButton;
         private bool forceShyOff = false;
         private bool hideEmptyChannels = false;
-        private int hoverIndex = -1;
         private int scrollBarThickness; // TODO: Check if we even need this. We likely won't have scrollbars in the channel name area itself.
         private float headerIconScale = Platform.IsMobile ? DpiScaling.ScaleForWindowFloat(0.5f)  : 1.0f;
 
@@ -20,6 +19,9 @@ namespace FamiStudio
         private Song Song => App?.SelectedSong;
 
         LocalizedString ShyModeTooltip;
+
+        public delegate void HoverChannelDelegate(int idx);
+        public event HoverChannelDelegate HoverChannelChanged;
 
         public ChannelNames(Sequencer sequencer)
         {
@@ -67,7 +69,7 @@ namespace FamiStudio
                 channelName.SoloToggled += (idx) => App.ToggleChannelSolo(idx, true);
                 channelName.ForceDisplayClicked += (idx) => { App.ToggleChannelForceDisplay(idx); SetHover(idx); };
                 channelName.ForceDisplaySoloToggled += (idx) => App.ToggleChannelForceDisplayAll(idx, true);
-                channelName.PointerEntered += SetHover;
+                channelName.PointerEntered += HoverChanged;
 
                 channelNames[i] = channelName;
                 namesContainer.AddControl(channelName);
@@ -78,13 +80,15 @@ namespace FamiStudio
         {
         }
 
-        public void SetHover(int index)
+        private void HoverChanged(int idx)
         {
-            if (Platform.IsDesktop && hoverIndex != index)
-            {
-                hoverIndex = index;
-                UpdateHover();
-            }
+            HoverChannelChanged?.Invoke(idx);
+        }
+
+        public void SetHover(int idx)
+        {
+            foreach (var c in channelNames)
+                c.Hovered = c.NameIndex == idx;
         }
 
         public void UpdateLayout()
@@ -124,12 +128,6 @@ namespace FamiStudio
             namesContainer.Visible = rowCount > 0;
             namesContainer.Move(0, sequencer.HeaderSizeY + 1);
             namesContainer.Resize(Width, rowCount * sequencer.ChannelSizeY);
-        }
-
-        private void UpdateHover()
-        {
-            foreach (var c in channelNames)
-                c.Hovered = c.NameIndex == hoverIndex;
         }
 
         private string ShyButton_ImageEvent(Control sender, ref Color tint)
@@ -175,8 +173,8 @@ namespace FamiStudio
 
         public override void OnContainerPointerEnterNotify(Control control, EventArgs e)
         {
-            if (control == headerContainer)
-                SetHover(-1);
+            if (control == headerContainer || control.IsInContainer(headerContainer))
+                HoverChanged(-1);
 
             var tooltip = control.ToolTip;
             if (string.IsNullOrEmpty(tooltip))
@@ -186,8 +184,8 @@ namespace FamiStudio
 
         public override void OnContainerPointerDownNotify(Control control, PointerEventArgs e)
         {
-            if (control == headerContainer)
-                SetHover(-1);
+            if (control == headerContainer || control.IsInContainer(headerContainer))
+                HoverChanged(-1);
         }
         
         protected override void OnRender(Graphics g)

@@ -9531,7 +9531,7 @@ namespace FamiStudio
             UpdateCaptureOperation(e.X, e.Y);
             UpdateHover(e);
 
-            if (middle)
+            if (middle && panning)
                 DoScroll(e.X - mouseLastX, e.Y - mouseLastY);
 
             UpdateToolTip(e);

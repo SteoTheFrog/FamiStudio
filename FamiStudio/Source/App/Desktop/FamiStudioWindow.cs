@@ -37,6 +37,7 @@ namespace FamiStudio
         public string Text { set => glfwSetWindowTitle(window, value); }
         public bool IsLandscape => true;
         public bool IsWindowInFocus => glfwGetWindowAttrib(window, GLFW_FOCUSED) == GLFW_TRUE;
+        public bool IsCursorInWindow => glfwGetWindowAttrib(window, GLFW_HOVERED) == GLFW_TRUE;
         public bool IsAsyncDialogInProgress => container.IsDialogActive;
         public bool IsContextMenuActive => container.IsContextMenuActive;
         public bool IsOutOfProcessDialogInProgress => Platform.IsOutOfProcessDialogInProgress();
@@ -637,18 +638,12 @@ namespace FamiStudio
             Debug.WriteLine($"ENTER! entered={entered}");
 
             if (entered == 0)
-            {
-                if (hoverControl != null && (!container.IsContextMenuActive || hoverControl == ContextMenu))
-                {
-                    hoverControl.SendPointerLeave(EventArgs.Empty);
-                    hoverControl = null;
-                }
-            }
+                ClearHoverControl(!container.IsContextMenuActive || hoverControl == ContextMenu);
         }
 
-        private void ClearHoverControl()
+        private void ClearHoverControl(bool condition = true)
         {
-            if (hoverControl != null)
+            if (hoverControl != null && condition)
             {
                 hoverControl.SendPointerLeave(EventArgs.Empty);
                 hoverControl = null;

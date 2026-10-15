@@ -663,12 +663,22 @@ namespace FamiStudio
             UpdateTooltips();
         }
 
-        public override void OnContainerPointerMoveNotify(Control control, PointerEventArgs e)
+        private void ContainerPointerDownMove(Control control, PointerEventArgs e)
         {
             var winPos = control.ControlToWindow(e.Position);
             var ctrl = GetControlAt(winPos.X, winPos.Y, out _, out _);
 
             tooltipLabel.ToolTip = ctrl != null && ctrl is Button ? ctrl.ToolTip : "";
+        }
+
+        public override void OnContainerPointerMoveNotify(Control control, PointerEventArgs e)
+        {
+            ContainerPointerDownMove(control, e);
+        }
+
+        public override void OnContainerPointerDownNotify(Control control, PointerEventArgs e)
+        {
+            ContainerPointerDownMove(control, e);
         }
 
         private void UpdateTooltips()

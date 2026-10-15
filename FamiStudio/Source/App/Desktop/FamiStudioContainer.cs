@@ -168,7 +168,8 @@ namespace FamiStudio
         {
             if (!contextMenu.ContainsMenu(ctrl))
             {
-                HideContextMenu();
+                // Use the app code path so the context menu control is cleared.
+                App.HideContextMenu();
             }
         }
 

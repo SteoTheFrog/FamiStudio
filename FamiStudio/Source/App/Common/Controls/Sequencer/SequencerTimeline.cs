@@ -214,7 +214,7 @@ namespace FamiStudio
 
         protected override void OnPointerEnter(EventArgs e)
         {
-            App.SetToolTip(tooltip);
+            HoverPatternChanged.Invoke(HoverPattern);
         }
 
         protected override void OnPointerMove(PointerEventArgs e)
@@ -232,6 +232,9 @@ namespace FamiStudio
                 OnTouchDown(e);
                 return;
             }
+
+            // Ensures the channel name hover is cleared if we exit a context menu.
+            HoverPatternChanged?.Invoke(HoverPattern);
 
             if (e.Middle)
             {
@@ -270,6 +273,11 @@ namespace FamiStudio
         protected override void OnPointerDownDelayed(PointerEventArgs e)
         {
             ColumnSelect?.Invoke(this, e);
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            Resize(sequencer.Width - sequencer.ChannelNameSizeX, height);
         }
 
         protected override void OnRender(Graphics g)

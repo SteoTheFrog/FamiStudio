@@ -6142,6 +6142,8 @@ namespace FamiStudio
                 return;
             }
 
+            UpdateToolTip(e);
+
             bool left  = e.Left;
             bool right = e.Right;
 

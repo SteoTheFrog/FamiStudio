@@ -2384,6 +2384,14 @@ namespace FamiStudio
             ReleasePointer();
         }
 
+        private void UpdateTooltipControl(Control control)
+        {
+            var tooltip = control.ToolTip;
+            if (string.IsNullOrEmpty(tooltip))
+                tooltip = control.ParentContainer.ToolTip;
+            App.SetToolTip(tooltip);
+        }
+
         //protected override void OnMouseWheel(PointerEventArgs e)
         //{
         //    if (!e.Handled)
@@ -2402,15 +2410,14 @@ namespace FamiStudio
             }
         }
 
+        public override void OnContainerPointerDownNotify(Control control, PointerEventArgs e)
+        {
+            UpdateTooltipControl(control);
+        }
+
         public override void OnContainerPointerEnterNotify(Control control, EventArgs e)
         {
-            if (control != null)
-            {
-                var tooltip = control.ToolTip;
-                if (string.IsNullOrEmpty(tooltip))
-                    tooltip = control.ParentContainer.ToolTip;
-                App.SetToolTip(tooltip);
-            }
+            UpdateTooltipControl(control);
         }
 
         public override void OnContainerPointerMoveNotify(Control control, PointerEventArgs e)

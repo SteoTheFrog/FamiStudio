@@ -49,6 +49,7 @@ namespace FamiStudio
         private Control activeControl = null;
         private Control captureControl = null;
         private Control hoverControl = null;
+        private Control contextMenuControl = null;
         private int captureCookie;
         private int captureButton = -1;
         private int lastButtonPress = -1;
@@ -638,16 +639,22 @@ namespace FamiStudio
             Debug.WriteLine($"ENTER! entered={entered}");
 
             if (entered == 0)
-                ClearHoverControl(!container.IsContextMenuActive || hoverControl == ContextMenu);
+                ClearHoverControl();
         }
 
-        private void ClearHoverControl(bool condition = true)
+        private void ClearHoverControl()
         {
-            if (hoverControl != null && condition)
+            if (hoverControl != null)
             {
                 hoverControl.SendPointerLeave(EventArgs.Empty);
                 hoverControl = null;
             }
+        }
+
+        private void ClearContextMenuControl()
+        {
+            contextMenuControl?.SendPointerLeave(EventArgs.Empty);
+            contextMenuControl = null;
         }
 
         private void ScrollCallback(IntPtr window, double xoffset, double yoffset)
@@ -919,7 +926,10 @@ namespace FamiStudio
 
         public void SetActiveControl(Control ctrl, bool animate = true)
         {
-            if (ctrl != null && ctrl != activeControl && (ctrl == PianoRoll || ctrl == Sequencer || ctrl == ProjectExplorer))
+            if (ctrl != null && ctrl != activeControl && (
+                ctrl == PianoRoll || ctrl.IsInContainer(PianoRoll) ||
+                ctrl == Sequencer || ctrl.IsInContainer(Sequencer) ||
+                ctrl == ProjectExplorer || ctrl.IsInContainer(ProjectExplorer)))
             {
                 activeControl.MarkDirty();
                 activeControl = ctrl;
@@ -929,6 +939,7 @@ namespace FamiStudio
 
         public void ShowContextMenuAsync(ContextMenuOption[] options)
         {
+            contextMenuControl = activeControl;
             contextMenuPoint = WindowToScreen(new Point(lastCursorX, lastCursorY));
             container.ShowContextMenu(lastCursorX, lastCursorY, options);
             RefreshCursor(container.ContextMenu);
@@ -939,6 +950,7 @@ namespace FamiStudio
         {
             container.HideContextMenu();
             ClearHoverControl();
+            ClearContextMenuControl();
         }
 
         public void InitDialog(Dialog dialog)

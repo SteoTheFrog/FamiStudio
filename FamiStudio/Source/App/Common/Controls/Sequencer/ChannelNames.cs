@@ -5,18 +5,22 @@ namespace FamiStudio
 {
     public class ChannelNames : Container
     {
-        private readonly Sequencer sequencer;
+        //private readonly Sequencer sequencer;
         private Container headerContainer;
         private Container namesContainer;
         private Button shyButton;
         private bool forceShyOff = false;
         private bool hideEmptyChannels = false;
         private int scrollBarThickness; // TODO: Check if we even need this. We likely won't have scrollbars in the channel name area itself.
+        private int visibleChannelCount;
         private float headerIconScale = Platform.IsMobile ? DpiScaling.ScaleForWindowFloat(0.5f)  : 1.0f;
 
         private ChannelName[] channelNames;
 
         private Song Song => App?.SelectedSong;
+        private Sequencer Sequencer => App?.Sequencer;
+        private int ChannelSizeY => Sequencer.ChannelSizeY;
+        private int HeaderSizeY => Sequencer.HeaderSizeY;
 
         LocalizedString ShyModeTooltip;
 
@@ -26,7 +30,6 @@ namespace FamiStudio
         public ChannelNames(Sequencer sequencer)
         {
             Localization.Localize(this);
-            this.sequencer = sequencer;
         }
 
         protected override void OnAddedToContainer()
@@ -69,7 +72,7 @@ namespace FamiStudio
                 channelName.SoloToggled += (idx) => App.ToggleChannelSolo(idx, true);
                 channelName.ForceDisplayClicked += (idx) => { App.ToggleChannelForceDisplay(idx); SetHover(idx); };
                 channelName.ForceDisplaySoloToggled += (idx) => App.ToggleChannelForceDisplayAll(idx, true);
-                channelName.PointerEntered += HoverChanged;
+                channelName.PointerEnteredName += HoverChanged;
 
                 channelNames[i] = channelName;
                 namesContainer.AddControl(channelName);
@@ -91,13 +94,29 @@ namespace FamiStudio
                 c.Hovered = c.NameIndex == idx;
         }
 
+        private int GetChannelToRowForIndex(int idx)
+        {
+            return Sequencer.GetChannelToRowForIndex(idx);
+        }
+
+        private void SetHideEmptyChannels(bool hide)
+        {
+            Sequencer.SetHideEmptyChannels(hide);
+            hideEmptyChannels = hide;
+        }
+
+        private void LayoutChanged()
+        {
+            Sequencer.LayoutChanged();
+        }
+
         public void UpdateLayout()
         {
-            headerContainer.Move(0, 1);
-            headerContainer.Resize(Width - 1, sequencer.HeaderSizeY - 2);
+            headerContainer.Move(0, 0);
+            headerContainer.Resize(Width, HeaderSizeY);
 
             shyButton.Move(Width - shyButton.Width, 0);
-            shyButton.Resize(sequencer.HeaderSizeY, sequencer.HeaderSizeY);
+            shyButton.Resize(HeaderSizeY, HeaderSizeY);
 
             RecreateChannelNames();
 
@@ -106,7 +125,7 @@ namespace FamiStudio
             for (var i = 0; i < channelNames.Length; i++)
             {
                 var channelName = channelNames[i];
-                var rowIdx = sequencer.GetChannelToRowForIndex(i);
+                var rowIdx = GetChannelToRowForIndex(i);
 
                 if (rowIdx < 0)
                 {
@@ -119,15 +138,17 @@ namespace FamiStudio
 
                 channelName.Visible = true;
 
-                channelName.Resize(Width, sequencer.ChannelSizeY);
-                channelName.Move(0, rowIdx * sequencer.ChannelSizeY);
+                channelName.Resize(Width, ChannelSizeY);
+                channelName.Move(0, rowIdx * ChannelSizeY);
             }
 
             var rowCount = maxRow + 1;
 
             namesContainer.Visible = rowCount > 0;
-            namesContainer.Move(0, sequencer.HeaderSizeY + 1);
-            namesContainer.Resize(Width, rowCount * sequencer.ChannelSizeY);
+            namesContainer.Move(0, HeaderSizeY);
+            namesContainer.Resize(width, rowCount * ChannelSizeY);
+
+            visibleChannelCount = rowCount;
         }
 
         private string ShyButton_ImageEvent(Control sender, ref Color tint)
@@ -138,10 +159,8 @@ namespace FamiStudio
 
         private void ShyButton_Clicked(Control sender)
         {
-            hideEmptyChannels = !hideEmptyChannels;
-            sequencer.SetHideEmptyChannels(hideEmptyChannels);
-            sequencer.LayoutChanged();
-
+            SetHideEmptyChannels(!hideEmptyChannels);
+            LayoutChanged();
             SetTickEnabled(hideEmptyChannels && !namesContainer.Visible);
         }
 
@@ -171,40 +190,47 @@ namespace FamiStudio
             }
         }
 
-        public override void OnContainerPointerEnterNotify(Control control, EventArgs e)
+        private void ContainerEnterPointerDown(Control control)
         {
             if (control == headerContainer || control.IsInContainer(headerContainer))
                 HoverChanged(-1);
+        }
 
-            var tooltip = control.ToolTip;
-            if (string.IsNullOrEmpty(tooltip))
-                tooltip = control.ParentContainer.ToolTip;
-            App.SetToolTip(tooltip);
+        public override void OnContainerPointerEnterNotify(Control control, EventArgs e)
+        {
+            ContainerEnterPointerDown(control);
         }
 
         public override void OnContainerPointerDownNotify(Control control, PointerEventArgs e)
         {
-            if (control == headerContainer || control.IsInContainer(headerContainer))
-                HoverChanged(-1);
+            ContainerEnterPointerDown(control);
         }
         
         protected override void OnRender(Graphics g)
         {
             var c = g.DefaultCommandList;
 
-            // Track name background
-            c.FillRectangle(0, 0, sequencer.ChannelNameSizeX, height, Theme.DarkGreyColor2);
-            c.DrawLine(sequencer.ChannelNameSizeX - 1, 0, sequencer.ChannelNameSizeX - 1, height, Theme.BlackColor);
-            c.DrawLine(0, 0, sequencer.ChannelNameSizeX, 0, Theme.BlackColor);
-            c.DrawLine(0, height - scrollBarThickness, sequencer.ChannelNameSizeX, height - scrollBarThickness, Theme.BlackColor);
-            c.DrawLine(0, height - 1, sequencer.ChannelNameSizeX, height - 1, Theme.BlackColor);
-            c.DrawLine(0, sequencer.HeaderSizeY, sequencer.ChannelNameSizeX, sequencer.HeaderSizeY, Theme.BlackColor);
+            // Outlines.
+            c.DrawLine(0, 0, width, 0, Theme.BlackColor);
+            c.DrawLine(width - 1, 0, width - 1, height, Theme.BlackColor);
 
+            // Ensure we don't draw over the outlines.
+            c.PushClipRegion(0, 1, width - 1, height - 1);
+
+            // Background
+            c.FillRectangle(0, 0, width, height, Theme.DarkGreyColor2);
+
+            // Bottom line.
+            var bottomHeight = visibleChannelCount > 0 ? height - 1 : HeaderSizeY;
+            c.DrawLine(0, bottomHeight, width, bottomHeight, Theme.BlackColor);
+
+            base.OnRender(g);
+
+            c.PopClipRegion();
+            
             // Vertical line seperating with the toolbar
             if (Platform.IsMobile && IsLandscape)
                 c.DrawLine(0, 0, 0, height, Theme.BlackColor);
-
-            base.OnRender(g);
         }   
     }
 
@@ -235,7 +261,7 @@ namespace FamiStudio
         public ChannelDelegate SoloToggled;
         public ChannelDelegate ForceDisplayClicked;
         public ChannelDelegate ForceDisplaySoloToggled;
-        public ChannelDelegate PointerEntered;
+        public ChannelDelegate PointerEnteredName;
 
         // Buttons
         LocalizedString MuteChannelTooltip;
@@ -345,9 +371,8 @@ namespace FamiStudio
 
         public override void OnContainerPointerDownNotify(Control control, PointerEventArgs e) 
         {
-            // Ensure the hover index and tooltip update (in case we exited a context menu).
-            PointerEntered?.Invoke(nameIndex);
-            App.SetToolTip(control.ToolTip);
+            // Ensure the hover index updates (in case we exited a context menu).
+            PointerEnteredName?.Invoke(nameIndex);
         }
 
         protected override void OnPointerDown(PointerEventArgs e)
@@ -357,9 +382,8 @@ namespace FamiStudio
                 Clicked?.Invoke(nameIndex);
             }
 
-            // Ensure the hover index and tooltip update (in case we exited a context menu).
-            PointerEntered?.Invoke(nameIndex);
-            App.SetToolTip(tooltip);
+            // Ensure the hover index updates (in case we exited a context menu).
+            PointerEnteredName?.Invoke(nameIndex);
         }
 
         protected override void OnPointerUp(PointerEventArgs e)
@@ -372,7 +396,7 @@ namespace FamiStudio
 
         protected override void OnPointerEnter(EventArgs e)
         {
-            PointerEntered?.Invoke(nameIndex);
+            PointerEnteredName?.Invoke(nameIndex);
             MarkDirty();
         }
 
@@ -428,9 +452,9 @@ namespace FamiStudio
                 c.FillRectangle(0, 0, width, height, Theme.MediumGreyColor1.Transparent(dim ? 192 : 255));
 
             // Separator lines.
-            c.DrawLine(width - 1, 0, width - 1, height, Theme.BlackColor);
-            c.DrawLine(0, height - 1, width, height - 1, Theme.BlackColor);
-
+            c.DrawLine(0, 0, width - 1, 0, Theme.BlackColor);
+            //c.DrawLine(0, height - 1, width, height - 1, Theme.BlackColor);
+            
             base.OnRender(g);
         }
     }

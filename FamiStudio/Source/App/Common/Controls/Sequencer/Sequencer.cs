@@ -419,17 +419,17 @@ namespace FamiStudio
 
         public bool GetChannelVisibleForIndex(int index)
         {
-            return channelVisible != null && channelVisible?.Length > index && channelVisible[index];
+            return channelVisible != null && channelVisible?.Length > index && index >= 0 && channelVisible[index];
         }
 
         public int GetChannelToRowForIndex(int index)
         {
-            return channelToRow != null && channelToRow.Length > index ? channelToRow[index] : -1;
+            return channelToRow != null && channelToRow.Length > index && index >= 0 ? channelToRow[index] : -1;
         }
 
         public int GetRowToChannelForIndex(int index)
         {
-            return rowToChannel != null && rowToChannel.Length > index ? rowToChannel[index] : -1;
+            return rowToChannel != null && rowToChannel.Length > index && index >= 0 ? rowToChannel[index] : -1;
         }
 
         public void SetHideEmptyChannels(bool hide)
@@ -517,14 +517,14 @@ namespace FamiStudio
             UpdateRenderCoords();
 
             channelNames = new ChannelNames(this);
-            channelNames.HoverChannelChanged += (ch) => SetHover(ch < 0 ? -1 : GetChannelToRowForIndex(ch), -1);
+            channelNames.HoverChannelChanged += (ch) => SetHover(GetChannelToRowForIndex(ch), -1);
             AddControl(channelNames);
 
             timeline = new SequencerTimeline(this);
             timeline.CancelDragSeekBar += AbortCaptureOperation;
             timeline.ColumnSelect += StartColumnSelection;
             timeline.DragSeekBar += StartDragSeekBar;
-            timeline.HoverPatternChanged += (x) => SetHover(-1, x);
+            timeline.HoverPatternChanged += (p) => SetHover(-1, p);
             timeline.LoopPointToggled += SetLoopPoint;
             timeline.PatternModified += () => PatternModified?.Invoke();
             timeline.StartPanning += StartPanning;
@@ -1345,6 +1345,14 @@ namespace FamiStudio
             return false;
         }
 
+        public override void OnContainerPointerDownNotify(Control control, PointerEventArgs e)
+        {
+            var p = WindowToControl(control.ControlToWindow(e.Position));
+            SetMouseLastPos(p.X, p.Y);
+
+            App.SetToolTip(control.ToolTip);
+        }
+
         public override void OnContainerPointerMoveNotify(Control control, PointerEventArgs e)
         {
             var p = WindowToControl(control.ControlToWindow(e.Position));
@@ -1377,10 +1385,13 @@ namespace FamiStudio
                 return;
             }
 
+            UpdateToolTip(e);
+
             if (captureOperation != CaptureOperation.None && (e.Left || e.Right))
                 return;
 
             UpdateCursor();
+            SetHoverByCoords(e.X, e.Y);
 
             if (HandleMouseDownPan(e)) goto Handled;
             if (HandleMouseDownScrollbar(e)) goto Handled;
@@ -2706,23 +2717,21 @@ namespace FamiStudio
                 DoScroll(e.X - mouseLastX, e.Y - mouseLastY);
 
             if (IsCursorInContainer())
-                UpdateHover(e);
-
-            // TODO: This will change when the pattern area becaomes its own control.
-            // For now, this stops it breaking the tooltips during a capture op.
-            if (mouseLastX > channelNameSizeX && mouseLastY > headerSizeY)
+            {
+                SetHoverByCoords(e.X, e.Y);
                 UpdateToolTip(e);
+            }
 
             SetMouseLastPos(e.X, e.Y);
             ShowExpansionIcons = false;
         }
 
-        private void UpdateHover(PointerEventArgs e)
+        private void SetHoverByCoords(int x, int y)
         {
             if (Platform.IsDesktop)
             {
-                var row     = GetRowIndexForCoord(e.Y);
-                var pattern = GetPatternIndexForCoord(e.X);
+                var row     = GetRowIndexForCoord(y);
+                var pattern = GetPatternIndexForCoord(x);
 
                 SetHover(row, pattern);
             }
@@ -2735,7 +2744,7 @@ namespace FamiStudio
                 if (hoverRow != row)
                 {
                     SetAndMarkDirty(ref hoverRow, row);
-                    channelNames.SetHover(row >= 0 ? GetRowToChannelForIndex(row) : -1);
+                    channelNames.SetHover(GetRowToChannelForIndex(row));
                 }
 
                 if (hoverPattern != pattern)
@@ -2770,7 +2779,15 @@ namespace FamiStudio
             }
         }
 
-        public override void OnContainerPointerLeaveNotify(Control c, EventArgs e)
+        public override void OnContainerPointerEnterNotify(Control control, EventArgs e)
+        {
+            var tooltip = control.ToolTip;
+            if (string.IsNullOrEmpty(tooltip))
+                tooltip = control.ParentContainer.ToolTip;
+            App.SetToolTip(tooltip);
+        }
+
+        public override void OnContainerPointerLeaveNotify(Control control, EventArgs e)
         {
             ConditionalClearHover();
         }

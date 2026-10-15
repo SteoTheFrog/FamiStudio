@@ -689,6 +689,7 @@ namespace FamiStudio
         {
             if (options != null && options.Length > 0)
             {
+                SetToolTip("");
                 window.ShowContextMenuAsync(options);
             }
         }

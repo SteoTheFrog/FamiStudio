@@ -262,6 +262,11 @@ namespace FamiStudio
             else
                 patternHeaderSizeY = DpiScaling.ScaleForFont(DefaultPatternHeaderSizeY);
 
+            channelNames?.Resize(channelNameSizeX, height);
+            channelNames?.UpdateLayout();
+            timeline?.Resize(width - channelNameSizeX, headerSizeY);
+            timeline?.Move(channelNameSizeX, 0);
+
             RebuildChannelMap();
         }
 
@@ -351,9 +356,6 @@ namespace FamiStudio
 
         public void LayoutChanged()
         {
-            timeline?.Resize(width - channelNameSizeX, headerSizeY);
-            timeline?.Move(channelNameSizeX, 0);
-
             UpdateRenderCoords();
             ClampScroll();
             InvalidatePatternCache();
@@ -412,9 +414,6 @@ namespace FamiStudio
                     rowToChannel[i] = i;
                 }
             }
-
-            channelNames?.Resize(channelNameSizeX, height);
-            channelNames?.UpdateLayout();
         }
 
         public bool GetChannelVisibleForIndex(int index)
@@ -1366,6 +1365,8 @@ namespace FamiStudio
 
             SetMouseLastPos(x, y);
             UpdateCursor();
+
+            App.SetToolTip(control.ToolTip);
         }
 
         public override void OnContainerPointerUpNotify(Control control, PointerEventArgs e)
@@ -2707,20 +2708,17 @@ namespace FamiStudio
             UpdateCursor();
             UpdateCaptureOperation(e.X, e.Y);
 
-            // TODO: There is a niche issue here that I've noticed on Wayland. If the pointer
-            // pointer leaves the window during a pan, then the middle button is released,
-            // the pointer events are delayed and fire after the cursor enters the window.
-            // On re-entry, this fires again before pointer up, leading the panning to 
-            // snap the distance of e.X - mouseLastX before middle and panning are false.
-            // There is surely a way to fire these events while the cursor is outside?
             if (middle && panning)
                 DoScroll(e.X - mouseLastX, e.Y - mouseLastY);
 
             if (IsCursorInContainer())
             {
                 SetHoverByCoords(e.X, e.Y);
-                UpdateToolTip(e);
             }
+
+            // Temporary until pattern area is its own control.
+            if (IsPointInPatternArea(e.X, e.Y))
+                UpdateToolTip(e);
 
             SetMouseLastPos(e.X, e.Y);
             ShowExpansionIcons = false;
@@ -2739,6 +2737,8 @@ namespace FamiStudio
 
         public void SetHover(int row, int pattern)
         {
+            Debug.WriteLine($"ROW: {row}, PATTERN: {pattern}");
+
             if (Platform.IsDesktop)
             {
                 if (hoverRow != row)

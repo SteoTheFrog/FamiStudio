@@ -25,6 +25,7 @@ namespace FamiStudio
             Zenity = 2,
         }
 
+        private const string CanberraGtkPlay = "canberra-gtk-play";
         private const string FlatpakInfoPath = "/.flatpak-info";
         private const string FlatpakPrefix = "/app";
         private const string FlatpakIdEnvVar = "FLATPAK_ID";
@@ -41,6 +42,7 @@ namespace FamiStudio
         private static readonly DialogBackend dialogBackend = DialogBackend.None;
         private static readonly string xdgSessionType;
         private static readonly string gdkBackend;
+        private static readonly bool isCanberraAvailable;
         private static readonly bool isDisplayAvailable;
         private static readonly bool isX11;
         private static readonly bool isWayland;
@@ -77,7 +79,10 @@ namespace FamiStudio
             isGdkValid = gdkBackend == null || string.Equals(gdkBackend, xdgSessionType);
 
             if (isGdkValid && TryInitializeGtk())
+            {
                 dialogBackend = DialogBackend.GTK;
+                isCanberraAvailable = CanberraNative.Initialize(GetGtkSoundTheme());
+            }
 
             else if (IsCommandAvailable("kdialog"))
                 dialogBackend = DialogBackend.Kdialog;
@@ -141,7 +146,21 @@ namespace FamiStudio
 
         #endregion
 
-        
+        [StructLayout(LayoutKind.Sequential)]
+        private struct GValue
+        {
+            public UIntPtr Type;
+            public GValueData Data0;
+            public GValueData Data1;
+        }
+
+        [StructLayout(LayoutKind.Explicit, Size = 8)]
+        private struct GValueData
+        {
+            [FieldOffset(0)] public IntPtr Pointer;
+            [FieldOffset(0)] public double Double;
+        }
+
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate void GDestroyNotify(IntPtr data);
 
@@ -156,6 +175,15 @@ namespace FamiStudio
 
         [DllImport(GobjectDllName, EntryPoint = "g_object_unref", CallingConvention = CallingConvention.Cdecl)]
         private static extern void GObjectUnref(IntPtr obj);
+
+        [DllImport(GobjectDllName, EntryPoint = "g_object_get_property",CallingConvention = CallingConvention.Cdecl)]
+        private static extern void GObjectGetProperty(IntPtr obj, [MarshalAs(UnmanagedType.LPUTF8Str)] string propertyName, ref GValue value);
+
+        [DllImport(GobjectDllName, EntryPoint = "g_value_get_string", CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr GValueGetString(ref GValue value);
+
+        [DllImport(GobjectDllName, EntryPoint = "g_value_unset", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void GValueUnset(ref GValue value);
 
         [DllImport(GtkDllName, EntryPoint = "gtk_init", CallingConvention = CallingConvention.Cdecl)]
         private static extern void GtkInit(int argc, IntPtr argv);
@@ -294,6 +322,9 @@ namespace FamiStudio
         [DllImport(GtkDllName, EntryPoint = "gtk_main_iteration", CallingConvention = CallingConvention.Cdecl)]
         private static extern void GtkMainIteration();
 
+        [DllImport(GtkDllName, EntryPoint = "gtk_settings_get_default", CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr GtkSettingsGetDefault();
+
         [DllImport(GdkDllName, EntryPoint = "gdk_x11_window_get_xid", CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr GdkX11WindowGetXid(IntPtr gdkWindow);
 
@@ -380,6 +411,34 @@ namespace FamiStudio
             {
                 Console.WriteLine($"Failed to initialize GTK: {ex.Message}");
                 return false;
+            }
+        }
+
+        private static string GetGtkSoundTheme()
+        {
+            IntPtr settings = GtkSettingsGetDefault();
+
+            if (settings == IntPtr.Zero)
+                return null;
+
+            GValue value = default;
+
+            try
+            {
+                value.Type = (UIntPtr)64;
+                GObjectGetProperty(settings, "gtk-sound-theme-name", ref value);
+
+                IntPtr str = GValueGetString(ref value);
+                return str == IntPtr.Zero ? null : Marshal.PtrToStringUTF8(str);
+            }
+            catch
+            {
+                return null;
+            }
+            finally
+            {
+                if (value.Type != UIntPtr.Zero)
+                    GValueUnset(ref value);
             }
         }
 
@@ -750,6 +809,12 @@ namespace FamiStudio
         {
             if (isDisplayAvailable)
             {
+                // Try to play a notification sound.
+                if (isCanberraAvailable)
+                {
+                    CanberraNative.PlaySound("dialog-warning");
+                }
+
                 switch (dialogBackend)
                 {
                     case DialogBackend.GTK:     return ShowGtkMessageBoxDialog();
@@ -946,18 +1011,41 @@ namespace FamiStudio
                 callback(dlg, GTK_RESPONSE_DELETE_EVENT, userData);
             }, IntPtr.Zero, IntPtr.Zero, 0);
 
+            bool alertSoundPlayed = true;
+
             while (!done)
             {
                 while (GtkEventsPending())
                     GtkMainIteration();
 
-                // In case a user hits the "X" button or ESC on the keyboard.
                 if (!IsGtkWindow(dialog))
                     break;
 
                 FamiStudioWindow.Instance.RunEventLoop(true);
 
-                // Attempt to simulate transient behaviour if it isn't supported.
+                if (FamiStudioWindow.Instance.IsWindowInFocus)
+                {
+                    if (!GtkWindowIsActive(dialog))
+                    {
+                        if (isCanberraAvailable && !alertSoundPlayed)
+                        {
+                            alertSoundPlayed = true;
+
+                            if (isCanberraAvailable)
+                            {
+                                CanberraNative.PlaySound("bell");
+                            }
+                        }
+
+                        // This doesn't work properly in all environments, but the dialog still remains above.
+                        GtkWindowPresent(dialog);
+                    }
+                }
+                else if (GtkWindowIsActive(dialog))
+                {
+                    alertSoundPlayed = false;
+                }
+
                 if ((isWayland && !isWaylandTransient) || !isGdkValid)
                     TrySimulateTransientBehaviour(dialog);
             }
@@ -1063,15 +1151,32 @@ namespace FamiStudio
             [FieldOffset(0)] public IntPtr s;
         }
 
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern IntPtr wl_display_create_queue(IntPtr display);
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern int    wl_display_roundtrip_queue(IntPtr display, IntPtr queue);
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern IntPtr wl_proxy_create_wrapper(IntPtr proxy);
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern void   wl_proxy_wrapper_destroy(IntPtr wrapper);
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern void   wl_proxy_set_queue(IntPtr proxy, IntPtr queue);
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern int    wl_proxy_add_listener(IntPtr proxy, IntPtr impl, IntPtr data);
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern void   wl_proxy_destroy(IntPtr proxy);
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern void   wl_proxy_marshal_array(IntPtr proxy, uint opcode, WlArgument* args);
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] static extern IntPtr wl_proxy_marshal_array_constructor_versioned(IntPtr proxy, uint opcode, WlArgument* args, IntPtr iface, uint version);
+        [DllImport(Lib, EntryPoint = "wl_display_create_queue", CallingConvention = CallingConvention.Cdecl)] 
+        static extern IntPtr WlDisplayCreateQueue(IntPtr display);
+
+        [DllImport(Lib, EntryPoint = "wl_display_roundtrip_queue", CallingConvention = CallingConvention.Cdecl)] 
+        static extern int WlDisplayRoundtripQueue(IntPtr display, IntPtr queue);
+
+        [DllImport(Lib,EntryPoint = "wl_proxy_create_wrapper", CallingConvention = CallingConvention.Cdecl)] 
+        static extern IntPtr WlProxyCreateWrapper(IntPtr proxy);
+
+        [DllImport(Lib, EntryPoint = "wl_proxy_wrapper_destroy" ,CallingConvention = CallingConvention.Cdecl)] 
+        static extern void WlProxyWrapperDestroy(IntPtr wrapper);
+
+        [DllImport(Lib, EntryPoint = "wl_proxy_set_queue", CallingConvention = CallingConvention.Cdecl)] 
+        static extern void WlProxySetQueue(IntPtr proxy, IntPtr queue);
+
+        [DllImport(Lib, EntryPoint = "wl_proxy_add_listener", CallingConvention = CallingConvention.Cdecl)] 
+        static extern int WlProxyAddListener(IntPtr proxy, IntPtr impl, IntPtr data);
+
+        [DllImport(Lib, EntryPoint = "wl_proxy_destroy", CallingConvention = CallingConvention.Cdecl)] 
+        static extern void WlProxyDestroy(IntPtr proxy);
+
+        [DllImport(Lib, EntryPoint = "wl_proxy_marshal_array", CallingConvention = CallingConvention.Cdecl)] 
+        static extern void WlProxyMarshalArray(IntPtr proxy, uint opcode, WlArgument* args);
+
+        [DllImport(Lib, EntryPoint = "wl_proxy_marshal_array_constructor_versioned",CallingConvention = CallingConvention.Cdecl)] 
+        static extern IntPtr WlProxyMarshalArrayConstructorVersioned(IntPtr proxy, uint opcode, WlArgument* args, IntPtr iface, uint version);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void GlobalFn(IntPtr data, IntPtr registry, uint name, IntPtr iface, uint version);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void GlobalRemoveFn(IntPtr data, IntPtr registry, uint name);
@@ -1142,18 +1247,18 @@ namespace FamiStudio
                 Init();
 
                 if (queue == IntPtr.Zero)
-                    queue = wl_display_create_queue(display);
+                    queue = WlDisplayCreateQueue(display);
 
                 if (exporter == IntPtr.Zero)
                 {
-                    var wrapper = wl_proxy_create_wrapper(display);
-                    wl_proxy_set_queue(wrapper, queue);
+                    var wrapper = WlProxyCreateWrapper(display);
+                    WlProxySetQueue(wrapper, queue);
 
                     var args = stackalloc WlArgument[1];
                     args[0].o = IntPtr.Zero; // new_id placeholder.
                     // wl_display.get_registry is opcode 1.
-                    var registry = wl_proxy_marshal_array_constructor_versioned(wrapper, 1, args, registryIface, 1);
-                    wl_proxy_wrapper_destroy(wrapper);
+                    var registry = WlProxyMarshalArrayConstructorVersioned(wrapper, 1, args, registryIface, 1);
+                    WlProxyWrapperDestroy(wrapper);
 
                     onGlobal = (d, reg, name, iface, ver) =>
                     {
@@ -1164,12 +1269,12 @@ namespace FamiStudio
                         a[2].u = 1;
                         a[3].o = IntPtr.Zero;
                         // wl_registry.bind is opcode 0.
-                        exporter = wl_proxy_marshal_array_constructor_versioned(reg, 0, a, exporterIface, 1);
+                        exporter = WlProxyMarshalArrayConstructorVersioned(reg, 0, a, exporterIface, 1);
                     };
                     onGlobalRemove = (d, reg, name) => { };
-                    wl_proxy_add_listener(registry, MakeListener(onGlobal, onGlobalRemove), IntPtr.Zero);
+                    WlProxyAddListener(registry, MakeListener(onGlobal, onGlobalRemove), IntPtr.Zero);
 
-                    wl_display_roundtrip_queue(display, queue);
+                    WlDisplayRoundtripQueue(display, queue);
                     if (exporter == IntPtr.Zero)
                         return null; // Compositor has no xdg-foreign. Transient will not work.
                 }
@@ -1178,13 +1283,14 @@ namespace FamiStudio
                 ea[0].o = IntPtr.Zero;
                 ea[1].o = surface;
                 // zxdg_exporter_v2.export_toplevel is opcode 1.
-                exported = wl_proxy_marshal_array_constructor_versioned(exporter, 1, ea, exportedIface, 1);
+                exported = WlProxyMarshalArrayConstructorVersioned(exporter, 1, ea, exportedIface, 1);
 
                 handle = null;
                 onHandle = (d, e, h) => handle = Marshal.PtrToStringUTF8(h);
-                wl_proxy_add_listener(exported, MakeListener(onHandle), IntPtr.Zero);
 
-                wl_display_roundtrip_queue(display, queue);
+                WlProxyAddListener(exported, MakeListener(onHandle), IntPtr.Zero);
+                WlDisplayRoundtripQueue(display, queue);
+
                 return handle;
             }
             catch (Exception ex) when (ex is DllNotFoundException || ex is EntryPointNotFoundException)
@@ -1197,10 +1303,146 @@ namespace FamiStudio
         {
             if (exported == IntPtr.Zero) return;
             var a = stackalloc WlArgument[1];
-            wl_proxy_marshal_array(exported, 0, a); // Destroy request.
-            wl_proxy_destroy(exported);
+            WlProxyMarshalArray(exported, 0, a); // Destroy request.
+            WlProxyDestroy(exported);
             exported = IntPtr.Zero;
             handle = null;
+        }
+    }
+
+    public static class CanberraNative
+    {
+        private const string Library = "libcanberra.so.0";
+
+        private static IntPtr _context;
+        private static bool _initialized;
+        private static readonly object Sync = new();
+
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int ca_context_create(out IntPtr context);
+
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int ca_context_change_props_full(IntPtr context, IntPtr properties);
+
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int ca_context_play_full(IntPtr context, uint id, IntPtr properties, IntPtr callback, IntPtr userdata);
+
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int ca_context_destroy(IntPtr context);
+
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int ca_proplist_create(out IntPtr properties);
+
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int ca_proplist_sets(IntPtr properties, [MarshalAs(UnmanagedType.LPUTF8Str)] string key, [MarshalAs(UnmanagedType.LPUTF8Str)] string value);
+
+        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int ca_proplist_destroy(IntPtr properties);
+
+        public static bool Initialize(string theme)
+        {
+            lock (Sync)
+            {
+                if (_initialized)
+                    return _context != IntPtr.Zero;
+
+                _initialized = true;
+                IntPtr context = IntPtr.Zero;
+
+                try
+                {
+                    if (ca_context_create(out context) != 0)
+                        return false;
+
+                    if (!string.IsNullOrWhiteSpace(theme))
+                    {
+                        IntPtr properties = IntPtr.Zero;
+
+                        try
+                        {
+                            if (ca_proplist_create(out properties) != 0)
+                                return false;
+
+                            if (ca_proplist_sets(properties,"canberra.xdg-theme.name", theme) != 0)
+                                return false;
+
+                            if (ca_context_change_props_full(context, properties) != 0)
+                                return false;
+                        }
+                        finally
+                        {
+                            if (properties != IntPtr.Zero)
+                                ca_proplist_destroy(properties);
+                        }
+                    }
+
+                    _context = context;
+                    context = IntPtr.Zero;
+                    return true;
+                }
+                catch (DllNotFoundException)
+                {
+                    return false;
+                }
+                catch (EntryPointNotFoundException)
+                {
+                    return false;
+                }
+                finally
+                {
+                    if (context != IntPtr.Zero)
+                        ca_context_destroy(context);
+                }
+            }
+        }
+
+        public static bool PlaySound(string soundEventId = "dialog-question")
+        {
+            lock (Sync)
+            {
+                if (_context == IntPtr.Zero)
+                    return false;
+
+                IntPtr properties = IntPtr.Zero;
+
+                try
+                {
+                    if (ca_proplist_create(out properties) != 0)
+                        return false;
+
+                    if (ca_proplist_sets(properties, "event.id", soundEventId) != 0)
+                        return false;
+
+                    return ca_context_play_full(_context, 0, properties, IntPtr.Zero, IntPtr.Zero) == 0;
+                }
+                catch (DllNotFoundException)
+                {
+                    return false;
+                }
+                catch (EntryPointNotFoundException)
+                {
+                    return false;
+                }
+                finally
+                {
+                    if (properties != IntPtr.Zero)
+                        ca_proplist_destroy(properties);
+                }
+            }
+        }
+
+        public static void Shutdown()
+        {
+            lock (Sync)
+            {
+                if (_context != IntPtr.Zero)
+                {
+                    ca_context_destroy(_context);
+                    _context = IntPtr.Zero;
+                }
+
+                _initialized = false;
+            }
         }
     }
 }

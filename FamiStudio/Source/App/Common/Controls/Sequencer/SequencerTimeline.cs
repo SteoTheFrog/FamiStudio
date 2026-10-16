@@ -234,7 +234,7 @@ namespace FamiStudio
             }
 
             // Ensures the channel name hover is cleared if we exit a context menu.
-            HoverPatternChanged?.Invoke(HoverPattern);
+            HoverPatternChanged?.Invoke(GetPatternIndexForCoord(e.X));
 
             if (e.Middle)
             {
@@ -273,11 +273,6 @@ namespace FamiStudio
         protected override void OnPointerDownDelayed(PointerEventArgs e)
         {
             ColumnSelect?.Invoke(this, e);
-        }
-
-        protected override void OnResize(EventArgs e)
-        {
-            Resize(sequencer.Width - sequencer.ChannelNameSizeX, height);
         }
 
         protected override void OnRender(Graphics g)

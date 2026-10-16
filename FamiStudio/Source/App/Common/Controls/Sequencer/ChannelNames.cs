@@ -5,7 +5,7 @@ namespace FamiStudio
 {
     public class ChannelNames : Container
     {
-        //private readonly Sequencer sequencer;
+        private readonly Sequencer sequencer;
         private Container headerContainer;
         private Container namesContainer;
         private Button shyButton;
@@ -18,9 +18,8 @@ namespace FamiStudio
         private ChannelName[] channelNames;
 
         private Song Song => App?.SelectedSong;
-        private Sequencer Sequencer => App?.Sequencer;
-        private int ChannelSizeY => Sequencer.ChannelSizeY;
-        private int HeaderSizeY => Sequencer.HeaderSizeY;
+        private int ChannelSizeY => sequencer.ChannelSizeY;
+        private int HeaderSizeY => sequencer.HeaderSizeY;
 
         LocalizedString ShyModeTooltip;
 
@@ -30,6 +29,7 @@ namespace FamiStudio
         public ChannelNames(Sequencer sequencer)
         {
             Localization.Localize(this);
+            this.sequencer = sequencer;
         }
 
         protected override void OnAddedToContainer()
@@ -96,22 +96,25 @@ namespace FamiStudio
 
         private int GetChannelToRowForIndex(int idx)
         {
-            return Sequencer.GetChannelToRowForIndex(idx);
+            return sequencer.GetChannelToRowForIndex(idx);
         }
 
         private void SetHideEmptyChannels(bool hide)
         {
-            Sequencer.SetHideEmptyChannels(hide);
+            sequencer.SetHideEmptyChannels(hide);
             hideEmptyChannels = hide;
         }
 
         private void LayoutChanged()
         {
-            Sequencer.LayoutChanged();
+            window.RefreshLayout();
         }
 
         public void UpdateLayout()
         {
+            if (Song == null)
+                return;
+
             headerContainer.Move(0, 0);
             headerContainer.Resize(Width, HeaderSizeY);
 
@@ -143,10 +146,12 @@ namespace FamiStudio
             }
 
             var rowCount = maxRow + 1;
+            var namesHeight = rowCount * ChannelSizeY;
 
             namesContainer.Visible = rowCount > 0;
             namesContainer.Move(0, HeaderSizeY);
-            namesContainer.Resize(width, rowCount * ChannelSizeY);
+            namesContainer.Resize(width, namesHeight);
+            Resize(width, namesHeight + HeaderSizeY + 1);
 
             visibleChannelCount = rowCount;
         }
@@ -221,8 +226,7 @@ namespace FamiStudio
             c.FillRectangle(0, 0, width, height, Theme.DarkGreyColor2);
 
             // Bottom line.
-            var bottomHeight = visibleChannelCount > 0 ? height - 1 : HeaderSizeY;
-            c.DrawLine(0, bottomHeight, width, bottomHeight, Theme.BlackColor);
+            c.DrawLine(0, height - 1, width, height - 1, Theme.BlackColor);
 
             base.OnRender(g);
 

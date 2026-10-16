@@ -61,7 +61,7 @@ namespace FamiStudio
         float flingVelX;
         float flingVelY;
         float selectionDragAnchorPatternXFraction = -1.0f;
-        CaptureOperation captureOperation = CaptureOperation.None;
+        CaptureOperation captureOperation;
         bool panning = false;
         bool canFling = false;
         bool continuouslyFollowing = false;
@@ -93,47 +93,38 @@ namespace FamiStudio
         TextureAtlasRef bmpDuplicateMove;
         TextureAtlasRef bmpMenuInstance;
 
-        enum CaptureOperation
+        private class CaptureOperation
         {
-            None,
-            SelectColumn,
-            SelectRectangle,
-            DragSelection,
-            AltZoom,
-            DragSeekBar,
-            ScrollBarX,
-            ScrollBarY,
-            MobileZoom,
-            MobilePan,
+            private string name;
+            private bool needsThreshold;
+            private bool realTimeUpdate;
+
+            public string Name => name;
+            public bool NeedsThreshold => needsThreshold;
+            public bool RealTimeUpdate => realTimeUpdate;
+
+            public CaptureOperation(string desc, bool realTime = true, bool threshold = true)
+            {
+                name = desc;
+                needsThreshold = threshold;
+                realTimeUpdate = realTime;
+            }
+
+            public override string ToString()
+            {
+                return name;
+            }
         }
 
-        static readonly bool[] captureNeedsThreshold = new[]
-        {
-            false, // None
-            Platform.IsMobile,  // SelectColumn
-            false, // SelectRectangle
-            true,  // DragSelection
-            false, // AltZoom
-            false, // DragSeekBar
-            false, // ScrollBarX
-            false, // ScrollBarY
-            false, // MobileZoom,
-            false, // MobilePan,
-        };
-
-        static readonly bool[] captureWantsRealTimeUpdate = new[]
-        {
-            false, // None
-            true,  // SelectColumn
-            true,  // SelectRectangle
-            true,  // DragSelection
-            false, // AltZoom
-            true,  // DragSeekBar
-            false, // ScrollBarX
-            false, // ScrollBarY
-            false, // MobileZoom,
-            false, // MobilePan,
-        };
+        private static readonly CaptureOperation SelectColumn    = new CaptureOperation("SelectColumn", true, Platform.IsMobile);
+        private static readonly CaptureOperation SelectRectangle = new CaptureOperation("SelectRectangle", true, false);
+        private static readonly CaptureOperation DragSelection   = new CaptureOperation("DragSelection");
+        private static readonly CaptureOperation AltZoom         = new CaptureOperation("AltZoom", false, false);
+        private static readonly CaptureOperation DragSeekBar     = new CaptureOperation("DragSeekBar", true, false);
+        private static readonly CaptureOperation ScrollBarX      = new CaptureOperation("ScrollBarX", false, false);
+        private static readonly CaptureOperation ScrollBarY      = new CaptureOperation("ScrollBarY", false, false);
+        private static readonly CaptureOperation MobileZoom      = new CaptureOperation("MobileZoom", false, false);
+        private static readonly CaptureOperation MobilePan       = new CaptureOperation("MobilePan", false, false);
 
         private ChannelNames channelNames;
         private SequencerTimeline timeline;
@@ -151,7 +142,7 @@ namespace FamiStudio
         public Color SelectedPatternVisibleColor   => selectedPatternVisibleColor;
         public PatternLocation SelectionMin => selectionMin;
         public PatternLocation SelectionMax => selectionMax;
-        public bool HasCaptureOperation => captureOperation != CaptureOperation.None;
+        public bool HasCaptureOperation => captureOperation != null;
         public int ChannelIconPosX  => channelIconPosX;
         public int ChannelIconPosY  => channelIconPosY;
         public int ChannelNamePosX  => channelNamePosX;
@@ -598,7 +589,7 @@ namespace FamiStudio
 
         public int GetSeekFrameToDraw()
         {
-            return captureOperation == CaptureOperation.DragSeekBar ? dragSeekPosition : App.CurrentFrame;
+            return captureOperation == DragSeekBar ? dragSeekPosition : App.CurrentFrame;
         }
 
         private int MinVisibleNoteIdx()
@@ -697,7 +688,7 @@ namespace FamiStudio
 
             // TODO : This is really bad, since all the logic is in the rendering code. Make
             // this more like any other capture op eventually.
-            if (captureOperation == CaptureOperation.DragSelection)
+            if (captureOperation == DragSelection)
             {
                 var pt = new Point(mouseLastX, mouseLastY);
                 var noteIdx = GetNoteForPixel(pt.X - channelNameSizeX);
@@ -1120,19 +1111,19 @@ namespace FamiStudio
 
         private void StartCaptureOperation(int x, int y, CaptureOperation op, Control ctrl = null)
         {
-            Debug.Assert(captureOperation == CaptureOperation.None);
+            Debug.Assert(captureOperation == null);
 
             CaptureMouse(x, y, ctrl);
 
             canFling = false;
             captureOperation = op;
-            captureThresholdMet = !captureNeedsThreshold[(int)op];
+            captureThresholdMet = !op.NeedsThreshold;
             mouseMovedDuringCapture = false;
-            captureRealTimeUpdate = captureWantsRealTimeUpdate[(int)op];
+            captureRealTimeUpdate = op.RealTimeUpdate;
             captureRowIdx = GetRowIndexForCoord(y);
             GetClampedPatternForCoord(x, y, out captureChannelIdx, out capturePatternIdx);
 
-            if (captureOperation == CaptureOperation.SelectRectangle)
+            if (captureOperation == SelectRectangle)
                 patternRefCounts.Clear();
         }
 
@@ -1207,7 +1198,7 @@ namespace FamiStudio
                     }
                     else if (x >= scrollBarPosX && x <= (scrollBarPosX + scrollBarSizeX))
                     {
-                        StartCaptureOperation(e.X, e.Y, CaptureOperation.ScrollBarX);
+                        StartCaptureOperation(e.X, e.Y, ScrollBarX);
                     }
                     return true;
                 }
@@ -1228,7 +1219,7 @@ namespace FamiStudio
                     }
                     else if (y >= scrollBarThumbPosY && y <= (scrollBarThumbPosY + scrollBarThumbSizeY))
                     {
-                        StartCaptureOperation(e.X, e.Y, CaptureOperation.ScrollBarY);
+                        StartCaptureOperation(e.X, e.Y, ScrollBarY);
                     }
                     return true;
                 }
@@ -1261,7 +1252,7 @@ namespace FamiStudio
         {
             if (e.Right && ModifierKeys.IsAltDown && Settings.AltZoomAllowed && GetPatternForCoord(e.X, e.Y, out _))
             {
-                StartCaptureOperation(e.X, e.Y, CaptureOperation.AltZoom);
+                StartCaptureOperation(e.X, e.Y, AltZoom);
                 return true;
             }
 
@@ -1271,7 +1262,7 @@ namespace FamiStudio
         private void StartDragSeekBar(Control control, PointerEventArgs e)
         {
             var p = WindowToControl(control.ControlToWindow(e.Position));
-            StartCaptureOperation(p.X, p.Y, CaptureOperation.DragSeekBar, control);
+            StartCaptureOperation(p.X, p.Y, DragSeekBar, control);
             UpdateSeekDrag(p.X, p.Y, false);
         }
         
@@ -1279,13 +1270,13 @@ namespace FamiStudio
         {
             selectionDragAnchorPatternIdx = patternIdx;
             selectionDragAnchorPatternXFraction = (x - channelNameSizeX + scrollX - GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(patternIdx), false)) / (float)GetPixelForNote(Song.GetPatternLength(patternIdx), false);
-            StartCaptureOperation(x, y, CaptureOperation.DragSelection);
+            StartCaptureOperation(x, y, DragSelection);
         }
 
         private void StartColumnSelection(Control control, PointerEventArgs e)
         {
             var p = WindowToControl(control.ControlToWindow(e.Position));
-            StartCaptureOperation(p.X, p.Y, CaptureOperation.SelectColumn, control);
+            StartCaptureOperation(p.X, p.Y, SelectColumn, control);
         }
 
         private void StartPanning(Control control, PointerEventArgs e)
@@ -1388,7 +1379,7 @@ namespace FamiStudio
 
             UpdateToolTip(e);
 
-            if (captureOperation != CaptureOperation.None && (e.Left || e.Right))
+            if (captureOperation != null && (e.Left || e.Right))
                 return;
 
             UpdateCursor();
@@ -1410,7 +1401,7 @@ namespace FamiStudio
         {
             if (e.Right && IsMouseInPatternZone(e))
             {
-                StartCaptureOperation(e.X, e.Y, CaptureOperation.SelectRectangle);
+                StartCaptureOperation(e.X, e.Y, SelectRectangle);
                 return true;
             }
 
@@ -1432,7 +1423,7 @@ namespace FamiStudio
         {
             if (IsPointInPatternArea(x, y))
             {
-                StartCaptureOperation(x, y, CaptureOperation.MobilePan);
+                StartCaptureOperation(x, y, MobilePan);
                 return true;
             }
 
@@ -1716,13 +1707,13 @@ namespace FamiStudio
             var x = e.X;
             var y = e.Y;
 
-            if (captureOperation != CaptureOperation.None)
+            if (captureOperation != null)
             {
-                Debug.Assert(captureOperation != CaptureOperation.MobileZoom);
+                Debug.Assert(captureOperation != MobileZoom);
                 AbortCaptureOperation();
             }
 
-            StartCaptureOperation(x, y, CaptureOperation.MobileZoom);
+            StartCaptureOperation(x, y, MobileZoom);
             SetMouseLastPos(x, y);
         }
 
@@ -1765,7 +1756,7 @@ namespace FamiStudio
             SetMouseLastPos(x, y);
 
             // Ignore double tap if we handled a single tap recently.
-            if (captureOperation != CaptureOperation.None/* || (DateTime.Now - lastPatternCreateTime).TotalMilliseconds < 500*/)
+            if (captureOperation != null/* || (DateTime.Now - lastPatternCreateTime).TotalMilliseconds < 500*/)
             {
                 return;
             }
@@ -2052,7 +2043,7 @@ namespace FamiStudio
 
         protected void UpdateCursor()
         {
-            if (captureOperation == CaptureOperation.DragSelection)
+            if (captureOperation == DragSelection)
             {
                 Cursor = Cursors.DragCursor;
             }
@@ -2249,25 +2240,23 @@ namespace FamiStudio
 
         private void EndCaptureOperation(int x, int y)
         {
-            if (captureOperation != CaptureOperation.None)
+            if (captureOperation != null)
             {
-                switch (captureOperation)
+                if (captureOperation == DragSelection)
                 {
-                    case CaptureOperation.DragSelection:
-                        EndDragSelection(x, y);
-                        break;
-                    case CaptureOperation.DragSeekBar:
-                        UpdateSeekDrag(x, y, true);
-                        break;
-                    case CaptureOperation.MobilePan:
-                    case CaptureOperation.MobileZoom:
-                        canFling = true;
-                        break;
-
+                    EndDragSelection(x,y);
+                }
+                else if (captureOperation == DragSeekBar)
+                {
+                    UpdateSeekDrag(x, y, true);
+                }
+                else if (captureOperation == MobilePan || captureOperation == MobileZoom)
+                {
+                    canFling = true;
                 }
 
                 panning = false;
-                captureOperation = CaptureOperation.None;
+                captureOperation = null;
                 ReleasePointer();
                 MarkDirty();
             }
@@ -2290,7 +2279,7 @@ namespace FamiStudio
             }
             else
             {
-                doMouseUp = captureOperation == CaptureOperation.None;
+                doMouseUp = captureOperation == null;
                 EndCaptureOperation(e.X, e.Y);
             }
 
@@ -2311,14 +2300,14 @@ namespace FamiStudio
 
         private void AbortCaptureOperation()
         {
-            if (captureOperation != CaptureOperation.None)
+            if (captureOperation != null)
             {
                 if (App.UndoRedoManager.HasTransactionInProgress)
                     App.UndoRedoManager.AbortTransaction();
 
                 panning = false;
                 canFling = false;
-                captureOperation = CaptureOperation.None;
+                captureOperation = null;
 
                 ReleasePointer();
                 MarkDirty();
@@ -2331,11 +2320,11 @@ namespace FamiStudio
 
         protected void CancelDragSelection()
         {
-            if (captureOperation == CaptureOperation.DragSelection)
+            if (captureOperation == DragSelection)
             {
                 selectionDragAnchorPatternIdx = -1;
                 selectionDragAnchorPatternXFraction = -1.0f;
-                captureOperation = CaptureOperation.None;
+                captureOperation = null;
             }
 
             captureMouseX = -1;
@@ -2423,7 +2412,7 @@ namespace FamiStudio
                 }
             }
 
-            if (captureOperation == CaptureOperation.DragSelection)
+            if (captureOperation == DragSelection)
             {
                 UpdateCursor();
                 MarkDirty();
@@ -2435,7 +2424,7 @@ namespace FamiStudio
 
         protected override void OnKeyUp(KeyEventArgs e)
         {
-            if (captureOperation == CaptureOperation.DragSelection)
+            if (captureOperation == DragSelection)
             {
                 UpdateCursor();
                 MarkDirty();
@@ -2641,7 +2630,7 @@ namespace FamiStudio
 
             var captureThresholdJustMet = false;
 
-            if (captureOperation != CaptureOperation.None)
+            if (captureOperation != null)
             {
                 if (!captureThresholdMet)
                 {
@@ -2656,41 +2645,48 @@ namespace FamiStudio
                 mouseMovedDuringCapture |= (x != captureMouseX || y != captureMouseY);
             }
 
-            if (captureOperation != CaptureOperation.None && captureThresholdMet && (captureRealTimeUpdate || !realTime))
+            if (captureOperation != null && captureThresholdMet && (captureRealTimeUpdate || !realTime))
             {
-                switch (captureOperation)
+                if (captureOperation == SelectColumn)
                 {
-                    case CaptureOperation.SelectColumn:
-                        UpdateSelection(x, y, true, captureThresholdJustMet);
-                        break;
-                    case CaptureOperation.SelectRectangle:
-                        UpdateSelection(x, y, false, captureThresholdJustMet);
-                        break;
-                    case CaptureOperation.AltZoom:
-                        UpdateAltZoom(x, y);
-                        break;
-                    case CaptureOperation.DragSeekBar:
-                        UpdateSeekDrag(x, y, false);
-                        break;
-                    case CaptureOperation.ScrollBarX:
-                        UpdateScrollBarX(x, y);
-                        break;
-                    case CaptureOperation.ScrollBarY:
-                        UpdateScrollBarY(x, y);
-                        break;
-                    case CaptureOperation.MobilePan:
-                        DoScroll(x - mouseLastX, y - mouseLastY);
-                        break;
-                    case CaptureOperation.DragSelection:
-                        UpdateDragSelection(x, y);
-                        break;
-                    case CaptureOperation.MobileZoom:
-                        ZoomAtLocation(x, scale);
-                        DoScroll(x - mouseLastX, y - mouseLastY);
-                        break;
-                    default:
-                        MarkDirty();
-                        break;
+                    UpdateSelection(x, y, true, captureThresholdJustMet);
+                }
+                else if (captureOperation == SelectRectangle)
+                {
+                    UpdateSelection(x, y, false, captureThresholdJustMet);
+                }
+                else if (captureOperation == AltZoom)
+                {
+                    UpdateAltZoom(x, y);
+                }
+                else if (captureOperation == DragSeekBar)
+                {
+                    UpdateSeekDrag(x, y, false);
+                }
+                else if (captureOperation == ScrollBarX)
+                {
+                    UpdateScrollBarX(x, y);
+                }
+                else if (captureOperation == ScrollBarY)
+                {
+                    UpdateScrollBarY(x, y);
+                }
+                else if (captureOperation == MobilePan)
+                {
+                    DoScroll(x - mouseLastX, y - mouseLastY);
+                }
+                else if (captureOperation == DragSelection)
+                {
+                    UpdateDragSelection(x, y);
+                }
+                else if (captureOperation == MobileZoom)
+                {
+                    ZoomAtLocation(x, scale);
+                    DoScroll(x - mouseLastX, y - mouseLastY);
+                }
+                else
+                {
+                    MarkDirty();
                 }
             }
         }
@@ -2737,8 +2733,6 @@ namespace FamiStudio
 
         public void SetHover(int row, int pattern)
         {
-            Debug.WriteLine($"ROW: {row}, PATTERN: {pattern}");
-
             if (Platform.IsDesktop)
             {
                 if (hoverRow != row)
@@ -2952,7 +2946,7 @@ namespace FamiStudio
             continuouslyFollowing = false;
 
             if ((App.IsPlaying || force) && App.FollowModeEnabled && Settings.FollowSync != Settings.FollowSyncPianoRoll && !panning && 
-                captureOperation == CaptureOperation.None && !window.IsAsyncDialogInProgress && !window.IsOutOfProcessDialogInProgress)
+                captureOperation == null && !window.IsAsyncDialogInProgress && !window.IsOutOfProcessDialogInProgress)
             {
                 var frame = App.CurrentFrame;
                 var seekX = GetPixelForNote(App.CurrentFrame);

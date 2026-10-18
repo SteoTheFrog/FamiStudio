@@ -8,24 +8,24 @@ namespace FamiStudio
         private const int DefaultHeaderIconPosX = 3;
         private const int DefaultHeaderIconPosY = 3;
 
-        private Sequencer sequencer;
         private TextureAtlasRef bmpLoopPoint;
         private int barTextPosY    = DpiScaling.ScaleForWindow(DefaultBarTextPosY);
         private int headerIconPosX = DpiScaling.ScaleForWindow(DefaultHeaderIconPosX);
         private int headerIconPosY = DpiScaling.ScaleForWindow(DefaultHeaderIconPosY);
         private float[] seekGeometry;
 
+        private Sequencer Sequencer => App?.Sequencer;
         private Song Song => App?.SelectedSong;
         
-        private Color SelectedPatternInvisibleColor => sequencer.SelectedPatternInvisibleColor;
-        private Color SelectedPatternVisibleColor   => sequencer.SelectedPatternVisibleColor;
-        private PatternLocation SelectionMax => sequencer.SelectionMax;
-        private PatternLocation SelectionMin => sequencer.SelectionMin;
-        private bool HasCaptureOperation => sequencer.HasCaptureOperation;
-        private int HeaderSizeY   => sequencer.HeaderSizeY;
-        private int HoverPattern  => sequencer.HoverPattern;
-        private int SeekX         => sequencer.SeekX;
-        private float BitmapScale => sequencer.BitmapScale;
+        private Color SelectedPatternInvisibleColor => Sequencer.SelectedPatternInvisibleColor;
+        private Color SelectedPatternVisibleColor   => Sequencer.SelectedPatternVisibleColor;
+        private PatternLocation SelectionMax        => Sequencer.SelectionMax;
+        private PatternLocation SelectionMin        => Sequencer.SelectionMin;
+
+        private bool  HasCaptureOperation => Sequencer.HasCaptureOperation;
+        private int   HoverPattern        => Sequencer.HoverPattern;
+        private int   SeekX               => Sequencer.SeekX;
+        private float BitmapScale         => Sequencer.BitmapScale;
 
         public delegate void PatternDelegate(int idx);
         public delegate void PointerDelegate(Control c, PointerEventArgs e);
@@ -55,10 +55,9 @@ namespace FamiStudio
         LocalizedString CustomPatternTitle;
         LocalizedString CustomPatternTooltip;
 
-        public SequencerTimeline(Sequencer sequencer)
+        public SequencerTimeline()
         {
             Localization.Localize(this);
-            this.sequencer = sequencer;
             supportsLongPress = true;
         }
 
@@ -69,43 +68,46 @@ namespace FamiStudio
             bmpLoopPoint = g.GetTextureAtlasRef("LoopSmallFill");
 
             tooltip = $"<MouseLeft> {SeekTooltip} - <MouseRight> {MoreOptionsTooltip} - <MouseRight><Drag> {SelectColumnTooltip}\n<L><MouseLeft> {SetLoopPointTooltip} - <MouseWheel><Drag> {PanTooltip}";
+        }
 
+        public void UpdateLayout(int headerSizeY)
+        {
             seekGeometry = new float[]
             {
-                -HeaderSizeY / 2, 1,
-                0, HeaderSizeY - 2,
-                HeaderSizeY / 2, 1 
+                -height / 2, 1,
+                0, height - 2,
+                height / 2, 1 
             };
         }
 
         private int GetPixelForNote(int note, bool scroll = true)
         {
-            return sequencer.GetPixelForNote(note, scroll);
+            return Sequencer.GetPixelForNote(note, scroll);
         }
 
         private int GetNoteForPixel(int x, bool scroll = true)
         {
-            return sequencer.GetNoteForPixel(x, scroll);
+            return Sequencer.GetNoteForPixel(x, scroll);
         }
 
         private bool IsValidTimeOnlySelection()
         {
-            return sequencer.IsValidTimeOnlySelection();
+            return Sequencer.IsValidTimeOnlySelection();
         }
 
         private Color GetSeekBarColor()
         {
-            return sequencer.GetSeekBarColor();
+            return Sequencer.GetSeekBarColor();
         }
 
         private int MaxVisiblePattern()
         {
-            return sequencer.MaxVisiblePattern();
+            return Sequencer.MaxVisiblePattern();
         }
 
         private int MinVisiblePattern()
         {
-            return sequencer.MinVisiblePattern();
+            return Sequencer.MinVisiblePattern();
         }
 
         private int GetPatternIndexForCoord(int x)
@@ -183,7 +185,7 @@ namespace FamiStudio
 
         private bool IsPointOnSeekBar(int x)
         {
-            return Math.Abs(SeekX - x) < HeaderSizeY;
+            return Math.Abs(SeekX - x) < height;
         }
 
         protected void OnTouchDown(PointerEventArgs e)
@@ -280,7 +282,7 @@ namespace FamiStudio
             var b = g.BackgroundCommandList;
             var c = g.DefaultCommandList;
 
-            c.DrawLine(0, HeaderSizeY, width, HeaderSizeY, Theme.BlackColor);
+            c.DrawLine(0, height, width, height, Theme.BlackColor);
 
             // Header Background
             for (int i = MinVisiblePattern(); i < MaxVisiblePattern(); i++)
@@ -288,7 +290,7 @@ namespace FamiStudio
                 var px = GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(i));
                 var sx = GetPixelForNote(Song.GetPatternLength(i), false);
                 var color = i == HoverPattern ? Theme.MediumGreyColor1 : ((i & 1) == 0 ? Theme.DarkGreyColor4 : Theme.DarkGreyColor2);
-                b.FillRectangle(px, 0, px + sx, HeaderSizeY, color);
+                b.FillRectangle(px, 0, px + sx, height, color);
             }
 
             // Header selection
@@ -296,8 +298,8 @@ namespace FamiStudio
             {
                 c.FillRectangle(
                     GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(Math.Min(SelectionMin.PatternIndex + 0, Song.Length))), 0,
-                    GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(Math.Min(SelectionMax.PatternIndex + 1, Song.Length))), HeaderSizeY,
-                    sequencer.IsActiveControl ? SelectedPatternVisibleColor : SelectedPatternInvisibleColor);
+                    GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(Math.Min(SelectionMax.PatternIndex + 1, Song.Length))), height,
+                    Sequencer.IsActiveControl ? SelectedPatternVisibleColor : SelectedPatternInvisibleColor);
             }
 
             // Top line.
@@ -308,7 +310,7 @@ namespace FamiStudio
             for (int i = Math.Max(1, MinVisiblePattern()); i <= MaxVisiblePattern(); i++)
             {
                 var px = GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(i));
-                b.DrawLine(px, 0, px, HeaderSizeY, Theme.BlackColor);
+                b.DrawLine(px, 0, px, height, Theme.BlackColor);
             }
 
             // Pattern names.

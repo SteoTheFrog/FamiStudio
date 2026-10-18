@@ -551,6 +551,12 @@ namespace FamiStudio
             }
             else if (action == GLFW_RELEASE)
             {
+                // Don't release a capture with the wrong mouse button. This prevents an issue 
+                // where a user starts a capture, then presses and releases a second mouse button
+                // while still holding the first, incorrectly ending the capture operation.
+                if (captureButton != -1 && button != captureButton)
+                    return;
+
                 if (button == ignoreReleaseButton)
                 {
                     ignoreReleaseButton = -1;
@@ -573,7 +579,10 @@ namespace FamiStudio
                 }
 
                 if (button == captureButton)
+                {
                     ReleasePointer();
+                    captureButton = -1;
+                }
 
                 if (ctrl != null)
                 {

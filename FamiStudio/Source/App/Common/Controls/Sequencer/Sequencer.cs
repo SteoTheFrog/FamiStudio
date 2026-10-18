@@ -126,6 +126,7 @@ namespace FamiStudio
         private static readonly CaptureOperation MobileZoom      = new CaptureOperation("MobileZoom", false, false);
         private static readonly CaptureOperation MobilePan       = new CaptureOperation("MobilePan", false, false);
 
+        // Controls.
         private ChannelNames channelNames;
         private SequencerTimeline timeline;
 
@@ -254,9 +255,10 @@ namespace FamiStudio
                 patternHeaderSizeY = DpiScaling.ScaleForFont(DefaultPatternHeaderSizeY);
 
             channelNames?.Resize(channelNameSizeX, height);
-            channelNames?.UpdateLayout();
+            channelNames?.UpdateLayout(headerSizeY, channelSizeY);
             timeline?.Resize(width - channelNameSizeX, headerSizeY);
             timeline?.Move(channelNameSizeX, 0);
+            timeline?.UpdateLayout(channelSizeY);
 
             RebuildChannelMap();
         }
@@ -359,6 +361,7 @@ namespace FamiStudio
             scrollY = 0;
             zoom = DefaultZoom;
             ClearSelection();
+            channelNames.Reset();
             UpdateRenderCoords();
             InvalidatePatternCache();
         }
@@ -506,11 +509,11 @@ namespace FamiStudio
         {
             UpdateRenderCoords();
 
-            channelNames = new ChannelNames(this);
+            channelNames = new ChannelNames();
             channelNames.HoverChannelChanged += (ch) => SetHover(GetChannelToRowForIndex(ch), -1);
             AddControl(channelNames);
 
-            timeline = new SequencerTimeline(this);
+            timeline = new SequencerTimeline();
             timeline.CancelDragSeekBar += AbortCaptureOperation;
             timeline.ColumnSelect += StartColumnSelection;
             timeline.DragSeekBar += StartDragSeekBar;
@@ -3039,6 +3042,7 @@ namespace FamiStudio
             {
                 // TODO: This is overly aggressive. We should have the 
                 // scope on the transaction on the buffer and filter by that.
+                channelNames?.Reset();
                 UpdateSelectedPatternRefCounts();
                 InvalidatePatternCache();
                 UpdateRenderCoords();

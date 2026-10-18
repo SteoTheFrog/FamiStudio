@@ -5,31 +5,29 @@ namespace FamiStudio
 {
     public class ChannelNames : Container
     {
-        private readonly Sequencer sequencer;
         private Container headerContainer;
         private Container namesContainer;
         private Button shyButton;
         private bool forceShyOff = false;
         private bool hideEmptyChannels = false;
+        private int hoverIndex = -1;
+        private int lastExpansionMask = -1;
         private int scrollBarThickness; // TODO: Check if we even need this. We likely won't have scrollbars in the channel name area itself.
-        private int visibleChannelCount;
         private float headerIconScale = Platform.IsMobile ? DpiScaling.ScaleForWindowFloat(0.5f)  : 1.0f;
 
         private ChannelName[] channelNames;
 
+        private Sequencer Sequencer => App?.Sequencer;
         private Song Song => App?.SelectedSong;
-        private int ChannelSizeY => sequencer.ChannelSizeY;
-        private int HeaderSizeY => sequencer.HeaderSizeY;
 
         LocalizedString ShyModeTooltip;
 
         public delegate void HoverChannelDelegate(int idx);
         public event HoverChannelDelegate HoverChannelChanged;
 
-        public ChannelNames(Sequencer sequencer)
+        public ChannelNames()
         {
             Localization.Localize(this);
-            this.sequencer = sequencer;
         }
 
         protected override void OnAddedToContainer()
@@ -55,32 +53,75 @@ namespace FamiStudio
 
         private void RecreateChannelNames()
         {
-            if (channelNames != null)
-            {
-                foreach (var c in channelNames)
-                    namesContainer.RemoveControl(c);
-            }
+            var expMask = App.Project.ExpansionAudioMask;
+            if (expMask == lastExpansionMask)
+                return;
+
+            ConditionalRemoveChannelNames();
 
             channelNames = new ChannelName[Song.Channels.Length];
 
             for (var i = 0; i < channelNames.Length; i++)
             {
                 var channelName = new ChannelName(i);
+                var idx = i; // Need to copy for channel index.
 
-                channelName.IconClicked += (idx) => { App.ToggleChannelActive(idx); SetHover(idx); };
-                channelName.Clicked += (idx) => { App.SelectedChannelIndex = idx; SetHover(idx); };
-                channelName.SoloToggled += (idx) => App.ToggleChannelSolo(idx, true);
-                channelName.ForceDisplayClicked += (idx) => { App.ToggleChannelForceDisplay(idx); SetHover(idx); };
-                channelName.ForceDisplaySoloToggled += (idx) => App.ToggleChannelForceDisplayAll(idx, true);
-                channelName.PointerEnteredName += HoverChanged;
+                channelName.Clicked += () => ChannelName_Clicked(idx);
+                channelName.ChannelIcon += () => ChannelIcon_Clicked(idx);
+                channelName.ChannelIconDoubleClicked += () => ChannelIcon_DoubleClicked(idx);
+                channelName.ForceDisplayClicked += () => ForceDisplay_Clicked(idx);
+                channelName.ForceDisplayDoubleClicked += () => ForceDisplay_DoubleClicked(idx);
+                channelName.PointerEntered += () => HoverChanged(idx);
 
                 channelNames[i] = channelName;
                 namesContainer.AddControl(channelName);
+
+                SetChannelHover(hoverIndex, true);
+            }
+
+            lastExpansionMask = expMask;
+        }
+
+        private void ConditionalRemoveChannelNames()
+        {
+            if (channelNames != null)
+            {
+                foreach (var c in channelNames)
+                    namesContainer.RemoveControl(c);
             }
         }
 
         public void Reset()
         {
+            RecreateChannelNames();
+        }
+
+        private void ChannelName_Clicked(int idx)
+        {
+            App.SelectedChannelIndex = idx;
+            SetHover(idx);
+        }
+
+        private void ChannelIcon_Clicked(int idx)
+        {
+            App.ToggleChannelActive(idx);
+            SetHover(idx);
+        }
+
+        private void ChannelIcon_DoubleClicked(int idx)
+        {
+            App.ToggleChannelSolo(idx, true);
+        }
+
+        private void ForceDisplay_Clicked(int idx)
+        {
+            App.ToggleChannelForceDisplay(idx);
+            SetHover(idx); 
+        }
+
+        private void ForceDisplay_DoubleClicked(int idx)
+        {
+            App.ToggleChannelForceDisplayAll(idx, true);
         }
 
         private void HoverChanged(int idx)
@@ -90,18 +131,28 @@ namespace FamiStudio
 
         public void SetHover(int idx)
         {
-            foreach (var c in channelNames)
-                c.Hovered = c.NameIndex == idx;
+            if (hoverIndex != idx)
+            {
+                SetChannelHover(hoverIndex, false);
+                hoverIndex = idx;
+                SetChannelHover(hoverIndex, true);
+            }
+        }
+
+        private void SetChannelHover(int idx, bool hover)
+        {
+            if (idx >= 0 && idx < channelNames.Length)
+                channelNames[idx].Hovered = hover;
         }
 
         private int GetChannelToRowForIndex(int idx)
         {
-            return sequencer.GetChannelToRowForIndex(idx);
+            return Sequencer.GetChannelToRowForIndex(idx);
         }
 
         private void SetHideEmptyChannels(bool hide)
         {
-            sequencer.SetHideEmptyChannels(hide);
+            Sequencer.SetHideEmptyChannels(hide);
             hideEmptyChannels = hide;
         }
 
@@ -110,18 +161,18 @@ namespace FamiStudio
             window.RefreshLayout();
         }
 
-        public void UpdateLayout()
+        public void UpdateLayout(int headerSizeY, int channelSizeY)
         {
             if (Song == null)
                 return;
 
+            //this.channelSizeY = channelSizeY;
+
             headerContainer.Move(0, 0);
-            headerContainer.Resize(Width, HeaderSizeY);
+            headerContainer.Resize(width, headerSizeY);
 
             shyButton.Move(Width - shyButton.Width, 0);
-            shyButton.Resize(HeaderSizeY, HeaderSizeY);
-
-            RecreateChannelNames();
+            shyButton.Resize(headerSizeY, headerSizeY);
 
             var maxRow = -1;
 
@@ -141,19 +192,17 @@ namespace FamiStudio
 
                 channelName.Visible = true;
 
-                channelName.Resize(Width, ChannelSizeY);
-                channelName.Move(0, rowIdx * ChannelSizeY);
+                channelName.Resize(Width, channelSizeY);
+                channelName.Move(0, rowIdx * channelSizeY);
             }
 
             var rowCount = maxRow + 1;
-            var namesHeight = rowCount * ChannelSizeY;
+            var namesHeight = rowCount * channelSizeY;
 
             namesContainer.Visible = rowCount > 0;
-            namesContainer.Move(0, HeaderSizeY);
+            namesContainer.Move(0, headerSizeY);
             namesContainer.Resize(width, namesHeight);
-            Resize(width, namesHeight + HeaderSizeY + 1);
-
-            visibleChannelCount = rowCount;
+            Resize(width, namesHeight + headerSizeY + 1);
         }
 
         private string ShyButton_ImageEvent(Control sender, ref Color tint)
@@ -235,7 +284,7 @@ namespace FamiStudio
             // Vertical line seperating with the toolbar
             if (Platform.IsMobile && IsLandscape)
                 c.DrawLine(0, 0, 0, height, Theme.BlackColor);
-        }   
+        }
     }
 
     public class ChannelName : Container
@@ -248,7 +297,7 @@ namespace FamiStudio
         const int DefaultGhostNoteOffsetX = 16;
         const int DefaultGhostNoteOffsetY = Platform.IsMobile ? 16 : 15;
 
-        private Button toggleMuteButton;
+        private Button channelIconButton;
         private Button forceDisplayButton;
 
         private bool hovered;
@@ -258,14 +307,14 @@ namespace FamiStudio
         private int channelNamePosX;
         private float iconScale = Platform.IsMobile ? DpiScaling.ScaleForWindowFloat(0.25f) : 1.0f;
 
-        public delegate void ChannelDelegate(int channelIdx);
+        public delegate void EmptyDelegate();
 
-        public ChannelDelegate Clicked;
-        public ChannelDelegate IconClicked;
-        public ChannelDelegate SoloToggled;
-        public ChannelDelegate ForceDisplayClicked;
-        public ChannelDelegate ForceDisplaySoloToggled;
-        public ChannelDelegate PointerEnteredName;
+        public EmptyDelegate Clicked;
+        public EmptyDelegate ChannelIcon;
+        public EmptyDelegate ChannelIconDoubleClicked;
+        public EmptyDelegate ForceDisplayClicked;
+        public EmptyDelegate ForceDisplayDoubleClicked;
+        public EmptyDelegate PointerEntered;
 
         // Buttons
         LocalizedString MuteChannelTooltip;
@@ -278,8 +327,6 @@ namespace FamiStudio
         LocalizedString ToggleMuteLabel;
         LocalizedString ToggleSoloLabel;
         LocalizedString ForceDisplayLabel;
-    
-        public int NameIndex => nameIndex;
 
         public bool Hovered 
         { 
@@ -307,24 +354,36 @@ namespace FamiStudio
 
             AddControl(button);
             button.AutoSizeToImage();
-            button.Move(x, Utils.DivideAndRoundUp(Height - button.Height, 2));
+            button.Move(x, Utils.DivideAndRoundUp(height - button.Height, 2));
             button.RightClick += ShowContextMenu;
-            button.MouseDoubleClick += HandleButtonDoubleClick;
-            button.TouchDoubleClick += HandleButtonDoubleClick;
             button.ClickOnMouseUp = true;
             button.SupportsDoubleClick = true;
 
             return button;
         }
 
-        private void HandleButtonDoubleClick(Control control, PointerEventArgs e)
+        private void ToggleMute_Click(Control control)
         {
-            if (control == toggleMuteButton)
-                SoloToggled?.Invoke(nameIndex);
-            else if (control == forceDisplayButton)
-                ForceDisplaySoloToggled?.Invoke(nameIndex);
+            ChannelIcon?.Invoke();
+            control.MarkDirty();
+        }
 
-            MarkDirty();
+        private void ForceDisplay_Click(Control control)
+        {
+            ForceDisplayClicked?.Invoke();
+            control.MarkDirty();
+        }
+
+        private void ToggleMute_DoubleClick(Control control, PointerEventArgs e)
+        {
+            ChannelIconDoubleClicked?.Invoke();
+            control.MarkDirty();
+        }
+
+        private void ForceDisplay_DoubleClick(Control control, PointerEventArgs e)
+        {
+            ForceDisplayDoubleClicked?.Invoke();
+            control.MarkDirty();
         }
 
         private void ShowContextMenu(Control sender)
@@ -332,7 +391,7 @@ namespace FamiStudio
             var menu = new List<ContextMenuOption>();
 
             // Only show toggle mute / solo if we clicked the mute button or main control.
-            if (sender == toggleMuteButton || sender == this)
+            if (sender == channelIconButton || sender == this)
             {
                 menu.Add(new ContextMenuOption("MenuMute", ToggleMuteLabel, () => { App.ToggleChannelActive(nameIndex); }));
                 menu.Add(new ContextMenuOption("MenuSolo", ToggleSoloLabel, () => { App.ToggleChannelSolo(nameIndex); }));
@@ -360,34 +419,36 @@ namespace FamiStudio
 
             tooltip = $"<MouseLeft> {MakeActiveTooltip}{channelShortcut}";
 
-            toggleMuteButton = CreateImageButton(channelIconPosX, ChannelType.Icons[type]);
-            forceDisplayButton = CreateImageButton(channelIconPosX + toggleMuteButton.Width + 2, "GhostSmall");
+            channelIconButton = CreateImageButton(channelIconPosX, ChannelType.Icons[type]);
+            channelIconButton.ToolTip = $"<MouseLeft> {MuteChannelTooltip} - <MouseLeft><MouseLeft> {SoloChannelTooltip}";
+            channelIconButton.ImageEvent += ToggleMuteButton_ImageEvent;
+            channelIconButton.Click += ToggleMute_Click;
+            channelIconButton.MouseDoubleClick += ToggleMute_DoubleClick;
+            channelIconButton.TouchDoubleClick += ToggleMute_DoubleClick;
 
-            toggleMuteButton.ToolTip = $"<MouseLeft> {MuteChannelTooltip} - <MouseLeft><MouseLeft> {SoloChannelTooltip}";
+            forceDisplayButton = CreateImageButton(channelIconPosX + channelIconButton.Width + 2, "GhostSmall");
             forceDisplayButton.ToolTip = $"<MouseLeft> {ForceDisplayTooltip}\n<MouseLeft><MouseLeft> {ForceDisplayAllChannelsTooltip}{displayShortcut}";
-
-            toggleMuteButton.ImageEvent += ToggleMuteButton_ImageEvent;
             forceDisplayButton.DimmedEvent += ForceDisplayButton_DimmedEvent;
-
-            toggleMuteButton.Click += (c) => { IconClicked?.Invoke(nameIndex); };
-            forceDisplayButton.Click += (c) => { ForceDisplayClicked?.Invoke(nameIndex); };
+            forceDisplayButton.Click += ForceDisplay_Click;
+            forceDisplayButton.MouseDoubleClick += ForceDisplay_DoubleClick;
+            forceDisplayButton.TouchDoubleClick += ForceDisplay_DoubleClick;
         }
 
         public override void OnContainerPointerDownNotify(Control control, PointerEventArgs e) 
         {
             // Ensure the hover index updates (in case we exited a context menu).
-            PointerEnteredName?.Invoke(nameIndex);
+            PointerEntered?.Invoke();
         }
 
         protected override void OnPointerDown(PointerEventArgs e)
         {
             if (e.Left)
             {
-                Clicked?.Invoke(nameIndex);
+                Clicked?.Invoke();
             }
 
             // Ensure the hover index updates (in case we exited a context menu).
-            PointerEnteredName?.Invoke(nameIndex);
+            PointerEntered?.Invoke();
         }
 
         protected override void OnPointerUp(PointerEventArgs e)
@@ -400,7 +461,7 @@ namespace FamiStudio
 
         protected override void OnPointerEnter(EventArgs e)
         {
-            PointerEnteredName?.Invoke(nameIndex);
+            PointerEntered?.Invoke();
             MarkDirty();
         }
 
@@ -426,9 +487,9 @@ namespace FamiStudio
             var iconSize  = DpiScaling.ScaleForWindow(DefaultChannelIconSize);
             var ghostSize = DpiScaling.ScaleForWindow(DefaultGhostIconSize);
 
-            toggleMuteButton?.Move(DpiScaling.ScaleForWindow(DefaultChannelIconPosX), DpiScaling.ScaleForWindow(DefaultChannelIconPosY));
-            toggleMuteButton?.Resize(iconSize, iconSize);
-            forceDisplayButton?.Move(Width - DpiScaling.ScaleForWindow(DefaultGhostNoteOffsetX), Height - DpiScaling.ScaleForWindow(DefaultGhostNoteOffsetY) - 1);
+            channelIconButton?.Move(DpiScaling.ScaleForWindow(DefaultChannelIconPosX), DpiScaling.ScaleForWindow(DefaultChannelIconPosY));
+            channelIconButton?.Resize(iconSize, iconSize);
+            forceDisplayButton?.Move(width - DpiScaling.ScaleForWindow(DefaultGhostNoteOffsetX), height - DpiScaling.ScaleForWindow(DefaultGhostNoteOffsetY) - 1);
             forceDisplayButton?.Resize(ghostSize, ghostSize);
         }
 
@@ -446,7 +507,7 @@ namespace FamiStudio
             // Dim unsupported channels if enabled in settings
             var dim = Settings.DimUnsupportedChannels && !selectedSong.Channels[nameIndex].SupportsInstrument(selectedInstrument, false);
 
-            c.DrawText(song.Channels[nameIndex].LocalizedName, font, channelNamePosX, channelIconPosY, Theme.LightGreyColor2.Transparent(dim ? 80 : 255), TextFlags.MiddleLeft, 0, toggleMuteButton.Height);
+            c.DrawText(song.Channels[nameIndex].LocalizedName, font, channelNamePosX, channelIconPosY, Theme.LightGreyColor2.Transparent(dim ? 80 : 255), TextFlags.MiddleLeft, 0, channelIconButton.Height);
 
             // Background fill.
             c.FillRectangle(0, 0, width, height, dim ? Theme.DarkGreyColor1 : Theme.DarkGreyColor2);

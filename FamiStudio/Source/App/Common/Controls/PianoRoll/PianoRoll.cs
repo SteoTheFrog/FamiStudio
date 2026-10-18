@@ -6151,6 +6151,7 @@ namespace FamiStudio
                 return;
 
             UpdateCursor();
+            UpdateHover(e);
 
             // General stuff.
             if (HandleMouseDownPan(e)) goto Handled;

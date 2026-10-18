@@ -166,7 +166,7 @@ namespace FamiStudio
 
         public void ConditionalHideContextMenu(Control ctrl)
         {
-            if (!contextMenu.ContainsMenu(ctrl))
+            if (contextMenu.Visible && !contextMenu.ContainsMenu(ctrl))
             {
                 // Use the app code path so the context menu control is cleared.
                 App.HideContextMenu();

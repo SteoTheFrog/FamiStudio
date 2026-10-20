@@ -102,7 +102,7 @@ namespace FamiStudio
         public void SendPointerEnter(EventArgs e) { if (IsContainedByMainWindow) { OnPointerEnter(e); SendContainerPointerEnterNotify(e); } }
         public void SendPointerLeave(EventArgs e) { if (IsContainedByMainWindow) { OnPointerLeave(e); SendContainerPointerLeaveNotify(e); } }
         public void SendMouseWheel(PointerEventArgs e) { OnMouseWheel(e); SendContainerMouseWheelNotify(e); }
-        public void SendMouseHorizontalWheel(PointerEventArgs e) { OnMouseHorizontalWheel(e); }
+        public void SendMouseHorizontalWheel(PointerEventArgs e) { OnMouseHorizontalWheel(e); SendContainerMouseHorizontalWheelNotify(e); }
         public void SendKeyDown(KeyEventArgs e) { OnKeyDown(e); }
         public void SendKeyUp(KeyEventArgs e) { OnKeyUp(e); }
         public void SendChar(CharEventArgs e) { OnChar(e); }
@@ -159,6 +159,18 @@ namespace FamiStudio
             while (c != null) 
             { 
                 c.OnContainerMouseWheelNotify(this, e);
+                if (c is Dialog)
+                    break;
+                c = c.ParentContainer;
+            }
+        } 
+
+        public void SendContainerMouseHorizontalWheelNotify(PointerEventArgs e) 
+        { 
+            var c = ParentContainer; 
+            while (c != null) 
+            { 
+                c.OnContainerMouseHorizontalWheelNotify(this, e);
                 if (c is Dialog)
                     break;
                 c = c.ParentContainer;

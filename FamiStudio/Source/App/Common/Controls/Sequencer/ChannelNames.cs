@@ -12,7 +12,7 @@ namespace FamiStudio
         private bool hideEmptyChannels = false;
         private int hoverIndex = -1;
         private int lastExpansionMask = -1;
-        private int scrollBarThickness; // TODO: Check if we even need this. We likely won't have scrollbars in the channel name area itself.
+        //private int scrollBarThickness; // TODO: Check if we even need this. We likely won't have scrollbars in the channel name area itself.
         private float headerIconScale = Platform.IsMobile ? DpiScaling.ScaleForWindowFloat(0.5f)  : 1.0f;
 
         private ChannelName[] channelNames;
@@ -20,10 +20,9 @@ namespace FamiStudio
         private Sequencer Sequencer => App?.Sequencer;
         private Song Song => App?.SelectedSong;
 
-        LocalizedString ShyModeTooltip;
+        public delegate void EmptyDelegate();
 
-        public delegate void HoverChannelDelegate(int idx);
-        public event HoverChannelDelegate HoverChannelChanged;
+        LocalizedString ShyModeTooltip;
 
         public ChannelNames()
         {
@@ -51,32 +50,31 @@ namespace FamiStudio
             headerContainer.AddControl(shyButton);
         }
 
-        private void RecreateChannelNames()
+        private void ConditionalRecreateChannelNames()
         {
             var expMask = App.Project.ExpansionAudioMask;
-            if (expMask == lastExpansionMask)
-                return;
-
-            ConditionalRemoveChannelNames();
-
-            channelNames = new ChannelName[Song.Channels.Length];
-
-            for (var i = 0; i < channelNames.Length; i++)
+            if (expMask != lastExpansionMask)
             {
-                var channelName = new ChannelName(i);
-                var idx = i; // Need to copy for channel index.
+                ConditionalRemoveChannelNames();
 
-                channelName.Clicked += () => ChannelName_Clicked(idx);
-                channelName.ChannelIcon += () => ChannelIcon_Clicked(idx);
-                channelName.ChannelIconDoubleClicked += () => ChannelIcon_DoubleClicked(idx);
-                channelName.ForceDisplayClicked += () => ForceDisplay_Clicked(idx);
-                channelName.ForceDisplayDoubleClicked += () => ForceDisplay_DoubleClicked(idx);
-                channelName.PointerEntered += () => HoverChanged(idx);
+                channelNames = new ChannelName[Song.Channels.Length];
 
-                channelNames[i] = channelName;
-                namesContainer.AddControl(channelName);
+                for (var i = 0; i < channelNames.Length; i++)
+                {
+                    var channelName = new ChannelName(i);
+                    var idx = i; // Need to copy for channel index.
 
-                SetChannelHover(hoverIndex, true);
+                    channelName.Clicked += () => ChannelName_Clicked(idx);
+                    channelName.ChannelIcon += () => ChannelIcon_Clicked(idx);
+                    channelName.ChannelIconDoubleClicked += () => ChannelIcon_DoubleClicked(idx);
+                    channelName.ForceDisplayClicked += () => ForceDisplay_Clicked(idx);
+                    channelName.ForceDisplayDoubleClicked += () => ForceDisplay_DoubleClicked(idx);
+
+                    channelNames[i] = channelName;
+                    namesContainer.AddControl(channelName);
+
+                    SetChannelHover(hoverIndex, true);
+                }
             }
 
             lastExpansionMask = expMask;
@@ -93,19 +91,22 @@ namespace FamiStudio
 
         public void Reset()
         {
-            RecreateChannelNames();
+            ConditionalRecreateChannelNames();
+        }
+
+        public void Refresh()
+        {
+            ConditionalRecreateChannelNames();
         }
 
         private void ChannelName_Clicked(int idx)
         {
             App.SelectedChannelIndex = idx;
-            SetHover(idx);
         }
 
         private void ChannelIcon_Clicked(int idx)
         {
             App.ToggleChannelActive(idx);
-            SetHover(idx);
         }
 
         private void ChannelIcon_DoubleClicked(int idx)
@@ -116,17 +117,11 @@ namespace FamiStudio
         private void ForceDisplay_Clicked(int idx)
         {
             App.ToggleChannelForceDisplay(idx);
-            SetHover(idx); 
         }
 
         private void ForceDisplay_DoubleClicked(int idx)
         {
             App.ToggleChannelForceDisplayAll(idx, true);
-        }
-
-        private void HoverChanged(int idx)
-        {
-            HoverChannelChanged?.Invoke(idx);
         }
 
         public void SetHover(int idx)
@@ -165,8 +160,6 @@ namespace FamiStudio
         {
             if (Song == null)
                 return;
-
-            //this.channelSizeY = channelSizeY;
 
             headerContainer.Move(0, 0);
             headerContainer.Resize(width, headerSizeY);
@@ -218,7 +211,7 @@ namespace FamiStudio
             SetTickEnabled(hideEmptyChannels && !namesContainer.Visible);
         }
 
-        public void SetScroll(int scrollY)
+        public void SetScrollY(int scrollY)
         {
             if (namesContainer.ScrollY != scrollY)
             {
@@ -242,22 +235,6 @@ namespace FamiStudio
             {
                 forceShyOff = false;
             }
-        }
-
-        private void ContainerEnterPointerDown(Control control)
-        {
-            if (control == headerContainer || control.IsInContainer(headerContainer))
-                HoverChanged(-1);
-        }
-
-        public override void OnContainerPointerEnterNotify(Control control, EventArgs e)
-        {
-            ContainerEnterPointerDown(control);
-        }
-
-        public override void OnContainerPointerDownNotify(Control control, PointerEventArgs e)
-        {
-            ContainerEnterPointerDown(control);
         }
         
         protected override void OnRender(Graphics g)
@@ -434,21 +411,12 @@ namespace FamiStudio
             forceDisplayButton.TouchDoubleClick += ForceDisplay_DoubleClick;
         }
 
-        public override void OnContainerPointerDownNotify(Control control, PointerEventArgs e) 
-        {
-            // Ensure the hover index updates (in case we exited a context menu).
-            PointerEntered?.Invoke();
-        }
-
         protected override void OnPointerDown(PointerEventArgs e)
         {
             if (e.Left)
             {
                 Clicked?.Invoke();
             }
-
-            // Ensure the hover index updates (in case we exited a context menu).
-            PointerEntered?.Invoke();
         }
 
         protected override void OnPointerUp(PointerEventArgs e)
@@ -457,12 +425,6 @@ namespace FamiStudio
             {
                 ShowContextMenu(this);
             }
-        }
-
-        protected override void OnPointerEnter(EventArgs e)
-        {
-            PointerEntered?.Invoke();
-            MarkDirty();
         }
 
         private string ToggleMuteButton_ImageEvent(Control sender, ref Color tint)
@@ -518,7 +480,6 @@ namespace FamiStudio
 
             // Separator lines.
             c.DrawLine(0, 0, width - 1, 0, Theme.BlackColor);
-            //c.DrawLine(0, height - 1, width, height - 1, Theme.BlackColor);
             
             base.OnRender(g);
         }

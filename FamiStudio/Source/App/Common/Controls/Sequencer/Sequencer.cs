@@ -16,7 +16,6 @@ namespace FamiStudio
         const int DefaultChannelNameSizeX    = Platform.IsMobile ? 68 : 94;
         const int DefaultHeaderSizeY         = 17;
         const int DefaultPatternHeaderSizeY  = 13;
-        const int DefaultPatternNamePosX     = 2;
         const int DefaultScrollBarThickness1 = 10;
         const int DefaultScrollBarThickness2 = 16;
         const int DefaultMinScrollBarLength  = 64;
@@ -34,7 +33,6 @@ namespace FamiStudio
         int channelIconPosX;   
         int channelIconPosY;   
         int channelNamePosX;   
-        int patternNamePosX;
         int scrollBarThickness;
         int minScrollBarLength;
         int virtualSizeY;
@@ -44,8 +42,7 @@ namespace FamiStudio
 
         int scrollX = 0;
         int scrollY = 0;
-        int mouseLastX = 0;
-        int mouseLastY = 0;
+        Point mouseLastPos;
         int captureMouseX = -1;
         int captureMouseY = -1;
         int captureScrollX = -1;
@@ -77,21 +74,15 @@ namespace FamiStudio
         PatternLocation selectionMin = PatternLocation.Invalid;
         PatternLocation selectionMax = PatternLocation.Invalid;
         PatternLocation highlightLocation = PatternLocation.Invalid;
-        Dictionary<Pattern, int> patternRefCounts = [];
 
         // Hover tracking
         int hoverRow = -1;
         int hoverPattern = -1;
 
-        PatternBitmapCache patternCache;
+        //PatternBitmapCache patternCache;
 
         Color selectedPatternVisibleColor   = Color.FromArgb(64, Theme.LightGreyColor1);
         Color selectedPatternInvisibleColor = Color.FromArgb(16, Theme.LightGreyColor1);
-
-        TextureAtlasRef bmpInstantiate;
-        TextureAtlasRef bmpDuplicate;
-        TextureAtlasRef bmpDuplicateMove;
-        TextureAtlasRef bmpMenuInstance;
 
         private class CaptureOperation
         {
@@ -128,6 +119,7 @@ namespace FamiStudio
 
         // Controls.
         private ChannelNames channelNames;
+        private PatternArea patternArea;
         private SequencerTimeline timeline;
 
         public delegate void PatternClickedDelegate(int channelIdx, int patternIdx, bool setActive);
@@ -140,48 +132,26 @@ namespace FamiStudio
         public event EmptyDelegate SelectionChanged;
 
         public Color SelectedPatternInvisibleColor => selectedPatternInvisibleColor;
-        public Color SelectedPatternVisibleColor   => selectedPatternVisibleColor;
+        public Color SelectedPatternVisibleColor => selectedPatternVisibleColor;
+        public PatternLocation HighlightLocation => highlightLocation;
         public PatternLocation SelectionMin => selectionMin;
         public PatternLocation SelectionMax => selectionMax;
+        public Point MouseLastPosition => mouseLastPos;
         public bool HasCaptureOperation => captureOperation != null;
-        public int ChannelIconPosX  => channelIconPosX;
-        public int ChannelIconPosY  => channelIconPosY;
-        public int ChannelNamePosX  => channelNamePosX;
-        public int ChannelNameSizeX => channelNameSizeX;
-        public int ChannelSizeY     => channelSizeY;
-        public int HeaderSizeY      => headerSizeY;
-        public int HoverPattern     => hoverPattern;
-        public int HoverRow         => hoverRow;
-        public int SeekX            => GetPixelForNote(GetSeekFrameToDraw());
-
-        public float BitmapScale        => bitmapScale;
+        public bool HasValidSelection => IsSelectionValid();
+        public bool HasValidTimeOnlySelection => IsValidTimeOnlySelection();
+        public bool IsDragSelectionInProgress => captureOperation == DragSelection;
+        public int CaptureRowIdx => captureRowIdx;
+        public int HoverPattern => hoverPattern;
+        public int HoverRow => hoverRow;
+        public int SeekX => GetPixelForNote(GetSeekFrameToDraw());
+        public int SelectionDragAnchorPatternIdx => selectionDragAnchorPatternIdx;
+        public float BitmapScale => bitmapScale;
         public float ChannelBitmapScale => channelBitmapScale;
+        public float SelectionDragAnchorPatternXFraction => selectionDragAnchorPatternXFraction;
 
 
         #region Localization
-
-        // Tooltips
-        LocalizedString AddPatternTooltip;
-        LocalizedString SetLoopPointTooltip;
-        LocalizedString PanTooltip;
-        LocalizedString SelectRectangleTooltip;
-        LocalizedString OrTooltip;
-        LocalizedString DeletePatternTooltip;
-        LocalizedString MoreOptionsTooltip;
-        LocalizedString MovePatternTooltip;
-        LocalizedString ClonePatternTooltip;
-
-        // Context menus
-        LocalizedString GoToPianoRollLabel;
-        LocalizedString ExpandSelectionLabel;
-        LocalizedString InstanciateHereLabel;
-        LocalizedString DuplicateHereLabel;
-        LocalizedString ClearSelectionLabel;
-        LocalizedString DeleteSelectionLabel;
-        LocalizedString SelectedPatternPropertiesLabel;
-        LocalizedString PatternPropertiesLabel;
-        LocalizedString DeletePatternLabel;
-        LocalizedString MakePatternsUniqueLabel;
 
         // Dialogs
         LocalizedString PasteTitle;
@@ -241,7 +211,6 @@ namespace FamiStudio
             channelNameSizeX   = DpiScaling.ScaleForWindow(DefaultChannelNameSizeX);
             headerSizeY        = DpiScaling.ScaleForWindow(DefaultHeaderSizeY);
             channelSizeY       = DpiScaling.ScaleForWindow(unscaledChannelSizeY);
-            patternNamePosX    = DpiScaling.ScaleForWindow(DefaultPatternNamePosX);
             scrollBarThickness = DpiScaling.ScaleForWindow(scrollBarSize);
             minScrollBarLength = DpiScaling.ScaleForWindow(DefaultMinScrollBarLength);
             noteSizeX          = DpiScaling.ScaleForWindowFloat(zoom * patternZoom);
@@ -256,9 +225,14 @@ namespace FamiStudio
 
             channelNames?.Resize(channelNameSizeX, height);
             channelNames?.UpdateLayout(headerSizeY, channelSizeY);
+
             timeline?.Resize(width - channelNameSizeX, headerSizeY);
             timeline?.Move(channelNameSizeX, 0);
             timeline?.UpdateLayout(channelSizeY);
+
+            patternArea?.Move(channelNameSizeX, headerSizeY);
+            patternArea?.Resize(width - channelNameSizeX, height - headerSizeY);
+            patternArea?.UpdateLayout(channelSizeY, patternHeaderSizeY, rowToChannel?.Length ?? 0, scrollBarThickness, allowVerticalScrolling);
 
             RebuildChannelMap();
         }
@@ -432,11 +406,16 @@ namespace FamiStudio
             MarkDirty();
         }
 
+        private void SetPanning(bool enabled)
+        {
+            panning = enabled;
+        }
+
         private void ClearSelection()
         {
             selectionMin = PatternLocation.Invalid;
             selectionMax = PatternLocation.Invalid;
-            patternRefCounts?.Clear();
+            patternArea?.ClearSelectedPatternRefCounts();
             SelectionChanged?.Invoke();
         }
 
@@ -446,7 +425,7 @@ namespace FamiStudio
             selectionMax = max;
             timeOnlySelection = timeOnly;
             SelectionChanged?.Invoke();
-            UpdateSelectedPatternRefCounts();
+            patternArea?.UpdateSelectedPatternRefCounts();
         }
 
         private void EnsureSelectionInclude(PatternLocation location)
@@ -493,10 +472,9 @@ namespace FamiStudio
             }
         }
 
-        private void SetMouseLastPos(int x, int y)
+        private void SetMouseLastPos(Point p)
         {
-            mouseLastX = x;
-            mouseLastY = y;
+            mouseLastPos = p;
         }
 
         private void SetFlingVelocity(float x, float y)
@@ -510,34 +488,38 @@ namespace FamiStudio
             UpdateRenderCoords();
 
             channelNames = new ChannelNames();
-            channelNames.HoverChannelChanged += (ch) => SetHover(GetChannelToRowForIndex(ch), -1);
             AddControl(channelNames);
 
             timeline = new SequencerTimeline();
             timeline.CancelDragSeekBar += AbortCaptureOperation;
             timeline.ColumnSelect += StartColumnSelection;
             timeline.DragSeekBar += StartDragSeekBar;
-            timeline.HoverPatternChanged += (p) => SetHover(-1, p);
             timeline.LoopPointToggled += SetLoopPoint;
             timeline.PatternModified += () => PatternModified?.Invoke();
             timeline.StartPanning += StartPanning;
             AddControl(timeline);
 
-            base.OnAddedToContainer();
+            patternArea = new PatternArea();
+            patternArea.ClearSelection += ClearSelection;
+            patternArea.CopySelectionToCursor += CopySelectionToCursor;
+            patternArea.DeleteSelection += () => DeleteSelection(true);
+            patternArea.EditPatternProperties += EditPatternProperties;
+            patternArea.EnsureSelectionInclude += EnsureSelectionInclude;
+            patternArea.PatternClicked += (c, p, s) => PatternClicked?.Invoke(c, p, s);
+            patternArea.SetSelection += (l) => SetSelection(l, l, false);
+            patternArea.SelectionChanged += () => SelectionChanged?.Invoke();
+            patternArea.StartDragSelection += StartDragSelection;
+            patternArea.StartRectangleSelection += StartRectangleSelection;
+            patternArea.StartPanning += StartPanning;
+            AddControl(patternArea);
 
-            var g = ParentWindow.Graphics;
-            patternCache = new PatternBitmapCache(g);
-            bmpInstantiate = g.GetTextureAtlasRef("Instance");
-            bmpDuplicate = g.GetTextureAtlasRef("Duplicate");
-            bmpDuplicateMove = g.GetTextureAtlasRef("DuplicateMove");
+            base.OnAddedToContainer();
 
             if (Platform.IsMobile)
             {
                 bitmapScale = DpiScaling.ScaleForWindowFloat(0.5f);
                 channelBitmapScale = DpiScaling.ScaleForWindowFloat(0.25f);
             }
-
-            bmpMenuInstance = g.GetTextureAtlasRef("MenuInstance");
         }
 
         protected override void OnResize(EventArgs e)
@@ -615,29 +597,8 @@ namespace FamiStudio
             return Utils.Clamp(Song.PatternIndexFromAbsoluteNoteIndex(MaxVisibleNoteIdx()) + 1, 0, Song.Length);
         }
 
-        private bool GetMinMaxSelectedRow(out int minSelRow, out int maxSelRow)
-        {
-            var minSelChannel = selectionMin.ChannelIndex;
-            var maxSelChannel = selectionMax.ChannelIndex;
-            
-            while (minSelChannel < Song.Channels.Length && channelToRow[minSelChannel] < 0) minSelChannel++;
-            while (maxSelChannel >= 0 && channelToRow[maxSelChannel] < 0) maxSelChannel--;
 
-            if (minSelChannel < Song.Channels.Length && maxSelChannel >= 0)
-            {
-                minSelRow = channelToRow[minSelChannel];
-                maxSelRow = channelToRow[maxSelChannel];
-                return true;
-            }
-            else
-            {
-                minSelRow = -1;
-                maxSelRow = -1;
-                return false;
-            }
-        }
-
-        protected void RenderPatternArea(Graphics g)
+/*         protected void RenderPatternArea(Graphics g)
         {
             var c = g.DefaultCommandList;
             var b = g.BackgroundCommandList;
@@ -863,13 +824,13 @@ namespace FamiStudio
                 c.PopTransform();
             }
         }
-
+ */
         protected void RenderDebug(Graphics g)
         {
 #if DEBUG
             if (Platform.IsMobile)
             {
-                g.OverlayCommandList.FillRectangle(mouseLastX - 30, mouseLastY - 30, mouseLastX + 30, mouseLastY + 30, Theme.WhiteColor);
+                g.OverlayCommandList.FillRectangle(mouseLastPos.X - 30, mouseLastPos.Y - 30, mouseLastPos.X + 30, mouseLastPos.Y + 30, Theme.WhiteColor);
             }
 #endif
         }
@@ -882,7 +843,7 @@ namespace FamiStudio
 
             base.OnRender(g);
 
-            RenderPatternArea(g);
+            //RenderPatternArea(g);
             RenderDebug(g);
         }
 
@@ -1007,17 +968,14 @@ namespace FamiStudio
         {
             if (pattern != null)
             {
-                patternCache.Remove(pattern);
+                patternArea?.InvalidatePattern(pattern);
             }
         }
 
 #if DEBUG
         public void ValidateIntegrity()
         {
-            if (patternCache != null)
-            {
-                patternCache.ValidateIntegrity();
-            }
+            patternArea?.ValidateIntegrity();
         }
 #endif
 
@@ -1041,15 +999,16 @@ namespace FamiStudio
             if (scrollY < minScrollY) { scrollY = minScrollY; scrolledY = false; }
             if (scrollY > maxScrollY) { scrollY = maxScrollY; scrolledY = false; }
 
-            channelNames?.SetScroll(scrollY);
+            channelNames?.SetScrollY(scrollY);
+            patternArea?.SetScrollY(scrollY);
 
             return scrolledX || scrolledY;
         }
 
-        private bool DoScroll(int deltaX, int deltaY)
+        private bool DoScroll(Point delta)
         {
-            scrollX -= deltaX;
-            scrollY -= deltaY; 
+            scrollX -= delta.X;
+            scrollY -= delta.Y; 
             MarkDirty();
             return ClampScroll();
         }
@@ -1081,30 +1040,30 @@ namespace FamiStudio
 
         private int GetRowIndexForCoord(int y)
         {
-            return Utils.Clamp(((y - headerSizeY) + scrollY) / channelSizeY, 0, rowToChannel.Length - 1);
+            return y > headerSizeY ? Utils.Clamp(((y - headerSizeY) + scrollY) / channelSizeY, 0, rowToChannel.Length - 1) : -1;
         }
 
         private int GetChannelIndexForCoord(int y)
         {
-            return rowToChannel.Length == 0 ? -1 : rowToChannel[GetRowIndexForCoord(y)];
+            return y > headerSizeY && rowToChannel.Length > 0 ? rowToChannel[GetRowIndexForCoord(y)] : -1;
         }
 
         private void GetClampedPatternForCoord(int x, int y, out int channelIdx, out int patternIdx)
         {
             patternIdx = Song.PatternIndexFromAbsoluteNoteIndex(Utils.Clamp(GetNoteForPixel(x - channelNameSizeX), 0, Song.GetPatternStartAbsoluteNoteIndex(Song.Length) - 1));
-            channelIdx = GetChannelIndexForCoord(y);
+            channelIdx = Utils.Clamp(GetChannelIndexForCoord(y), 0, Song.Length);
         }
 
-        bool IsPointInPatternArea(int x, int y)
+/*         bool IsPointInPatternArea(int x, int y)
         {
             return x > channelNameSizeX && y > headerSizeY;
         }
-
-        private void CaptureMouse(int x, int y, Control ctrl = null)
+ */
+        private void CaptureMouse(Point p, Control ctrl = null)
         {
-            SetMouseLastPos(x, y);
-            captureMouseX = x;
-            captureMouseY = y;
+            SetMouseLastPos(p);
+            captureMouseX = p.X;
+            captureMouseY = p.Y;
             captureScrollX = scrollX;
             captureScrollY = scrollY;
 
@@ -1112,22 +1071,26 @@ namespace FamiStudio
             ctrl.CapturePointer();
         }
 
-        private void StartCaptureOperation(int x, int y, CaptureOperation op, Control ctrl = null)
+        private void StartCaptureOperation(Control control, Point p, CaptureOperation op)
         {
             Debug.Assert(captureOperation == null);
 
-            CaptureMouse(x, y, ctrl);
+            var ctrlPos = WindowToControl(control.ControlToWindow(p));
+
+            CaptureMouse(ctrlPos, control);
 
             canFling = false;
             captureOperation = op;
             captureThresholdMet = !op.NeedsThreshold;
             mouseMovedDuringCapture = false;
             captureRealTimeUpdate = op.RealTimeUpdate;
-            captureRowIdx = GetRowIndexForCoord(y);
-            GetClampedPatternForCoord(x, y, out captureChannelIdx, out capturePatternIdx);
+            captureRowIdx = GetRowIndexForCoord(ctrlPos.Y);
+            GetClampedPatternForCoord(ctrlPos.X, ctrlPos.Y, out captureChannelIdx, out capturePatternIdx);
 
             if (captureOperation == SelectRectangle)
-                patternRefCounts.Clear();
+                patternArea?.ClearSelectedPatternRefCounts();
+            else if (captureOperation == DragSeekBar)
+                UpdateSeekDrag(p, false);
         }
 
         private void SetLoopPoint(int patternIdx)
@@ -1158,7 +1121,7 @@ namespace FamiStudio
             var pattern = channel.PatternInstances[location.PatternIndex];
 
             App.UndoRedoManager.BeginTransaction(TransactionScope.Channel, Song.Id, location.ChannelIndex);
-            patternCache.Remove(pattern);
+            patternArea?.InvalidatePattern(pattern);
             channel.PatternInstances[location.PatternIndex] = null;
             channel.InvalidateCumulativePatternCache();
             PatternModified?.Invoke();
@@ -1168,21 +1131,21 @@ namespace FamiStudio
             MarkDirty();
         }
 
-        private bool HandleMouseDownPan(PointerEventArgs e)
+/*         private bool HandleMouseDownPan(PointerEventArgs e)
         {
             bool middle = e.Middle || (e.Left && ModifierKeys.IsAltDown && Settings.AltLeftForMiddle);
 
             if (middle && e.X > channelNameSizeX)
             {
                 panning = true;
-                CaptureMouse(e.X, e.Y);
+                CaptureMouse(e.Position);
                 return true;
             }
 
             return false;
-        }
+        } */
 
-        private bool HandleMouseDownScrollbar(PointerEventArgs e)
+/*         private bool HandleMouseDownScrollbar(PointerEventArgs e)
         {
             if (e.Left && scrollBarThickness > 0 && e.X > channelNameSizeX && e.Y > headerSizeY)
             {
@@ -1229,12 +1192,12 @@ namespace FamiStudio
             }
 
             return false;
-        }
+        } */
 
-        private bool HandleMouseUpPatternArea(PointerEventArgs e)
+/*         private bool HandleMouseUpPatternArea(PointerEventArgs e)
         {
             return e.Right && HandleContextMenuPatternArea(e.X, e.Y);
-        }
+        } */
 
         private bool HandleMouseDownSetLoopPoint(PointerEventArgs e)
         {
@@ -1251,7 +1214,7 @@ namespace FamiStudio
             return false;
         }
 
-        private bool HandleMouseDownAltZoom(PointerEventArgs e)
+/*         private bool HandleMouseDownAltZoom(PointerEventArgs e)
         {
             if (e.Right && ModifierKeys.IsAltDown && Settings.AltZoomAllowed && GetPatternForCoord(e.X, e.Y, out _))
             {
@@ -1260,33 +1223,40 @@ namespace FamiStudio
             }
 
             return false;
+        } */
+
+        private Point ControlToLocal(Control control, PointerEventArgs e)
+        {
+            return WindowToControl(control.ControlToWindow(e.Position));
         }
 
         private void StartDragSeekBar(Control control, PointerEventArgs e)
         {
-            var p = WindowToControl(control.ControlToWindow(e.Position));
-            StartCaptureOperation(p.X, p.Y, DragSeekBar, control);
-            UpdateSeekDrag(p.X, p.Y, false);
+            StartCaptureOperation(control, e.Position, DragSeekBar);
         }
-        
-        private void StartDragSelection(int x, int y, int patternIdx)
+
+        private void StartRectangleSelection(Control control, PointerEventArgs e, int patternIdx)
+        {
+            StartCaptureOperation(control, e.Position, SelectRectangle);
+        }
+
+        private void StartDragSelection(Control control, PointerEventArgs e, int patternIdx)
         {
             selectionDragAnchorPatternIdx = patternIdx;
-            selectionDragAnchorPatternXFraction = (x - channelNameSizeX + scrollX - GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(patternIdx), false)) / (float)GetPixelForNote(Song.GetPatternLength(patternIdx), false);
-            StartCaptureOperation(x, y, DragSelection);
+            selectionDragAnchorPatternXFraction = (e.X + scrollX - GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(patternIdx), false)) / (float)GetPixelForNote(Song.GetPatternLength(patternIdx), false);
+            StartCaptureOperation(control, e.Position, DragSelection);
         }
 
         private void StartColumnSelection(Control control, PointerEventArgs e)
         {
-            var p = WindowToControl(control.ControlToWindow(e.Position));
-            StartCaptureOperation(p.X, p.Y, SelectColumn, control);
+            StartCaptureOperation(control, e.Position, SelectColumn);
         }
 
         private void StartPanning(Control control, PointerEventArgs e)
         {
-            var p = WindowToControl(control.ControlToWindow(e.Position));
+            var p = ControlToLocal(control, e);
             panning = true;
-            CaptureMouse(p.X, p.Y);
+            CaptureMouse(p);
         }
 
         private bool HandleMouseDownPatternArea(PointerEventArgs e)
@@ -1323,7 +1293,7 @@ namespace FamiStudio
                             SelectionChanged?.Invoke();
                         }
 
-                        StartDragSelection(e.X, e.Y, location.PatternIndex);
+                        StartDragSelection(this, e, location.PatternIndex);
                     }
 
                     return true;
@@ -1341,38 +1311,54 @@ namespace FamiStudio
         public override void OnContainerPointerDownNotify(Control control, PointerEventArgs e)
         {
             var p = WindowToControl(control.ControlToWindow(e.Position));
-            SetMouseLastPos(p.X, p.Y);
+            SetMouseLastPos(p);
 
-            App.SetToolTip(control.ToolTip);
+            if (IsCursorInContainer())
+            {
+                SetHoverByCoords(p.X, p.Y);
+            }
+
+            UpdateTooltipControl(control);
+            App.SequencerShowExpansionIcons = false;
         }
 
         public override void OnContainerPointerMoveNotify(Control control, PointerEventArgs e)
         {
-            var p = WindowToControl(control.ControlToWindow(e.Position));
-            var x = p.X;
-            var y = p.Y;
-
-            UpdateCaptureOperation(x, y);
+            var p = ControlToLocal(control, e);
+            UpdateCaptureOperation(p);
 
             if (panning)
-                DoScroll(x - mouseLastX, y - mouseLastY);
+                DoScroll(p - mouseLastPos);
 
-            SetMouseLastPos(x, y);
+            if (IsCursorInContainer())
+            {
+                SetHoverByCoords(p.X, p.Y);
+            }
+
+            SetMouseLastPos(p);
             UpdateCursor();
 
-            App.SetToolTip(control.ToolTip);
+            UpdateTooltipControl(control);
+            App.SequencerShowExpansionIcons = false;
         }
 
         public override void OnContainerPointerUpNotify(Control control, PointerEventArgs e)
         {
-            var p = WindowToControl(control.ControlToWindow(e.Position));
-            EndCaptureOperation(p.X, p.Y);
+            var p = ControlToLocal(control, e);
+            EndCaptureOperation(p);
             UpdateCursor();
 
-            panning = false;
+            if (e.Middle)
+            {
+                panning = false;
+            }
+            else if (e.Right)
+            {
+                patternArea?.UpdateSelectedPatternRefCounts();
+            }
         }
 
-        protected override void OnPointerDown(PointerEventArgs e)
+/*         protected override void OnPointerDown(PointerEventArgs e)
         {
             if (e.IsTouchEvent)
             {
@@ -1388,7 +1374,7 @@ namespace FamiStudio
             UpdateCursor();
             SetHoverByCoords(e.X, e.Y);
 
-            if (HandleMouseDownPan(e)) goto Handled;
+            //if (HandleMouseDownPan(e)) goto Handled;
             if (HandleMouseDownScrollbar(e)) goto Handled;
             if (HandleMouseDownSetLoopPoint(e)) goto Handled;
             if (HandleMouseDownAltZoom(e)) goto Handled;
@@ -1398,31 +1384,9 @@ namespace FamiStudio
 
         Handled:
             MarkDirty();
-        }
+        } */
 
-        private bool HandleMouseDownDelayedRectangleSelection(PointerEventArgs e)
-        {
-            if (e.Right && IsMouseInPatternZone(e))
-            {
-                StartCaptureOperation(e.X, e.Y, SelectRectangle);
-                return true;
-            }
-
-            return false;
-        }
-
-        protected override void OnPointerDownDelayed(PointerEventArgs e)
-        {
-
-            if (HandleMouseDownDelayedRectangleSelection(e)) goto Handled;
-
-            return;
-
-        Handled:
-            MarkDirty();
-        }
-
-        private bool HandleTouchDownPan(int x, int y)
+/*         private bool HandleTouchDownPan(int x, int y)
         {
             if (IsPointInPatternArea(x, y))
             {
@@ -1432,8 +1396,8 @@ namespace FamiStudio
 
             return false;
         }
-
-        private bool HandleTouchDownPatternArea(int x, int y)
+ */
+/*         private bool HandleTouchDownPatternArea(int x, int y)
         {
             if (IsPointInPatternArea(x, y))
             {
@@ -1451,8 +1415,8 @@ namespace FamiStudio
 
             return false;
         }
-
-        private bool HandleTouchClickPatternArea(int x, int y)
+ */
+/*         private bool HandleTouchClickPatternArea(int x, int y)
         {
             bool inPatternZone = GetPatternForCoord(x, y, out var location);
 
@@ -1484,9 +1448,9 @@ namespace FamiStudio
             }
 
             return false;
-        }
+        } */
 
-        private bool HandleTouchDoubleClickPatternArea(int x, int y)
+/*         private bool HandleTouchDoubleClickPatternArea(int x, int y)
         {
             bool inPatternZone = GetPatternForCoord(x, y, out var location);
 
@@ -1504,162 +1468,22 @@ namespace FamiStudio
             }
 
             return false;
-        }
+        } */
 
-        private void GotoPianoRoll(PatternLocation location)
+        private void CopySelectionToCursor(PatternLocation location, bool copy)
         {
-            PatternClicked?.Invoke(location.ChannelIndex, location.PatternIndex, true);
-        }
-
-        private void CopySelectionToCursor(bool copy)
-        {
-            var channelDeltaIdx = highlightLocation.ChannelIndex - selectionMin.ChannelIndex;
-            var patternDeltaIdx = highlightLocation.PatternIndex - selectionMin.PatternIndex;
+            var channelDeltaIdx = location.ChannelIndex - selectionMin.ChannelIndex;
+            var patternDeltaIdx = location.PatternIndex - selectionMin.PatternIndex;
 
             MoveCopyOrDuplicateSelection(channelDeltaIdx, patternDeltaIdx, true, copy);
         }
 
-        private bool UpdateSelectedPatternRefCounts()
-        {
-            if (!IsSelectionValid())
-                return false;
-
-            var selectedPatterns = new HashSet<Pattern>();
-
-            foreach (var pattern in GetSelectedPatterns(out _))
-            {
-                if (pattern != null)
-                    selectedPatterns.Add(pattern);
-            }
-
-            var counts = new Dictionary<Pattern, int>();
-            bool duplicateFound = false;
-
-            for (int i = 0; i < Song.Channels.Length; i++)
-            {
-                var channel = Song.Channels[i];
-
-                for (int j = 0; j < Song.Length; j++)
-                {
-                    var pattern = channel.PatternInstances[j];
-                    if (pattern == null || !selectedPatterns.Contains(pattern))
-                        continue;
-
-                    var count = counts.TryGetValue(pattern, out var c) ? c + 1 : 1;
-                    counts[pattern] = count;
-
-                    if (count > 1)
-                        duplicateFound = true;
-                }
-            }
-
-            patternRefCounts = counts;
-            return duplicateFound;
-        }
-
-        private void MakeSelectedPatternsUnique()
-        {
-            if (patternRefCounts.Count == 0)
-                return;
-
-            App.UndoRedoManager.BeginTransaction(TransactionScope.Song, Song.Id);
-            
-            var patternCounts = new Dictionary<Pattern, int>(patternRefCounts); // Safety.
-
-            for (int i = selectionMin.ChannelIndex; i <= selectionMax.ChannelIndex; i++)
-            {
-                var channel = Song.Channels[i];
-                for (int j = selectionMin.PatternIndex; j <= selectionMax.PatternIndex; j++)
-                {
-                    var pattern = channel.PatternInstances[j];
-                    if (pattern != null && patternCounts.TryGetValue(pattern, out var count) && count > 1)
-                    {
-                        var newPattern = CreateUniquePatternClone(pattern, channel);
-                        channel.PatternInstances[j] = newPattern;
-                        patternCounts[pattern]--;
-                    }
-                }
-            }
-
-            Song.DeleteNotesPastMaxInstanceLength();
-            Song.InvalidateCumulativePatternCache();
-            UpdateSelectedPatternRefCounts();
-
-            App.UndoRedoManager.EndTransaction();
-        }
-
-        private bool HandleContextMenuPatternArea(int x, int y)
-        {
-            bool inPatternZone = GetPatternForCoord(x, y, out var location);
-
-            if (inPatternZone)
-            {
-                var pattern = Song.GetPatternInstance(location);
-
-                SetHighlightedPattern(location);
-
-                var menu = new List<ContextMenuOption>();
-                var sel  = new List<ContextMenuOption>();
-
-                if (Platform.IsMobile)
-                {
-                    menu.Add(new ContextMenuOption("MenuPiano", GoToPianoRollLabel, () => { GotoPianoRoll(location); }));
-                }
-                else if (pattern != null &&!IsPatternSelected(location))
-                {
-                    SetSelection(location, location);
-                }
-
-                if (IsSelectionValid() && !IsPatternSelected(location))
-                {
-                    if (Platform.IsMobile)
-                        menu.Add(new ContextMenuOption("MenuExpandSelection", ExpandSelectionLabel, () => { EnsureSelectionInclude(location); }));
-                    if (selectionMin.ChannelIndex == location.ChannelIndex)
-                        menu.Add(new ContextMenuOption("MenuInstance", InstanciateHereLabel, () => { CopySelectionToCursor(false); }));
-                    menu.Add(new ContextMenuOption("MenuDuplicate", DuplicateHereLabel, () => { CopySelectionToCursor(true); }));
-                }
-
-                if (IsSelectionValid())
-                {
-                    menu.Add(new ContextMenuOption("MenuClearSelection", ClearSelectionLabel, () => { ClearSelection(); ClearHighlightedPatern(); }, ContextMenuSeparator.Before));
-                }
-
-                if (pattern != null)
-                {
-                    if (IsPatternSelected(location) && SelectionContainsMultiplePatterns())
-                    {
-                        menu.Insert(0, new ContextMenuOption("MenuDeleteSelection", DeleteSelectionLabel, () => { DeleteSelection(true); }));
-                        menu.Add(new ContextMenuOption("MenuProperties", SelectedPatternPropertiesLabel, () => { EditPatternProperties(new Point(x, y), pattern, location, true); }, ContextMenuSeparator.Before));
-                    }
-                    else
-                    {
-                        menu.Add(new ContextMenuOption("MenuProperties", PatternPropertiesLabel, () => { EditPatternProperties(new Point(x, y), pattern, location, false); }, ContextMenuSeparator.Before));
-                    }
-
-                    menu.Insert(0, new ContextMenuOption("MenuDelete", DeletePatternLabel, () => { DeletePattern(location); }));
-                }
-
-                if (IsPatternSelected(location))
-                {
-                    if (UpdateSelectedPatternRefCounts())
-                        menu.Insert(1, new ContextMenuOption("MenuUnlink", MakePatternsUniqueLabel, () => { MakeSelectedPatternsUnique(); }));
-                }
-
-                if (menu.Count > 0)
-                    App.ShowContextMenuAsync(menu.ToArray());
-                
-                return true;
-            }
-
-            return false;
-        }
-
-        private bool HandleTouchLongPressPatternArea(int x, int y)
+/*         private bool HandleTouchLongPressPatternArea(int x, int y)
         {
             return HandleContextMenuPatternArea(x, y);
-        }
+        } */
 
-        protected void OnTouchDown(PointerEventArgs e)
+/*         protected void OnTouchDown(PointerEventArgs e)
         {
             var x = e.X;
             var y = e.Y;
@@ -1667,30 +1491,24 @@ namespace FamiStudio
             SetFlingVelocity(0, 0);
             SetMouseLastPos(x, y);
 
-            if (HandleTouchDownPatternArea(x, y)) goto Handled;
-            if (HandleTouchDownPan(x, y)) goto Handled;
+            //if (HandleTouchDownPatternArea(x, y)) goto Handled;
+            //if (HandleTouchDownPan(x, y)) goto Handled;
             return;
 
         Handled:
             MarkDirty();
-        }
+        } */
 
         protected void OnTouchMove(PointerEventArgs e)
         {
-            var x = e.X;
-            var y = e.Y;
-
-            UpdateCaptureOperation(x, y);
-            SetMouseLastPos(x, y);
+            UpdateCaptureOperation(e.Position);
+            SetMouseLastPos(e.Position);
         }
 
         protected void OnTouchUp(PointerEventArgs e)
         {
-            var x = e.X;
-            var y = e.Y;
-
-            EndCaptureOperation(x, y);
-            SetMouseLastPos(x, y);
+            EndCaptureOperation(e.Position);
+            SetMouseLastPos(e.Position);
         }
 
         protected override void OnTouchFling(PointerEventArgs e)
@@ -1700,12 +1518,12 @@ namespace FamiStudio
 
             if (canFling)
             {
-                EndCaptureOperation(x, y);
+                EndCaptureOperation(e.Position);
                 SetFlingVelocity(e.FlingVelocityX, e.FlingVelocityY);
             }
         }
 
-        protected override void OnTouchScaleBegin(PointerEventArgs e)
+/*         protected override void OnTouchScaleBegin(PointerEventArgs e)
         {
             var x = e.X;
             var y = e.Y;
@@ -1736,9 +1554,9 @@ namespace FamiStudio
 
             EndCaptureOperation(x, y);
             SetMouseLastPos(x, y);
-        }
+        } */
 
-        protected override void OnTouchClick(PointerEventArgs e)
+/*         protected override void OnTouchClick(PointerEventArgs e)
         {
             var x = e.X;
             var y = e.Y;
@@ -1749,17 +1567,14 @@ namespace FamiStudio
 
         Handled:
             MarkDirty();
-        }
+        } */
 
-        protected override void OnTouchDoubleClick(PointerEventArgs e)
+/*         protected override void OnTouchDoubleClick(PointerEventArgs e)
         {
-            var x = e.X;
-            var y = e.Y;
-
-            SetMouseLastPos(x, y);
+            SetMouseLastPos(e.Position);
 
             // Ignore double tap if we handled a single tap recently.
-            if (captureOperation != null/* || (DateTime.Now - lastPatternCreateTime).TotalMilliseconds < 500*/)
+            if (captureOperation != null) // || (DateTime.Now - lastPatternCreateTime).TotalMilliseconds < 500)
             {
                 return;
             }
@@ -1770,9 +1585,9 @@ namespace FamiStudio
 
         Handled:
             MarkDirty();
-        }
+        } */
 
-        protected override void OnTouchLongPress(PointerEventArgs e)
+/*         protected override void OnTouchLongPress(PointerEventArgs e)
         {
             var x = e.X;
             var y = e.Y;
@@ -1797,9 +1612,9 @@ namespace FamiStudio
 
         Handled:
             MarkDirty();
-        }
+        } */
 
-        private Pattern[,] GetSelectedPatterns(out Song.PatternCustomSetting[] customSettings)
+        public Pattern[,] GetSelectedPatterns(out Song.PatternCustomSetting[] customSettings)
         {
             customSettings = null;
 
@@ -2090,7 +1905,7 @@ namespace FamiStudio
             return patternIndex;
         }
 
-        private Pattern CreateUniquePatternClone(Pattern pattern, Channel channel)
+        public Pattern CreateUniquePatternClone(Pattern pattern, Channel channel)
         {
             var newName = pattern.Name;
             if (!channel.IsPatternNameUnique(newName))
@@ -2178,7 +1993,7 @@ namespace FamiStudio
             App.UndoRedoManager.EndTransaction();
         }
 
-        private void EndDragSelection(int x, int y)
+        private void EndDragSelection(Point p)
         {
             if (captureThresholdMet)
             {
@@ -2188,15 +2003,15 @@ namespace FamiStudio
                 }
                 else
                 {
-                    var noteIdx = GetNoteForPixel(x - channelNameSizeX);
+                    var noteIdx = GetNoteForPixel(p.X - channelNameSizeX);
 
                     if (noteIdx >= 0 && noteIdx < Song.GetPatternStartAbsoluteNoteIndex(Song.Length))
                     {
-                        var patternIdx = Song.PatternIndexFromAbsoluteNoteIndex(GetNoteForPixel(x - channelNameSizeX));
+                        var patternIdx = Song.PatternIndexFromAbsoluteNoteIndex(GetNoteForPixel(p.X - channelNameSizeX));
                         var patternIdxDelta = patternIdx - selectionDragAnchorPatternIdx;
 
                         var dragRowIdxStart   = captureRowIdx;
-                        var dragRowIdxCurrent = GetRowIndexForCoord(y);
+                        var dragRowIdxCurrent = GetRowIndexForCoord(p.Y);
                         var rowIdxDelta = dragRowIdxCurrent - dragRowIdxStart;
 
                         // No need to proceed if the patterns haven't moved.
@@ -2241,17 +2056,17 @@ namespace FamiStudio
             }
         }
 
-        private void EndCaptureOperation(int x, int y)
+        private void EndCaptureOperation(Point p)
         {
             if (captureOperation != null)
             {
                 if (captureOperation == DragSelection)
                 {
-                    EndDragSelection(x,y);
+                    EndDragSelection(p);
                 }
                 else if (captureOperation == DragSeekBar)
                 {
-                    UpdateSeekDrag(x, y, true);
+                    UpdateSeekDrag(p, true);
                 }
                 else if (captureOperation == MobilePan || captureOperation == MobileZoom)
                 {
@@ -2267,7 +2082,10 @@ namespace FamiStudio
 
         protected override void OnPointerUp(PointerEventArgs e)
         {
-            if (e.IsTouchEvent)
+            if (e.Middle)
+                panning = false;
+        }
+/*            if (e.IsTouchEvent)
             {
                 OnTouchUp(e);
                 return;
@@ -2286,9 +2104,9 @@ namespace FamiStudio
                 EndCaptureOperation(e.X, e.Y);
             }
 
-            UpdateCursor();
+            UpdateCursor(); */
 
-            if (doMouseUp)
+/*             if (doMouseUp)
             {
                 if (HandleMouseUpPatternArea(e)) goto Handled;
                 return;
@@ -2297,9 +2115,9 @@ namespace FamiStudio
             }
             else if (e.Right && IsSelectionValid())
             {
-                UpdateSelectedPatternRefCounts();
-            }
-        }
+                patternArea?.UpdateSelectedPatternRefCounts();
+            } */
+        //}
 
         private void AbortCaptureOperation()
         {
@@ -2352,7 +2170,7 @@ namespace FamiStudio
                 {
                     var pattern = Song.Channels[i].PatternInstances[j];
                     if (pattern != null)
-                        patternCache.Remove(pattern);
+                        patternArea?.InvalidatePattern(pattern);
                     Song.Channels[i].PatternInstances[j] = null;
                 }
             }
@@ -2437,11 +2255,11 @@ namespace FamiStudio
                 UpdateToolTip(null); */
         }
 
-        private void UpdateSeekDrag(int mouseX, int mouseY, bool final)
+        private void UpdateSeekDrag(Point p, bool final)
         {
-            ScrollIfNearEdge(mouseX, mouseY);
+            ScrollIfNearEdge(p.X, p.Y);
 
-            dragSeekPosition = Utils.Clamp(GetNoteForPixel(mouseX - channelNameSizeX), 0, Song.GetPatternStartAbsoluteNoteIndex(Song.Length) - 1);
+            dragSeekPosition = Utils.Clamp(GetNoteForPixel(p.X - channelNameSizeX), 0, Song.GetPatternStartAbsoluteNoteIndex(Song.Length) - 1);
 
             if (final)
                 App.SeekSong(dragSeekPosition);
@@ -2547,7 +2365,7 @@ namespace FamiStudio
             return e.Y > headerSizeY && e.X > channelNameSizeX;
         }
 
-        private void UpdateToolTip(PointerEventArgs e)
+/*         private void UpdateToolTip(PointerEventArgs e)
         {
             if (e == null)
             {
@@ -2599,6 +2417,14 @@ namespace FamiStudio
             }
 
             App.SetToolTip(tooltip);
+        } */
+
+        private void UpdateTooltipControl(Control control)
+        {
+            var tooltip = control.ToolTip;
+            if (string.IsNullOrEmpty(tooltip))
+                tooltip = control.ParentContainer.ToolTip;
+            App.SetToolTip(tooltip);
         }
 
         private void UpdateScrollBarX(int x, int y)
@@ -2627,11 +2453,13 @@ namespace FamiStudio
             return minScrollY != maxScrollY;
         }
 
-        private void UpdateCaptureOperation(int x, int y, float scale = 1.0f, bool realTime = false)
+        private void UpdateCaptureOperation(Point p, float scale = 1.0f, bool realTime = false)
         {
             const int CaptureThreshold = Platform.IsDesktop ? 5 : 50;
 
             var captureThresholdJustMet = false;
+            var x = p.X;
+            var y = p.Y;
 
             if (captureOperation != null)
             {
@@ -2664,7 +2492,7 @@ namespace FamiStudio
                 }
                 else if (captureOperation == DragSeekBar)
                 {
-                    UpdateSeekDrag(x, y, false);
+                    UpdateSeekDrag(p, false);
                 }
                 else if (captureOperation == ScrollBarX)
                 {
@@ -2676,7 +2504,7 @@ namespace FamiStudio
                 }
                 else if (captureOperation == MobilePan)
                 {
-                    DoScroll(x - mouseLastX, y - mouseLastY);
+                    DoScroll(p - mouseLastPos);
                 }
                 else if (captureOperation == DragSelection)
                 {
@@ -2685,7 +2513,7 @@ namespace FamiStudio
                 else if (captureOperation == MobileZoom)
                 {
                     ZoomAtLocation(x, scale);
-                    DoScroll(x - mouseLastX, y - mouseLastY);
+                    DoScroll(p - mouseLastPos);
                 }
                 else
                 {
@@ -2705,10 +2533,10 @@ namespace FamiStudio
             bool middle = e.Middle || (e.Left && ModifierKeys.IsAltDown && Settings.AltLeftForMiddle);
 
             UpdateCursor();
-            UpdateCaptureOperation(e.X, e.Y);
+            UpdateCaptureOperation(e.Position);
 
             if (middle && panning)
-                DoScroll(e.X - mouseLastX, e.Y - mouseLastY);
+                DoScroll(e.Position - mouseLastPos);
 
             if (IsCursorInContainer())
             {
@@ -2716,10 +2544,10 @@ namespace FamiStudio
             }
 
             // Temporary until pattern area is its own control.
-            if (IsPointInPatternArea(e.X, e.Y))
-                UpdateToolTip(e);
+/*             if (IsPointInPatternArea(e.X, e.Y))
+                UpdateToolTip(e); */
 
-            SetMouseLastPos(e.X, e.Y);
+            SetMouseLastPos(e.Position);
             ShowExpansionIcons = false;
         }
 
@@ -2778,10 +2606,7 @@ namespace FamiStudio
 
         public override void OnContainerPointerEnterNotify(Control control, EventArgs e)
         {
-            var tooltip = control.ToolTip;
-            if (string.IsNullOrEmpty(tooltip))
-                tooltip = control.ParentContainer.ToolTip;
-            App.SetToolTip(tooltip);
+            UpdateTooltipControl(control);
         }
 
         public override void OnContainerPointerLeaveNotify(Control control, EventArgs e)
@@ -2898,8 +2723,9 @@ namespace FamiStudio
             MarkDirty();
         }
 
-        protected override void OnMouseWheel(PointerEventArgs e)
+        public override void OnContainerMouseWheelNotify(Control control, PointerEventArgs e)
         {
+            // TODO: Vertical zooming in the channel name area once sequencer resizing is implemented.
             if (Settings.TrackPadControls && !ModifierKeys.IsControlDown && !ModifierKeys.IsAltDown)
             {
                 if (CanScrollVertically() && !ModifierKeys.IsShiftDown)
@@ -2912,11 +2738,12 @@ namespace FamiStudio
             }
             else
             {
-                ZoomAtLocation(e.X, e.ScrollY < 0.0f ? 0.5f : 2.0f);
+                var p = ControlToLocal(control, e);
+                ZoomAtLocation(p.X, e.ScrollY < 0.0f ? 0.5f : 2.0f);
             }
         }
 
-        protected override void OnMouseHorizontalWheel(PointerEventArgs e)
+        public override void OnContainerMouseHorizontalWheelNotify(Control control, PointerEventArgs e)
         {
             scrollX += Utils.SignedCeil(e.ScrollX);
             ClampScroll();
@@ -2977,7 +2804,7 @@ namespace FamiStudio
                 var deltaPixelX = (int)Math.Round(flingVelX * delta);
                 var deltaPixelY = (int)Math.Round(flingVelY * delta);
 
-                if ((deltaPixelX != 0 || deltaPixelY != 0) && DoScroll(deltaPixelX, deltaPixelY))
+                if ((deltaPixelX != 0 || deltaPixelY != 0) && DoScroll(new Point(deltaPixelX, deltaPixelY)))
                 {
                     flingVelX *= (float)Math.Exp(delta * -4.5f);
                     flingVelY *= (float)Math.Exp(delta * -4.5f);
@@ -2995,7 +2822,7 @@ namespace FamiStudio
             if (App == null)
                 return;
 
-            UpdateCaptureOperation(mouseLastX, mouseLastY, 1.0f, true);
+            UpdateCaptureOperation(mouseLastPos, 1.0f, true);
             UpdateFollowMode();
             TickFling(delta);
         }
@@ -3011,8 +2838,7 @@ namespace FamiStudio
 
         public void InvalidatePatternCache()
         {
-            if (patternCache != null)
-                patternCache.Clear();
+            patternArea?.InvalidateCache();
             MarkDirty();
         }
 
@@ -3042,8 +2868,8 @@ namespace FamiStudio
             {
                 // TODO: This is overly aggressive. We should have the 
                 // scope on the transaction on the buffer and filter by that.
-                channelNames?.Reset();
-                UpdateSelectedPatternRefCounts();
+                channelNames?.Refresh();
+                patternArea?.UpdateSelectedPatternRefCounts();
                 InvalidatePatternCache();
                 UpdateRenderCoords();
                 CancelDragSelection();

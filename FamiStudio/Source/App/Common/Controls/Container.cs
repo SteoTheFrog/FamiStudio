@@ -32,6 +32,10 @@ namespace FamiStudio
         {
         }
 
+        public virtual void OnContainerMouseHorizontalWheelNotify(Control control, PointerEventArgs e)
+        {
+        }
+
         public virtual void OnContainerPointerMoveNotify(Control control, PointerEventArgs e)
         {
         }

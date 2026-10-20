@@ -30,9 +30,9 @@ namespace FamiStudio
         public delegate void PatternDelegate(int idx);
         public delegate void PointerDelegate(Control c, PointerEventArgs e);
         public delegate void EmptyDelegate();
+        
         public event PointerDelegate ColumnSelect;
         public event PointerDelegate DragSeekBar;
-        public event PatternDelegate HoverPatternChanged;
         public event PatternDelegate LoopPointToggled;
         public event PointerDelegate StartPanning; 
         public event EmptyDelegate CancelDragSeekBar;
@@ -214,19 +214,6 @@ namespace FamiStudio
             }
         }
 
-        protected override void OnPointerEnter(EventArgs e)
-        {
-            HoverPatternChanged.Invoke(HoverPattern);
-        }
-
-        protected override void OnPointerMove(PointerEventArgs e)
-        {
-            var x = GetPatternIndexForCoord(e.X);
-
-            if (HoverPattern != x)
-                HoverPatternChanged.Invoke(x);
-        }
-
         protected override void OnPointerDown(PointerEventArgs e)
         {
             if (e.IsTouchEvent)
@@ -234,9 +221,6 @@ namespace FamiStudio
                 OnTouchDown(e);
                 return;
             }
-
-            // Ensures the channel name hover is cleared if we exit a context menu.
-            HoverPatternChanged?.Invoke(GetPatternIndexForCoord(e.X));
 
             if (e.Middle)
             {

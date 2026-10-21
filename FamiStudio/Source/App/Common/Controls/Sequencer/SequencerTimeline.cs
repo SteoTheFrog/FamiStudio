@@ -22,8 +22,8 @@ namespace FamiStudio
         private PatternLocation SelectionMax        => Sequencer.SelectionMax;
         private PatternLocation SelectionMin        => Sequencer.SelectionMin;
 
+        private Point HoverPosition       => Sequencer.HoverPosition;
         private bool  HasCaptureOperation => Sequencer.HasCaptureOperation;
-        private int   HoverPattern        => Sequencer.HoverPattern;
         private int   SeekX               => Sequencer.SeekX;
         private float BitmapScale         => Sequencer.BitmapScale;
 
@@ -31,13 +31,13 @@ namespace FamiStudio
         public delegate void PointerDelegate(Control c, PointerEventArgs e);
         public delegate void EmptyDelegate();
         
-        public event PointerDelegate ColumnSelect;
-        public event PointerDelegate DragSeekBar;
-        public event PatternDelegate LoopPointToggled;
-        public event PointerDelegate StartPanning; 
+
         public event EmptyDelegate CancelDragSeekBar;
         public event EmptyDelegate PatternModified;
-
+        public event PointerDelegate ColumnSelect;
+        public event PointerDelegate DragSeekBar;
+        public event PointerDelegate StartAltZoom;
+        public event PatternDelegate LoopPointToggled;
         // Tooltips
         LocalizedString MoreOptionsTooltip;
         LocalizedString PanTooltip;
@@ -222,11 +222,11 @@ namespace FamiStudio
                 return;
             }
 
-            if (e.Middle)
+/*             if (e.Middle)
             {
                 StartPanning?.Invoke(this, e);
                 return;
-            }
+            } */
 
             if (e.Left)
             {
@@ -243,6 +243,15 @@ namespace FamiStudio
             }
             else if (e.Right)
             {
+                if (ModifierKeys.IsAltDown && Settings.AltZoomAllowed)
+                {   
+                    if (GetPatternIndexForCoord(e.X) >= 0)
+                    {
+                        StartAltZoom?.Invoke(this, e);
+                        return;
+                    }
+                }
+
                 e.DelayRightClick(); // Can have selection or context menu, need to wait.
             }
         }
@@ -273,7 +282,7 @@ namespace FamiStudio
             {
                 var px = GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(i));
                 var sx = GetPixelForNote(Song.GetPatternLength(i), false);
-                var color = i == HoverPattern ? Theme.MediumGreyColor1 : ((i & 1) == 0 ? Theme.DarkGreyColor4 : Theme.DarkGreyColor2);
+                var color = i == HoverPosition.X ? Theme.MediumGreyColor1 : ((i & 1) == 0 ? Theme.DarkGreyColor4 : Theme.DarkGreyColor2);
                 b.FillRectangle(px, 0, px + sx, height, color);
             }
 

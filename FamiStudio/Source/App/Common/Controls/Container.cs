@@ -61,6 +61,18 @@ namespace FamiStudio
         {
         }
 
+        public virtual void OnContainerTouchScaleBeginNotify(Control control, PointerEventArgs e)
+        {
+        }
+
+        public virtual void OnContainerTouchScaleNotify(Control control, PointerEventArgs e)
+        {
+        }
+
+        public virtual void OnContainerTouchScaleEndNotify(Control control, PointerEventArgs e)
+        {
+        }
+
         public virtual void OnContainerTouchFlingNotify(Control control, PointerEventArgs e)
         {
         }

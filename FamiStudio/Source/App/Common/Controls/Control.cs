@@ -42,6 +42,9 @@ namespace FamiStudio
         public event EventDelegate        ContainerPointerEnterNotify;
         public event EventDelegate        ContainerPointerLeaveNotify;
         public event PointerEventDelegate ContainerTouchClickNotify;
+        public event PointerEventDelegate ContainerTouchScaleBeginNotify;
+        public event PointerEventDelegate ContainerTouchScaleNotify;
+        public event PointerEventDelegate ContainerTouchScaleEndNotify;
         public event PointerEventDelegate ContainerTouchFlingNotify;
 
         protected Control()
@@ -111,9 +114,9 @@ namespace FamiStudio
         public void SendAddedToContainer() { OnAddedToContainer(); }
         public void SendTouchClick(PointerEventArgs e) { OnTouchClick(e); TouchClick?.Invoke(this, e); SendContainerTouchClickNotify(e); }
         public void SendTouchDoubleClick(PointerEventArgs e) { OnTouchDoubleClick(e); TouchDoubleClick?.Invoke(this, e); }
-        public void SendTouchScaleBegin(PointerEventArgs e) { OnTouchScaleBegin(e); }
-        public void SendTouchScale(PointerEventArgs e) { OnTouchScale(e); }
-        public void SendTouchScaleEnd(PointerEventArgs e) { OnTouchScaleEnd(e); }
+        public void SendTouchScaleBegin(PointerEventArgs e) { OnTouchScaleBegin(e); SendContainerTouchScaleBeginNotify(e); }
+        public void SendTouchScale(PointerEventArgs e) { OnTouchScale(e); SendContainerTouchScaleNotify(e); }
+        public void SendTouchScaleEnd(PointerEventArgs e) { OnTouchScaleEnd(e); SendContainerTouchScaleEndNotify(e); }
         public void SendTouchFling(PointerEventArgs e) { OnTouchFling(e); TouchFling?.Invoke(this, e); SendContainerTouchFlingNotify(e); }
 
         public void SendMouseDoubleClick(PointerEventArgs e)
@@ -249,6 +252,45 @@ namespace FamiStudio
             {
                 c.OnContainerTouchClickNotify(this, e);
                 c.ContainerTouchClickNotify?.Invoke(this, e);
+                if (c is Dialog)
+                    break;
+                c = c.ParentContainer;
+            }
+        }
+        
+        public void SendContainerTouchScaleBeginNotify(PointerEventArgs e)
+        {
+            var c = ParentContainer;
+            while (c != null)
+            {
+                c.OnContainerTouchScaleBeginNotify(this, e);
+                c.ContainerTouchScaleBeginNotify?.Invoke(this, e);
+                if (c is Dialog)
+                    break;
+                c = c.ParentContainer;
+            }
+        }
+
+        public void SendContainerTouchScaleNotify(PointerEventArgs e)
+        {
+            var c = ParentContainer;
+            while (c != null)
+            {
+                c.OnContainerTouchScaleNotify(this, e);
+                c.ContainerTouchScaleNotify?.Invoke(this, e);
+                if (c is Dialog)
+                    break;
+                c = c.ParentContainer;
+            }
+        }
+
+        public void SendContainerTouchScaleEndNotify(PointerEventArgs e)
+        {
+            var c = ParentContainer;
+            while (c != null)
+            {
+                c.OnContainerTouchScaleEndNotify(this, e);
+                c.ContainerTouchScaleEndNotify?.Invoke(this, e);
                 if (c is Dialog)
                     break;
                 c = c.ParentContainer;

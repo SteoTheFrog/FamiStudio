@@ -213,18 +213,58 @@ namespace FamiStudio
             else
                 patternHeaderSizeY = DpiScaling.ScaleForFont(DefaultPatternHeaderSizeY);
 
-            var patternAreaWidth = width - channelNameSizeX - (verticalScrollBar != null && verticalScrollBar.Visible ? scrollBarThickness : 0);
-            UpdateScrollBarCoords();
+            var patternAreaWidth = width - channelNameSizeX - (verticalScrollBar != null && verticalScrollBar.Visible ? scrollBarThickness - 1 : 0);
+            ConditionalAddOrRemoveScrollbars();
 
             channelNameArea?.Resize(channelNameSizeX, height);
             channelNameArea?.UpdateLayout(headerSizeY, channelSizeY);
             timeline?.Move(channelNameSizeX, 0, width - channelNameSizeX, headerSizeY);
             timeline?.UpdateLayout(channelSizeY);
-            patternArea?.Move(channelNameSizeX, headerSizeY, patternAreaWidth, height - headerSizeY - scrollBarThickness);
+            patternArea?.Move(channelNameSizeX, headerSizeY, patternAreaWidth, height - headerSizeY - scrollBarThickness + 1);
             patternArea?.UpdateLayout(channelSizeY, patternHeaderSizeY, rowToChannel?.Length ?? 0);
 
             RebuildChannelMap();
             SetHoverByCoords(mouseLastPos); // For undo / redo.
+        }
+
+        private void ConditionalAddOrRemoveScrollbars()
+        {
+            if (Settings.ScrollBars != 0)
+            {
+                UpdateScrollBarCoords();
+
+                if (verticalScrollBar == null)
+                {
+                    verticalScrollBar = new ScrollBar();
+                    verticalScrollBar.LineColor = Color.Black;
+                    verticalScrollBar.Scrolled += VerticalScrollBar_Scrolled;
+                    AddControl(verticalScrollBar);
+                }
+
+                if (horizontalScrollBar == null)
+                {
+                    horizontalScrollBar = new ScrollBar(true);
+                    horizontalScrollBar.LineColor = Color.Black;
+                    horizontalScrollBar.Scrolled += HorizontalScrollBar_Scrolled;
+                    AddControl(horizontalScrollBar);
+                }
+            }
+            else
+            {
+                if (verticalScrollBar != null)
+                {
+                    verticalScrollBar.Scrolled -= VerticalScrollBar_Scrolled;
+                    RemoveControl(verticalScrollBar);
+                    verticalScrollBar = null;
+                }
+
+                if (horizontalScrollBar != null)
+                {
+                    horizontalScrollBar.Scrolled -= HorizontalScrollBar_Scrolled;
+                    RemoveControl(horizontalScrollBar);
+                    horizontalScrollBar = null;
+                }
+            }
         }
 
         private void UpdateScrollBarCoords()
@@ -244,12 +284,14 @@ namespace FamiStudio
                     verticalScrollBar.Move(width - scrollBarThickness + 1, headerSizeY, scrollBarThickness, vSize);
                     verticalScrollBar.VirtualSize = maxScrollY + vSize;
                     verticalScrollBar.SetScroll(scrollY, false);
+                    verticalScrollBar.UpdateThickness();
                 }
 
                 var hSize = width - channelNameSizeX + 1;
                 horizontalScrollBar.Move(channelNameSizeX - 1, height - scrollBarThickness, hSize, scrollBarThickness);
                 horizontalScrollBar.VirtualSize = maxScrollX + hSize;
                 horizontalScrollBar.SetScroll(scrollX, false);
+                horizontalScrollBar.UpdateThickness();
             }
         }
 
@@ -533,45 +575,6 @@ namespace FamiStudio
             patternArea.StartDragSelection += StartDragSelection;
             patternArea.StartRectangleSelection += StartRectangleSelection;
             AddControl(patternArea);
-
-            var wantsScrollBars = Settings.ScrollBars != 0;
-            if (wantsScrollBars)
-            {
-                if (verticalScrollBar == null)
-                {
-                    verticalScrollBar = new ScrollBar();
-                    verticalScrollBar.LineColor = Color.Black;
-                    verticalScrollBar.Scrolled += VerticalScrollBar_Scrolled;
-                    AddControl(verticalScrollBar);
-                }
-
-                if (horizontalScrollBar == null)
-                {
-                    horizontalScrollBar = new ScrollBar(true);
-                    horizontalScrollBar.LineColor = Color.Black;
-                    horizontalScrollBar.Scrolled += HorizontalScrollBar_Scrolled;
-                    AddControl(horizontalScrollBar);
-                }
-
-                verticalScrollBar.UpdateThickness();
-                horizontalScrollBar.UpdateThickness();
-            }
-            else
-            {
-                if (verticalScrollBar != null)
-                {
-                    verticalScrollBar.Scrolled -= VerticalScrollBar_Scrolled;
-                    RemoveControl(verticalScrollBar);
-                    verticalScrollBar = null;
-                }
-
-                if (horizontalScrollBar != null)
-                {
-                    horizontalScrollBar.Scrolled -= HorizontalScrollBar_Scrolled;
-                    RemoveControl(horizontalScrollBar);
-                    horizontalScrollBar = null;
-                }
-            }
 
             base.OnAddedToContainer();
 

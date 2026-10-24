@@ -4,7 +4,7 @@ using System.IO;
 
 namespace FamiStudio
 {
-    public class PatternArea : Control
+    public class PatternArea : Container
     {
         private const int DefaultPatternNamePosX = 2;
 
@@ -112,7 +112,7 @@ namespace FamiStudio
             this.patternHeaderSizeY = patternHeaderSizeY;
             this.rowToChannelCount = rowToChannelCount;
 
-            virtualSizeY    = rowToChannelCount * channelSizeY;
+            virtualSizeY = rowToChannelCount * channelSizeY;
             patternNamePosX = DpiScaling.ScaleForWindow(DefaultPatternNamePosX);
         }
 
@@ -653,11 +653,9 @@ namespace FamiStudio
 
             c.PushClipRegion(0, 0, width, height);
 
-            // Bottom line
-            //c.DrawLine(0, height - 1, width, height - 1, Theme.BlackColor);
-
             // Background
             c.DrawLine(0, 0, width, 0, Theme.BlackColor);
+            c.DrawLine(0, height - 1, width, height - 1, Theme.BlackColor);
 
             for (int i = MinVisiblePattern(); i < MaxVisiblePattern(); i++)
             {
@@ -814,7 +812,7 @@ namespace FamiStudio
                             if (isSelectionValid && patternRefCounts.TryGetValue(pattern, out var count) && count > 1)
                             {
                                 // TODO: Get the correct icon instead of resizing. This is a placeholder.
-                                var scale = BitmapScale * (Platform.IsDesktop ? 1.0f : 0.25f);
+                                var scale = ChannelBitmapScale;
                                 var iconH = bmpMenuInstance.ElementSize.Height * scale;
                                 var iconX = sx / 2 - iconH / 2;
                                 var iconY = patternHeaderSizeY / 2 + channelSizeY / 2 - iconH / 2;
@@ -848,23 +846,6 @@ namespace FamiStudio
 
             // Seek bar
             b.DrawLine(SeekX, 0, SeekX, virtualSizeY, GetSeekBarColor(), 3);
-
-            // Scroll bar (optional) TODO: Use "real" scrollbar controls.
-/*             if (GetScrollBarParams(true, out var scrollBarThumbPosX, out var scrollBarSizeThumbX, out var scrollBarSizeX))
-            {
-                c.PushTranslation(channelNameSizeX - 1, 0);
-                c.FillAndDrawRectangle(0, actualSizeY, scrollBarSizeX, height - 1, Theme.DarkGreyColor4, Theme.BlackColor);
-                c.FillAndDrawRectangle(scrollBarThumbPosX, actualSizeY, scrollBarThumbPosX + scrollBarSizeThumbX, height, Theme.MediumGreyColor1, Theme.BlackColor);
-                c.PopTransform();
-            }
-
-            if (GetScrollBarParams(false, out var scrollBarThumbPosY, out var scrollBarThumbSizeY, out var scrollBarSizeY))
-            {
-                c.PushTranslation(0, headerSizeY);
-                c.FillAndDrawRectangle(width - scrollBarThickness, 0, width, scrollBarSizeY, Theme.DarkGreyColor4, Theme.BlackColor);
-                c.FillAndDrawRectangle(width - scrollBarThickness, scrollBarThumbPosY, width, scrollBarThumbPosY + scrollBarThumbSizeY, Theme.MediumGreyColor1, Theme.BlackColor);
-                c.PopTransform();
-            } */
 
             c.PopTransform();
             c.PopClipRegion();

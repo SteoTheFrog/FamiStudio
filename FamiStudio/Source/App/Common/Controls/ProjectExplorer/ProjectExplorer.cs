@@ -1765,6 +1765,8 @@ namespace FamiStudio
 
         private void MainContainer_Rendering(Graphics g)
         {
+            g.ForegroundCommandList.DrawLine(0, 0, width, 0, Theme.BlackColor);
+
             if (captureOperation != null && captureThresholdMet)
             {
                 var c = g.DefaultCommandList;

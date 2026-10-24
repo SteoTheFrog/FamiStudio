@@ -10,10 +10,11 @@ namespace FamiStudio
         private bool forceShyOff = false;
         private bool hideEmptyChannels = false;
         private int hoverIndex = -1;
+        private int selectedIndex = -1;
         private int lastExpansionMask = -1;
         private float headerIconScale = Platform.IsMobile ? DpiScaling.ScaleForWindowFloat(0.5f)  : 1.0f;
 
-        private ChannelName[] channelNames;
+        private ChannelNamePanel[] channelNames;
 
         private Sequencer Sequencer => App?.Sequencer;
         private Song Song => App?.SelectedSong;
@@ -28,6 +29,8 @@ namespace FamiStudio
         protected override void OnAddedToContainer()
         {
             headerContainer = new Container();
+            headerContainer.SetupClipRegion(false);
+            headerContainer.Rendering += HeaderContainer_Rendering;
             AddControl(headerContainer);
 
             shyButton = new Button("ShyOff");
@@ -39,6 +42,7 @@ namespace FamiStudio
             headerContainer.AddControl(shyButton);
 
             namesContainer = new Container();
+            namesContainer.Rendering += NamesContainer_Rendering;
             AddControl(namesContainer);
         }
 
@@ -49,11 +53,11 @@ namespace FamiStudio
             {
                 ConditionalRemoveChannelNames();
 
-                channelNames = new ChannelName[Song.Channels.Length];
+                channelNames = new ChannelNamePanel[Song.Channels.Length];
 
                 for (var i = 0; i < channelNames.Length; i++)
                 {
-                    var channelName = new ChannelName(i);
+                    var channelName = new ChannelNamePanel(Song.Channels[i]);
                     var idx = i; // Need to copy for channel index.
 
                     channelName.Clicked += () => ChannelName_Clicked(idx);
@@ -64,8 +68,6 @@ namespace FamiStudio
 
                     channelNames[i] = channelName;
                     namesContainer.AddControl(channelName);
-
-                    SetChannelHover(hoverIndex, true);
                 }
             }
 
@@ -83,16 +85,19 @@ namespace FamiStudio
 
         public void Reset()
         {
-            ConditionalRecreateChannelNames();
+            Refresh();
         }
 
         public void Refresh()
         {
             ConditionalRecreateChannelNames();
+            SetSelectedChannel(App.SelectedChannelIndex);
+            SetHover(hoverIndex);
         }
 
         private void ChannelName_Clicked(int idx)
         {
+            SetSelectedChannel(idx);
             App.SelectedChannelIndex = idx;
         }
 
@@ -126,10 +131,26 @@ namespace FamiStudio
             }
         }
 
+        public void SetSelectedChannel(int idx)
+        {
+            if (selectedIndex != idx)
+            {
+                SetChannelSelection(selectedIndex, false);
+                selectedIndex = idx;
+                SetChannelSelection(selectedIndex, true);
+            }
+        }
+
         private void SetChannelHover(int idx, bool hover)
         {
             if (idx >= 0 && idx < channelNames.Length)
-                channelNames[idx].Hovered = hover;
+                channelNames[idx].SetHovered(hover);
+        }
+
+        private void SetChannelSelection(int idx, bool select)
+        {
+            if (idx >= 0 && idx < channelNames.Length)
+                channelNames[idx].SetSelected(select);
         }
 
         private int GetChannelToRowForIndex(int idx)
@@ -153,13 +174,10 @@ namespace FamiStudio
             if (Song == null)
                 return;
 
-            headerContainer.Move(0, 0);
-            headerContainer.Resize(width, headerSizeY);
+            headerContainer.Move(0, 0, width, headerSizeY);
+            shyButton.Move(width - headerSizeY, 0, headerSizeY, headerSizeY);
 
-            shyButton.Move(Width - shyButton.Width, 0);
-            shyButton.Resize(headerSizeY, headerSizeY);
-
-            var maxRow = -1;
+            var rowCount = 0;
 
             for (var i = 0; i < channelNames.Length; i++)
             {
@@ -169,25 +187,17 @@ namespace FamiStudio
                 if (rowIdx < 0)
                 {
                     channelName.Visible = false;
-                    channelName.Hovered = false;
                     continue;
                 }
 
-                maxRow = Math.Max(maxRow, rowIdx);
+                rowCount = Math.Max(rowCount, rowIdx + 1);
 
+                channelName.Move(0, rowIdx * channelSizeY, width, channelSizeY);
                 channelName.Visible = true;
-
-                channelName.Resize(Width, channelSizeY);
-                channelName.Move(0, rowIdx * channelSizeY);
             }
 
-            var rowCount = maxRow + 1;
-            var namesHeight = rowCount * channelSizeY;
-
             namesContainer.Visible = rowCount > 0;
-            namesContainer.Move(0, headerSizeY);
-            namesContainer.Resize(width, namesHeight);
-            Resize(width, namesHeight + headerSizeY + 1);
+            namesContainer.Move(0, headerSizeY, width, height - headerSizeY);
         }
 
         private string ShyButton_ImageEvent(Control sender, ref Color tint)
@@ -229,26 +239,14 @@ namespace FamiStudio
             }
         }
 
-        protected override void OnRender(Graphics g)
+        private void HeaderContainer_Rendering(Graphics g)
         {
-            var c = g.DefaultCommandList;
+            g.ForegroundCommandList.DrawRectangle(0, 0, headerContainer.Width - 1, headerContainer.Height, Theme.BlackColor);
+        }
 
-            // Background
-            c.FillAndDrawRectangle(0, 0, width, height, Theme.DarkGreyColor1, Theme.BlackColor);
-
-            // Ensure we don't draw over the outlines.
-            c.PushClipRegion(1, 1, width - 1, height - 1);
-
-            // Bottom line.
-            c.DrawLine(0, height - 1, width, height - 1, Theme.BlackColor);
-
-            base.OnRender(g);
-
-            c.PopClipRegion();
-            
-            // Vertical line seperating with the toolbar
-            if (Platform.IsMobile && IsLandscape)
-                c.DrawLine(0, 0, 0, height, Theme.BlackColor);
+        private void NamesContainer_Rendering(Graphics g)
+        {
+            g.ForegroundCommandList.DrawRectangle(0, 0, namesContainer.Width - 1, namesContainer.Height - 1, Theme.BlackColor);
         }
     }
 }

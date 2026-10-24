@@ -168,8 +168,8 @@
     <Compile Include="Source\App\Common\Controls\ProjectExplorer\RegisterViewerPanel.cs" />
     <Compile Include="Source\App\Common\Controls\ProjectExplorer\SimpleTab.cs" />
     <Compile Include="Source\App\Common\Controls\ProjectExplorer\ProjectExplorer.cs" />
-    <Compile Include="Source\App\Common\Controls\Sequencer\ChannelName.cs" />
     <Compile Include="Source\App\Common\Controls\Sequencer\ChannelNameArea.cs" />
+    <Compile Include="Source\App\Common\Controls\Sequencer\ChannelNamePanel.cs" />
     <Compile Include="Source\App\Common\Controls\Sequencer\PatternArea.cs" />
     <Compile Include="Source\App\Common\Controls\Sequencer\Sequencer.cs" />
     <Compile Include="Source\App\Common\Controls\Sequencer\SequencerTimeline.cs" />

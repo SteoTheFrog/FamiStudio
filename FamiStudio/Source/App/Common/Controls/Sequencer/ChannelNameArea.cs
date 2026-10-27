@@ -9,8 +9,6 @@ namespace FamiStudio
         private Button shyButton;
         private bool forceShyOff = false;
         private bool hideEmptyChannels = false;
-        private int hoverIndex = -1;
-        private int selectedIndex = -1;
         private int lastExpansionMask = -1;
         private float headerIconScale = Platform.IsMobile ? DpiScaling.ScaleForWindowFloat(0.5f)  : 1.0f;
 
@@ -58,14 +56,6 @@ namespace FamiStudio
                 for (var i = 0; i < channelNames.Length; i++)
                 {
                     var channelName = new ChannelNamePanel(Song.Channels[i]);
-                    var idx = i; // Need to copy for channel index.
-
-                    channelName.Clicked += () => ChannelName_Clicked(idx);
-                    channelName.ChannelIcon += () => ChannelIcon_Clicked(idx);
-                    channelName.ChannelIconDoubleClicked += () => ChannelIcon_DoubleClicked(idx);
-                    channelName.ForceDisplayClicked += () => ForceDisplay_Clicked(idx);
-                    channelName.ForceDisplayDoubleClicked += () => ForceDisplay_DoubleClicked(idx);
-
                     channelNames[i] = channelName;
                     namesContainer.AddControl(channelName);
                 }
@@ -91,66 +81,6 @@ namespace FamiStudio
         public void Refresh()
         {
             ConditionalRecreateChannelNames();
-            SetSelectedChannel(App.SelectedChannelIndex);
-            SetHover(hoverIndex);
-        }
-
-        private void ChannelName_Clicked(int idx)
-        {
-            SetSelectedChannel(idx);
-            App.SelectedChannelIndex = idx;
-        }
-
-        private void ChannelIcon_Clicked(int idx)
-        {
-            App.ToggleChannelActive(idx);
-        }
-
-        private void ChannelIcon_DoubleClicked(int idx)
-        {
-            App.ToggleChannelSolo(idx, true);
-        }
-
-        private void ForceDisplay_Clicked(int idx)
-        {
-            App.ToggleChannelForceDisplay(idx);
-        }
-
-        private void ForceDisplay_DoubleClicked(int idx)
-        {
-            App.ToggleChannelForceDisplayAll(idx, true);
-        }
-
-        public void SetHover(int idx)
-        {
-            if (hoverIndex != idx)
-            {
-                SetChannelHover(hoverIndex, false);
-                hoverIndex = idx;
-                SetChannelHover(hoverIndex, true);
-            }
-        }
-
-        public void SetSelectedChannel(int idx)
-        {
-            if (selectedIndex != idx)
-            {
-                SetChannelSelection(selectedIndex, false);
-                selectedIndex = idx;
-                SetChannelSelection(selectedIndex, true);
-            }
-        }
-
-        private void SetChannelHover(int idx, bool hover)
-        {
-            if (idx >= 0 && idx < channelNames.Length)
-                channelNames[idx].SetHovered(hover);
-        }
-
-        private void SetChannelSelection(int idx, bool select)
-        {
-            if (idx >= 0 && idx < channelNames.Length)
-                channelNames[idx].SetSelected(select);
         }
 
         private int GetChannelToRowForIndex(int idx)

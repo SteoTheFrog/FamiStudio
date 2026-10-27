@@ -64,6 +64,7 @@ namespace FamiStudio
         bool[] channelVisible;
         int[] channelToRow;
         int[] rowToChannel;
+        float[] seekGeometry;
         PatternLocation selectionMin = PatternLocation.Invalid;
         PatternLocation selectionMax = PatternLocation.Invalid;
         PatternLocation highlightLocation = PatternLocation.Invalid;
@@ -219,7 +220,7 @@ namespace FamiStudio
             channelNameArea?.Resize(channelNameSizeX, height);
             channelNameArea?.UpdateLayout(headerSizeY, channelSizeY);
             timeline?.Move(channelNameSizeX, 0, width - channelNameSizeX, headerSizeY);
-            timeline?.UpdateLayout(channelSizeY);
+            timeline?.UpdateLayout();
             patternArea?.Move(channelNameSizeX, headerSizeY, patternAreaWidth, height - headerSizeY - scrollBarThickness + 1);
             patternArea?.UpdateLayout(channelSizeY, patternHeaderSizeY, rowToChannel?.Length ?? 0);
 
@@ -393,6 +394,7 @@ namespace FamiStudio
             scrollY = 0;
             zoom = DefaultZoom;
             ClearSelection();
+            timeline?.Reset();
             channelNameArea?.Reset();
             UpdateRenderCoords();
             InvalidatePatternCache();
@@ -545,7 +547,14 @@ namespace FamiStudio
         {
             UpdateRenderCoords();
 
-            ContainerTouchFlingNotify += MainContainer_ContainerTouchFlingNotify;
+            seekGeometry = new float[]
+            {
+                -headerSizeY / 2, 1,
+                0, headerSizeY - 2,
+                headerSizeY / 2, 1 
+            };
+
+            base.OnAddedToContainer();
 
             channelNameArea = new ChannelNameArea();
             AddControl(channelNameArea);
@@ -554,7 +563,6 @@ namespace FamiStudio
             timeline.CancelDragSeekBar += AbortCaptureOperation;
             timeline.ColumnSelect += StartColumnSelection;
             timeline.DragSeekBar += StartDragSeekBar;
-            timeline.LoopPointToggled += SetLoopPoint;
             timeline.PatternModified += () => PatternModified?.Invoke();
             timeline.StartAltZoom += StartAltZoom;
             AddControl(timeline);
@@ -575,8 +583,6 @@ namespace FamiStudio
             patternArea.StartDragSelection += StartDragSelection;
             patternArea.StartRectangleSelection += StartRectangleSelection;
             AddControl(patternArea);
-
-            base.OnAddedToContainer();
 
             if (Platform.IsMobile)
             {
@@ -640,6 +646,7 @@ namespace FamiStudio
             return captureOperation == DragSeekBar ? dragSeekPosition : App.CurrentFrame;
         }
 
+        // TODO: All of these min / max things go when everything is a native control.
         private int MinVisibleNoteIdx()
         {
             return Math.Max(GetNoteForPixel(0), 0);
@@ -677,8 +684,6 @@ namespace FamiStudio
                 return;
 
             base.OnRender(g);
-
-            //RenderPatternArea(g);
             RenderDebug(g);
         }
 
@@ -834,6 +839,7 @@ namespace FamiStudio
             if (scrollY < minScrollY) { scrollY = minScrollY; scrolledY = false; }
             if (scrollY > maxScrollY) { scrollY = maxScrollY; scrolledY = false; }
 
+            timeline?.SetScroll(scrollX);
             channelNameArea?.SetScrollY(scrollY);
             patternArea?.SetScrollY(scrollY);
 
@@ -930,14 +936,6 @@ namespace FamiStudio
             }
         }
 
-        private void SetLoopPoint(int patternIdx)
-        {
-            App.UndoRedoManager.BeginTransaction(TransactionScope.Song, Song.Id);
-            Song.SetLoopPoint(Song.LoopPoint == patternIdx ? -1 : patternIdx);
-            App.UndoRedoManager.EndTransaction();
-            MarkDirty();
-        }
-
         private void VerticalScrollBar_Scrolled(Control sender, int pos)
         {
             if (sender == verticalScrollBar)
@@ -963,7 +961,6 @@ namespace FamiStudio
         private void PatternArea_PatternClicked(int channelIdx, int patternIdx, bool setActive)
         {
             PatternClicked?.Invoke(channelIdx, patternIdx, setActive);
-            channelNameArea?.SetSelectedChannel(channelIdx);
             App.SelectedChannelIndex = channelIdx;
         }
 
@@ -1069,11 +1066,11 @@ namespace FamiStudio
             MoveCopyOrDuplicateSelection(channelDeltaIdx, patternDeltaIdx, true, copy);
         }
 
-        private void MainContainer_ContainerTouchFlingNotify(Control sender, PointerEventArgs e)
+        public override void OnContainerTouchFlingNotify(Control control, PointerEventArgs e)
         {
             if (canFling)
             {
-                EndCaptureOperation(sender, e.Position);
+                EndCaptureOperation(control, e.Position);
                 SetFlingVelocity(e.FlingVelocityX, e.FlingVelocityY);
             }
         }
@@ -1811,8 +1808,13 @@ namespace FamiStudio
         private void UpdateTooltipControl(Control control)
         {
             var tooltip = control.ToolTip;
-            if (string.IsNullOrEmpty(tooltip))
-                tooltip = control.ParentContainer.ToolTip;
+
+            for (var c = control; string.IsNullOrEmpty(tooltip) && c.ParentContainer != null; )
+            {
+                c = c.ParentContainer;
+                tooltip = c.ToolTip;
+            }
+
             App.SetToolTip(tooltip);
         }
 
@@ -1925,7 +1927,6 @@ namespace FamiStudio
                 if (hoverPos.X != p.X || hoverPos.Y != p.Y)
                 {
                     hoverPos = new Point(p.X, p.Y);
-                    channelNameArea?.SetHover(GetRowToChannelForIndex(hoverPos.Y));
                     MarkDirty();
                 }
             }

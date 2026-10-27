@@ -15,10 +15,8 @@ namespace FamiStudio
 
         private Button channelIconButton;
         private Button forceDisplayButton;
-        private Label channelNameLabel;
 
         private Channel channel;
-        private Color backgroundColor;
         private int channelNameIndex;
         private int channelIconPosX;
         private int channelIconPosY;
@@ -26,17 +24,6 @@ namespace FamiStudio
         private int channelIconSize;
         private int ghostIconSize;
         private float iconScale = Platform.IsMobile ? DpiScaling.Window * 0.25f : 1.0f;
-
-        public delegate void EmptyDelegate();
-        public delegate void SelectionDelegate(int idx);
-
-        public EmptyDelegate Clicked;
-        public EmptyDelegate ChannelIcon;
-        public EmptyDelegate ChannelIconDoubleClicked;
-        public EmptyDelegate ForceDisplayClicked;
-        public EmptyDelegate ForceDisplayDoubleClicked;
-        public EmptyDelegate PointerEntered;
-        public SelectionDelegate SelectionChanged;
 
         // Buttons
         LocalizedString MuteChannelTooltip;
@@ -78,26 +65,22 @@ namespace FamiStudio
 
         private void ToggleMute_Click(Control control)
         {
-            ChannelIcon?.Invoke();
-            control.MarkDirty();
+            App.ToggleChannelActive(channelNameIndex);
         }
 
         private void ForceDisplay_Click(Control control)
         {
-            ForceDisplayClicked?.Invoke();
-            control.MarkDirty();
+            App.ToggleChannelForceDisplay(channelNameIndex);
         }
 
         private void ToggleMute_DoubleClick(Control control, PointerEventArgs e)
         {
-            ChannelIconDoubleClicked?.Invoke();
-            control.MarkDirty();
+            App.ToggleChannelSolo(channelNameIndex, true);
         }
 
         private void ForceDisplay_DoubleClick(Control control, PointerEventArgs e)
         {
-            ForceDisplayDoubleClicked?.Invoke();
-            control.MarkDirty();
+            App.ToggleChannelForceDisplayAll(channelNameIndex, true);
         }
 
         private void ShowContextMenu(Control sender)
@@ -119,24 +102,6 @@ namespace FamiStudio
                 App.ShowContextMenuAsync(menu.ToArray());
 
             MarkDirty();
-        }
-
-        public void SetHovered(bool hover)
-        {
-            UpdateBackground(hover);
-            MarkDirty();
-        }
-
-        public void SetSelected(bool select)
-        {
-            channelNameLabel.Font = select ? Fonts.FontMediumBold : Fonts.FontMedium;
-            MarkDirty();
-        }
-
-        private void UpdateBackground(bool hover)
-        {
-            var dim = Settings.DimUnsupportedChannels && !channel.SupportsInstrument(App.SelectedInstrument, false);
-            backgroundColor = hover ? Theme.MediumGreyColor1.Transparent(dim ? 192 : 255) : dim ? Theme.DarkGreyColor1 : Theme.DarkGreyColor2;
         }
 
         private void UpdateRenderCoords()
@@ -162,11 +127,6 @@ namespace FamiStudio
 
             UpdateRenderCoords();
 
-            channelNameLabel = new Label(channel.LocalizedName, false);
-            channelNameLabel.PointerDown += (s, e) => OnPointerDown(e);
-            channelNameLabel.Move(channelNamePosX, 0);
-            AddControl(channelNameLabel);
-
             tooltip = $"<MouseLeft> {MakeActiveTooltip}{channelShortcut}";
 
             channelIconButton = CreateImageButton(channelIconPosX, channelIconPosY, ChannelType.Icons[channel.Type]);
@@ -182,16 +142,13 @@ namespace FamiStudio
             forceDisplayButton.Click += ForceDisplay_Click;
             forceDisplayButton.MouseDoubleClick += ForceDisplay_DoubleClick;
             forceDisplayButton.TouchDoubleClick += ForceDisplay_DoubleClick;
-
-            UpdateBackground(false);
         }
 
         protected override void OnPointerDown(PointerEventArgs e)
         {
             if (e.Left)
             {
-                SelectionChanged?.Invoke(channelNameIndex);
-                Clicked?.Invoke();
+                App.SelectedChannelIndex = channelNameIndex;
             }
         }
 
@@ -201,6 +158,14 @@ namespace FamiStudio
             {
                 ShowContextMenu(this);
             }
+        }
+
+        private Color GetBackgroundColor()
+        {
+            var hovered = App.Sequencer.HoverPosition.Y == channelNameIndex;
+            var dim = Settings.DimUnsupportedChannels && !channel.SupportsInstrument(App.SelectedInstrument, false);
+
+            return hovered ? Theme.MediumGreyColor1.Transparent(dim ? 192 : 255) : dim ? Theme.DarkGreyColor1 : Theme.DarkGreyColor2;
         }
 
         private string ToggleMuteButton_ImageEvent(Control sender, ref Color tint)
@@ -226,7 +191,12 @@ namespace FamiStudio
 
         protected override void OnRender(Graphics g)
         {
-            g.DefaultCommandList.FillAndDrawRectangle(0, 0, width, height, backgroundColor, Theme.BlackColor);
+            var c = g.DefaultCommandList;
+            var selected = App.SelectedChannelIndex == channelNameIndex;
+
+            c.FillAndDrawRectangle(0, 0, width, height, GetBackgroundColor(), Theme.BlackColor);
+            c.DrawText(channel.LocalizedName, selected ? fonts.FontMediumBold : fonts.FontMedium, channelNamePosX, channelIconPosY, Theme.LightGreyColor2, TextFlags.MiddleLeft, 0, channelIconButton.Height);
+
             base.OnRender(g);
         }
     }

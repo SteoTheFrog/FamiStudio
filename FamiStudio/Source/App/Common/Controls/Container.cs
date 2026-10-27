@@ -53,6 +53,10 @@ namespace FamiStudio
         {
         }
 
+        public virtual void OnContainerPointerDownDelayedNotify(Control control, PointerEventArgs e)
+        {
+        }
+
         public virtual void OnContainerPointerUpNotify(Control control, PointerEventArgs e)
         {
         }

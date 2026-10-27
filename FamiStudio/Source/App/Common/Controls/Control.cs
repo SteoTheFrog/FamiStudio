@@ -30,6 +30,7 @@ namespace FamiStudio
         public delegate void EventDelegate(Control sender, EventArgs e);
 
         public event PointerEventDelegate PointerDown;
+        public event PointerEventDelegate PointerDownDelayed;
         public event PointerEventDelegate PointerUp;
         public event PointerEventDelegate MouseDoubleClick;
         public event PointerEventDelegate PointerMove;
@@ -99,7 +100,7 @@ namespace FamiStudio
 
         public virtual void Render(Graphics g) { OnRender(g); }
         public void SendPointerDown(PointerEventArgs e) { OnPointerDown(e); PointerDown?.Invoke(this, e); SendContainerPointerDownNotify(e); }
-        public void SendPointerDownDelayed(PointerEventArgs e) { OnPointerDownDelayed(e); }
+        public void SendPointerDownDelayed(PointerEventArgs e) { OnPointerDownDelayed(e); PointerDownDelayed?.Invoke(this, e); SendContainerPointerDownDelayedNotify(e); }
         public void SendPointerUp(PointerEventArgs e) { OnPointerUp(e); PointerUp?.Invoke(this, e); SendContainerPointerUpNotify(e); }
         public void SendPointerMove(PointerEventArgs e) { OnPointerMove(e); PointerMove?.Invoke(this, e); SendContainerPointerMoveNotify(e); }
         public void SendPointerEnter(EventArgs e) { if (IsContainedByMainWindow) { OnPointerEnter(e); SendContainerPointerEnterNotify(e); } }
@@ -187,6 +188,18 @@ namespace FamiStudio
             {
                 c.OnContainerPointerDownNotify(this, e);
                 c.ContainerPointerDownNotify?.Invoke(this, e);
+                if (c is Dialog)
+                    break;
+                c = c.ParentContainer;
+            }
+        }
+
+        public void SendContainerPointerDownDelayedNotify(PointerEventArgs e) 
+        {
+            var c = ParentContainer;
+            while (c != null)
+            {
+                c.OnContainerPointerDownDelayedNotify(this, e);
                 if (c is Dialog)
                     break;
                 c = c.ParentContainer;

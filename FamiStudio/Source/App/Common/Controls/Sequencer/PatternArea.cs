@@ -21,7 +21,9 @@ namespace FamiStudio
         private Sequencer Sequencer => App?.Sequencer;
         private Song Song => App?.SelectedSong;
 
+        private bool IsColumnSelectionInProgress => Sequencer.IsColumnSelectionInProgress;
         private bool IsDragSelectionInProgress => Sequencer.IsDragSelectionInProgress;
+        private bool IsRectangleSelectionInProgress => Sequencer.IsRectangleSelectionInProgress;
         private bool IsValidTimeOnlySelection => Sequencer.HasValidTimeOnlySelection;
         private int SeekX => Sequencer.SeekX;
         public int SelectionDragAnchorPatternIdx => Sequencer.SelectionDragAnchorPatternIdx;
@@ -29,7 +31,10 @@ namespace FamiStudio
 
         private Color SelectedPatternInvisibleColor => Sequencer.SelectedPatternInvisibleColor;
         private Color SelectedPatternVisibleColor => Sequencer.SelectedPatternVisibleColor;
+        private IReadOnlyCollection<PatternLocation> SelectedPatternLocations => Sequencer.SelectedPatternLocations;
         private PatternLocation HighlightLocation => Sequencer.HighlightLocation;
+        private PatternLocation MarqueeMax => Sequencer.MarqueeMax;
+        private PatternLocation MarqueeMin => Sequencer.MarqueeMin;
         private PatternLocation SelectionMax => Sequencer.SelectionMax;
         private PatternLocation SelectionMin => Sequencer.SelectionMin;
         private bool HasCaptureOperation => Sequencer.HasCaptureOperation;
@@ -150,10 +155,23 @@ namespace FamiStudio
             return Sequencer.IsSelectionValid();
         }
 
+        private bool IsPatternHighlighted(PatternLocation location)
+        {
+            if (IsPatternSelected(location))
+                return true;
+
+            if (MarqueeMin.IsValid && MarqueeMax.IsValid)
+            {
+                return location.ChannelIndex >= MarqueeMin.ChannelIndex && location.ChannelIndex <= MarqueeMax.ChannelIndex &&
+                       location.PatternIndex >= MarqueeMin.PatternIndex && location.PatternIndex <= MarqueeMax.PatternIndex;
+            }
+
+            return false;
+        }
+
         private bool IsPatternSelected(PatternLocation location)
         {
-            return location.ChannelIndex >= SelectionMin.ChannelIndex && location.ChannelIndex <= SelectionMax.ChannelIndex &&
-                   location.PatternIndex >= SelectionMin.PatternIndex && location.PatternIndex <= SelectionMax.PatternIndex;
+            return Sequencer.IsPatternSelected(location);
         }
 
         private int GetPixelForNote(int note, bool scroll = true)
@@ -245,7 +263,7 @@ namespace FamiStudio
             PatternModified?.Invoke();
             App.UndoRedoManager.EndTransaction();
 
-            ClearSelection();
+            ClearSelection?.Invoke();
             MarkDirty();
         }
 
@@ -266,7 +284,10 @@ namespace FamiStudio
         public bool UpdateSelectedPatternRefCounts()
         {
             if (!IsSelectionValid())
+            {
+                patternRefCounts.Clear();
                 return false;
+            }
 
             var selectedPatterns = new HashSet<Pattern>();
 
@@ -334,8 +355,10 @@ namespace FamiStudio
 
         private bool GetMinMaxSelectedRow(out int minSelRow, out int maxSelRow)
         {
-            var minSelChannel = SelectionMin.ChannelIndex;
-            var maxSelChannel = SelectionMax.ChannelIndex;
+            var isMarquee = IsRectangleSelectionInProgress || IsColumnSelectionInProgress;
+
+            var minSelChannel = isMarquee ? MarqueeMin.ChannelIndex : SelectionMin.ChannelIndex;
+            var maxSelChannel = isMarquee ? MarqueeMax.ChannelIndex : SelectionMax.ChannelIndex;
             
             while (minSelChannel < Song.Channels.Length && GetChannelToRowForIndex(minSelChannel) < 0) minSelChannel++;
             while (maxSelChannel >= 0 && GetChannelToRowForIndex(maxSelChannel) < 0) maxSelChannel--;
@@ -666,13 +689,13 @@ namespace FamiStudio
             }
 
             // Selection
-            if (isSelectionValid)
+            if (Sequencer.IsRectangleSelectionInProgress || Sequencer.IsColumnSelectionInProgress)
             {
                 if (GetMinMaxSelectedRow(out var minSelRow, out var maxSelRow))
                 {
                     c.FillRectangle(
-                        GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(Math.Min(SelectionMin.PatternIndex + 0, Song.Length))), channelSizeY * (minSelRow + 0) - scrollY,
-                        GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(Math.Min(SelectionMax.PatternIndex + 1, Song.Length))), channelSizeY * (maxSelRow + 1) - scrollY,
+                        GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(Math.Min(MarqueeMin.PatternIndex + 0, Song.Length))), channelSizeY * (minSelRow + 0) - scrollY,
+                        GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(Math.Min(MarqueeMax.PatternIndex + 1, Song.Length))), channelSizeY * (maxSelRow + 1) - scrollY,
                         Sequencer.IsActiveControl ? SelectedPatternVisibleColor : SelectedPatternInvisibleColor);
                 }
             }
@@ -697,70 +720,38 @@ namespace FamiStudio
                 var pt = MouseLastPosition();
                 var noteIdx = GetNoteForPixel(pt.X);
 
-                if (noteIdx >= 0 && noteIdx < Song.GetPatternStartAbsoluteNoteIndex(Song.Length) && GetMinMaxSelectedRow(out var minSelRow, out var maxSelRow))
+                if (noteIdx >= 0 && noteIdx < Song.GetPatternStartAbsoluteNoteIndex(Song.Length))
                 {
-                    var patternIdx = Song.PatternIndexFromAbsoluteNoteIndex(noteIdx);
+                    var patternIdx      = Song.PatternIndexFromAbsoluteNoteIndex(noteIdx);
                     var patternIdxDelta = patternIdx - SelectionDragAnchorPatternIdx;
+                    var rowIdxDelta     = GetRowIndexForCoord(pt.Y) - CaptureRowIdx;
 
-                    var dragRowIdxStart = CaptureRowIdx;
-                    var dragRowIdxCurrent = GetRowIndexForCoord(pt.Y);
-                    var rowIdxDelta = dragRowIdxCurrent - dragRowIdxStart;
+                    // Anchor for where the pattern under the cursor should start.
+                    var anchorSizeX = GetPixelForNote(Song.GetPatternLength(patternIdx), false);
+                    var anchorLeftX = pt.X - (int)(anchorSizeX * SelectionDragAnchorPatternXFraction);
+                    var shiftX      = anchorLeftX - GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(patternIdx), false);
 
-                    for (int j = minSelRow + rowIdxDelta; j <= maxSelRow + rowIdxDelta; j++)
+                    var instance  = ModifierKeys.IsControlDown;
+                    var duplicate = instance && ModifierKeys.IsShiftDown;
+                    var bmpCopy   = rowIdxDelta != 0 ? ((duplicate || instance) ? bmpDuplicate : bmpDuplicateMove) : (duplicate ? bmpDuplicate : (instance ? bmpInstantiate : null));
+                    var bmpSize   = DpiScaling.ScaleCustom(bmpDuplicate.ElementSize.Width, BitmapScale);
+
+                    foreach (var loc in SelectedPatternLocations)
                     {
-                        if (j < 0 || j >= rowToChannelCount)
+                        var row = GetChannelToRowForIndex(loc.ChannelIndex) + rowIdxDelta;
+                        var tp  = loc.PatternIndex + patternIdxDelta;
+
+                        if (row < 0 || row >= rowToChannelCount || tp < 0 || tp >= Song.Length)
                             continue;
 
-                        var y = j * channelSizeY;
+                        var x = GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(tp), false) + shiftX;
+                        var w = GetPixelForNote(Song.GetPatternLength(tp), false);
+                        var y = row * channelSizeY;
 
-                        // Center.
-                        var patternSizeX = GetPixelForNote(Song.GetPatternLength(patternIdx), false);
-                        var anchorOffsetLeftX = (int)(patternSizeX * SelectionDragAnchorPatternXFraction);
-                        var anchorOffsetRightX = (int)(patternSizeX * (1.0f - SelectionDragAnchorPatternXFraction));
-
-                        var instance = ModifierKeys.IsControlDown;
-                        var duplicate = instance && ModifierKeys.IsShiftDown;
-
-                        var bmpCopy = (TextureAtlasRef)null;
-                        var bmpSize = DpiScaling.ScaleCustom(bmpDuplicate.ElementSize.Width, BitmapScale);
-
-                        if (rowIdxDelta != 0)
-                            bmpCopy = (duplicate || instance) ? bmpDuplicate : bmpDuplicateMove;
-                        else
-                            bmpCopy = duplicate ? bmpDuplicate : (instance ? bmpInstantiate : null);
-
-                        c.PushTranslation(pt.X, y);
-                        c.FillAndDrawRectangle(-anchorOffsetLeftX, 0, -anchorOffsetLeftX + patternSizeX, channelSizeY, SelectedPatternVisibleColor, Theme.BlackColor);
+                        c.FillAndDrawRectangle(x, y, x + w, y + channelSizeY, SelectedPatternVisibleColor, Theme.BlackColor);
 
                         if (bmpCopy != null)
-                            c.DrawTextureAtlas(bmpCopy, -anchorOffsetLeftX + patternSizeX / 2 - bmpSize / 2, channelSizeY / 2 - bmpSize / 2, BitmapScale, Theme.LightGreyColor1);
-
-                        // Left side
-                        for (int p = patternIdx - 1; p >= SelectionMin.PatternIndex + patternIdxDelta && p >= 0; p--)
-                        {
-                            patternSizeX = GetPixelForNote(Song.GetPatternLength(p), false);
-                            anchorOffsetLeftX += patternSizeX;
-
-                            c.FillAndDrawRectangle(-anchorOffsetLeftX, 0, -anchorOffsetLeftX + patternSizeX, channelSizeY, SelectedPatternVisibleColor, Theme.BlackColor);
-
-                            if (bmpCopy != null)
-                                c.DrawTextureAtlas(bmpCopy, -anchorOffsetLeftX + patternSizeX / 2 - bmpSize / 2, channelSizeY / 2 - bmpSize / 2, BitmapScale, Theme.LightGreyColor1);
-                        }
-
-                        // Right side
-                        for (int p = patternIdx + 1; p <= SelectionMax.PatternIndex + patternIdxDelta && p < Song.Length; p++)
-                        {
-                            patternSizeX = GetPixelForNote(Song.GetPatternLength(p), false);
-
-                            c.FillAndDrawRectangle(anchorOffsetRightX, 0, anchorOffsetRightX + patternSizeX, channelSizeY, SelectedPatternVisibleColor, Theme.BlackColor);
-
-                            if (bmpCopy != null)
-                                c.DrawTextureAtlas(bmpCopy, anchorOffsetRightX + patternSizeX / 2 - bmpSize / 2, channelSizeY / 2 - bmpSize / 2, BitmapScale, Theme.LightGreyColor1);
-
-                            anchorOffsetRightX += patternSizeX;
-                        }
-
-                        c.PopTransform();
+                            c.DrawTextureAtlas(bmpCopy, x + w / 2 - bmpSize / 2, y + channelSizeY / 2 - bmpSize / 2, BitmapScale, Theme.LightGreyColor1);
                     }
                 }
             }
@@ -789,7 +780,7 @@ namespace FamiStudio
                         if (pattern != null)
                         {
                             var bmp = patternCache.GetOrAddPattern(pattern, patternLen, noteLen, out var u0, out var v0, out var u1, out var v1);
-                            var isSelected = IsPatternSelected(location);
+                            var isSelected = IsPatternHighlighted(location);
                             var font = isSelected ? Fonts.FontSmallBold : Fonts.FontSmall;
 
                             c.PushTranslation(0, py);
@@ -800,6 +791,7 @@ namespace FamiStudio
 
                             if (isSelected)
                             {
+                                c.FillRectangle(0, 0, sx, channelSizeY, Color.FromArgb(48, Theme.WhiteColor));
                                 c.DrawRectangle(0, 0, sx, channelSizeY, Theme.WhiteColor, 3, true, true);
                                 c.DrawLine(0, patternHeaderSizeY, sx, patternHeaderSizeY, Theme.WhiteColor, 3, true, true);
                                 c.DrawText(pattern.Name, font, patternNamePosX + 1, 1, Theme.BlackColor, TextFlags.Left | TextFlags.Middle | TextFlags.Clip, sx - patternNamePosX, patternHeaderSizeY + 1);

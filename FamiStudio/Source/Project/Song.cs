@@ -565,7 +565,7 @@ namespace FamiStudio
             }
         }
 
-        public bool DuplicatePatternsForNoteLengthChange(int minPatternIdx, int maxPatternIdx, bool ignoreCustomSettings)
+        public bool DuplicatePatternsForNoteLengthChange(List<int> patternIndexes, bool ignoreCustomSettings)
         {
             var duplicatedAnything = false;
 
@@ -581,7 +581,7 @@ namespace FamiStudio
 
                     if (pattern != null)
                     {
-                        var inRange = p >= minPatternIdx && p <= maxPatternIdx && (!ignoreCustomSettings || !PatternHasCustomSettings(p));
+                        var inRange = patternIndexes.Contains(p) && (!ignoreCustomSettings || !PatternHasCustomSettings(p));
 
                         if (inRange)
                             patternsInsideRange.Add(pattern);
@@ -604,7 +604,7 @@ namespace FamiStudio
                     }
                 }
 
-                for (var p = minPatternIdx; p <= maxPatternIdx; p++)
+                foreach (var p in patternIndexes)
                 {
                     var inRange = !ignoreCustomSettings || !PatternHasCustomSettings(p);
                     if (inRange)

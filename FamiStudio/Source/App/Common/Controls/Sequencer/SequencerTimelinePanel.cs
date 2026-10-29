@@ -30,14 +30,35 @@ namespace FamiStudio
             bmpLoopPoint = Graphics.GetTextureAtlasRef("LoopSmallFill");
         }
 
+        private bool IsPatternHighlighted()
+        {
+            if (App.Sequencer.IsValidTimeOnlySelection())
+            {
+                var sequencer = App.Sequencer;
+                
+                if (sequencer.SelectedTimelineColumns.Contains(patternIndex))
+                    return true;
+
+                if (sequencer.IsColumnSelectionInProgress && sequencer.MarqueeMin.IsValid && sequencer.MarqueeMax.IsValid)
+                    return patternIndex >= sequencer.MarqueeMin.PatternIndex && patternIndex <= sequencer.MarqueeMax.PatternIndex;
+            }
+
+            return false;
+        }
+
         protected override void OnRender(Graphics g)
         {
             var c = g.DefaultCommandList;
             var hovered = App.Sequencer.HoverPosition.X == patternIndex;
             var color = hovered ? Theme.MediumGreyColor1 : backgroundColor;
             var text = (patternIndex + 1).ToString() + (App.SelectedSong.PatternHasCustomSettings(patternIndex) ? "*" : "");
+            var highlight = IsPatternHighlighted();
 
-            c.FillAndDrawRectangle(0, 0, width, height, color, Theme.BlackColor);
+            if (highlight)
+                c.FillAndDrawRectangle(0, 0, width, height, Theme.Lighten(color), Theme.WhiteColor, 3, true, true);
+            else
+                c.FillAndDrawRectangle(0, 0, width, height, color, Theme.BlackColor);
+
             c.DrawText(text, fonts.FontMedium, 0, 0, Theme.LightGreyColor2, TextFlags.MiddleCenter, width, height);
 
             if (patternIndex == App.SelectedSong.LoopPoint)

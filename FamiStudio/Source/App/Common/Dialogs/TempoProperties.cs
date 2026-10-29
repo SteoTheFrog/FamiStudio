@@ -10,9 +10,8 @@ namespace FamiStudio
         private PropertyPage props;
         private Song song;
 
-        private int patternIdx    = -1;
-        private int minPatternIdx = -1;
-        private int maxPatternIdx = -1;
+        private List<int> patternIndexes;
+        private int patternIdx = -1;
 
         private int firstPropIdx             = -1;
         private int famitrackerTempoPropIdx  = -1;
@@ -78,15 +77,14 @@ namespace FamiStudio
 
         #endregion
 
-        public TempoProperties(PropertyPage props, Song song, int patternIdx = -1, int minPatternIdx = -1, int maxPatternIdx = -1)
+        public TempoProperties(PropertyPage props, Song song, int patternIdx = -1, List<int> patternIndexes = null)
         {
             Localization.Localize(this);
 
             this.song = song;
             this.props = props;
             this.patternIdx = patternIdx;
-            this.minPatternIdx = minPatternIdx;
-            this.maxPatternIdx = maxPatternIdx;
+            this.patternIndexes = patternIndexes;
 
             props.PropertyChanged += Props_PropertyChanged;
         }
@@ -327,18 +325,18 @@ namespace FamiStudio
                 }
                 else
                 {
-                    for (int i = minPatternIdx; i <= maxPatternIdx; i++)
+                    foreach (var p in patternIndexes)
                     {
                         var beatLength    = props.GetPropertyValue<int>(notesPerBeatPropIdx);
                         var patternLength = props.GetPropertyValue<int>(notesPerPatternPropIdx);
 
                         if (custom)
                         {
-                            song.SetPatternCustomSettings(i, patternLength, beatLength);
+                            song.SetPatternCustomSettings(p, patternLength, beatLength);
                         }
                         else
                         {
-                            song.ClearPatternCustomSettings(i);
+                            song.ClearPatternCustomSettings(p);
                         }
                     }
                 }
@@ -366,9 +364,12 @@ namespace FamiStudio
                 {
                     ShowConvertTempoDialogAsync(win, noteLength != originalNoteLength, (convert, duplicate) =>
                     {
-                        if (duplicate && song.DuplicatePatternsForNoteLengthChange(0, song.Length - 1, true))
+                        if (duplicate)
                         {
-                            FamiStudio.StaticInstance.DisplayNotification(DuplicateNotificationSong, false);
+                            var allPatterns = Enumerable.Range(0, song.Length).ToList();
+
+                            if (song.DuplicatePatternsForNoteLengthChange(allPatterns, true))
+                                FamiStudio.StaticInstance.DisplayNotification(DuplicateNotificationSong, false);
                         }
 
                         song.ChangeFamiStudioTempoGroove(groove, convert);
@@ -393,11 +394,11 @@ namespace FamiStudio
                     }
 
                     var patternsToResize = new List<int>();
-                    for (int i = minPatternIdx; i <= maxPatternIdx; i++)
+                    foreach (var p in patternIndexes)
                     {
                         if (actualNoteLength != song.GetPatternNoteLength(patternIdx))
                         {
-                            patternsToResize.Add(i);
+                            patternsToResize.Add(p);
                         }
                     }
 
@@ -405,7 +406,7 @@ namespace FamiStudio
                     {
                         if (convert)
                         {
-                            if (duplicate && song.DuplicatePatternsForNoteLengthChange(minPatternIdx, maxPatternIdx, false))
+                            if (duplicate && song.DuplicatePatternsForNoteLengthChange(patternIndexes, false))
                             {
                                 FamiStudio.StaticInstance.DisplayNotification(DuplicateNotificationCustom, false);
                             }
@@ -417,15 +418,15 @@ namespace FamiStudio
                             }
                         }
 
-                        for (int i = minPatternIdx; i <= maxPatternIdx; i++)
+                        foreach (var p in patternIndexes)
                         {
                             if (custom)
                             {
-                                song.SetPatternCustomSettings(i, actualPatternLength, actualBeatLength, groove, groovePadMode);
+                                song.SetPatternCustomSettings(p, actualPatternLength, actualBeatLength, groove, groovePadMode);
                             }
                             else
                             {
-                                song.ClearPatternCustomSettings(i);
+                                song.ClearPatternCustomSettings(p);
                             }
                         }
 

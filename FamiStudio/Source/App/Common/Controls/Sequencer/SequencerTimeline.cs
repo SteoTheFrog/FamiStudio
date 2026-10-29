@@ -158,16 +158,15 @@ namespace FamiStudio
             var song = Song;
             var enabled = song.PatternHasCustomSettings(patternIdx);
 
-            var minPattern = patternIdx;
-            var maxPattern = patternIdx;
+            var patterns = new List<int> { patternIdx };
 
             if (IsValidTimeOnlySelection())
             {
-                minPattern = SelectionMin.PatternIndex;
-                maxPattern = SelectionMax.PatternIndex;
+                patterns = new List<int>(Sequencer.SelectedTimelineColumns);
+                patterns.Sort();
             }
 
-            var tempoProperties = new TempoProperties(dlg.Properties, song, patternIdx, minPattern, maxPattern);
+            var tempoProperties = new TempoProperties(dlg.Properties, song, patternIdx, patterns);
 
             dlg.Properties.AddCheckBox(CustomPatternLabel.Colon, song.PatternHasCustomSettings(patternIdx), CustomPatternTooltip); // 0
             tempoProperties.AddProperties();

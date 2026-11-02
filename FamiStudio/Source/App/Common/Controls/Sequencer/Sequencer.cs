@@ -520,7 +520,7 @@ namespace FamiStudio
             RecomputeSelectionBounds();
 
             SelectionChanged?.Invoke();
-            patternArea?.UpdateSelectedPatternRefCounts();
+            //patternArea?.UpdateSelectedPatternRefCounts();
         }
         
         private void RecomputeSelectionBounds()
@@ -888,6 +888,7 @@ namespace FamiStudio
 
             timeline?.SetScroll(scrollX);
             channelNameArea?.SetScrollY(scrollY);
+            patternArea?.SetScrollX(scrollX);
             patternArea?.SetScrollY(scrollY);
 
             horizontalScrollBar?.SetScroll(scrollX, false);
@@ -1026,16 +1027,16 @@ namespace FamiStudio
             StartCaptureOperation(control, e.Position, DragSeekBar);
         }
 
-        private void StartRectangleSelection(Control control, PointerEventArgs e, int patternIdx)
+        private void StartRectangleSelection(Control control, Point p, int patternIdx)
         {
-            StartCaptureOperation(control, e.Position, SelectRectangle);
+            StartCaptureOperation(control, p, SelectRectangle);
         }
 
-        private void StartDragSelection(Control control, PointerEventArgs e, int patternIdx)
+        private void StartDragSelection(Control control, Point p, int patternIdx)
         {
             selectionDragAnchorPatternIdx = patternIdx;
-            selectionDragAnchorPatternXFraction = (e.X + scrollX - GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(patternIdx), false)) / (float)GetPixelForNote(Song.GetPatternLength(patternIdx), false);
-            StartCaptureOperation(control, e.Position, DragSelection);
+            selectionDragAnchorPatternXFraction = p.X / (float)control.Width;
+            StartCaptureOperation(control, p, DragSelection);
         }
 
         private void StartColumnSelection(Control control, PointerEventArgs e)
@@ -1104,10 +1105,10 @@ namespace FamiStudio
             EndCaptureOperation(control, e.Position);
             UpdateCursor();
 
-            if (e.Right)
+/*             if (e.Right)
             {
                 patternArea?.UpdateSelectedPatternRefCounts();
-            }
+            } */
         }
 
         private void CopySelectionToCursor(PatternLocation location, bool copy)
@@ -2230,6 +2231,7 @@ namespace FamiStudio
         public void InvalidatePatternCache()
         {
             patternArea?.InvalidateCache();
+            Song.InvalidatePatternRefCounts();
             MarkDirty();
         }
 
@@ -2282,7 +2284,7 @@ namespace FamiStudio
                 
                 RecomputeSelectionBounds();
                 channelNameArea?.Refresh();
-                patternArea?.UpdateSelectedPatternRefCounts();
+                //patternArea?.UpdateSelectedPatternRefCounts();
 
                 // TODO: This is overly aggressive. We should have the 
                 // scope on the transaction on the buffer and filter by that.

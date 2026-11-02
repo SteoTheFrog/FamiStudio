@@ -19,17 +19,18 @@ namespace FamiStudio
         // FDS
         private byte    fdsMasterVolume = FdsMasterVolumeType.Volume100;
         private byte    fdsWavPreset = WavePresetType.Sine;
+        private byte    fdsWaveCount = 1;
         private byte    fdsModPreset = WavePresetType.Flat;
         private ushort  fdsModSpeed;
         private byte    fdsModDepth;
         private byte    fdsModDelay;
-        private byte    fdsWaveCount = 1;
         private bool    fdsAutoMod;
         private byte    fdsAutoModDenom = 1;
         private byte    fdsAutoModNumer = 1;
         private int     fdsResampleWavPeriod = 128;
         private int     fdsResampleWavOffset = 0;
         private bool    fdsResampleWavNormalize = true;
+        private bool    fdsRemapDacLevels;
         private short[] fdsResampleWavData;
 
         // N163
@@ -232,16 +233,6 @@ namespace FamiStudio
             }
         }
 
-        public byte FdsModPreset
-        {
-            get { return fdsModPreset; }
-            set
-            {
-                fdsModPreset = value;
-                UpdateFdsModulationEnvelope();
-            }
-        }
-
         public byte FdsWaveCount
         {
             get { return fdsWaveCount; }
@@ -249,6 +240,16 @@ namespace FamiStudio
             {
                 fdsWaveCount = (byte)Utils.Clamp(value, 1, FdsMaxWaveCount);
                 UpdateFdsWaveEnvelope();
+            }
+        }
+
+        public byte FdsModPreset
+        {
+            get { return fdsModPreset; }
+            set
+            {
+                fdsModPreset = value;
+                UpdateFdsModulationEnvelope();
             }
         }
 
@@ -276,6 +277,16 @@ namespace FamiStudio
         {
             get { return fdsResampleWavNormalize; }
             set { fdsResampleWavNormalize = value; ResampleWaveform(); }
+        }
+
+        public bool FdsRemapDacLevels
+        {
+            get { return fdsRemapDacLevels; }
+            set 
+            { 
+                fdsRemapDacLevels = value;
+                UpdateFdsWaveEnvelope();
+            }
         }
 
         public short[] FdsResampleWaveData => fdsResampleWavData;
@@ -946,6 +957,11 @@ namespace FamiStudio
                             buffer.Serialize(ref fdsModSpeed);
                             buffer.Serialize(ref fdsModDepth);
                             buffer.Serialize(ref fdsModDelay);
+                            // At version 20 (FamiStudio 4.6.0), we added FDS DAC level remapping. 
+                            if (buffer.Version >= 20)
+                            {
+                                buffer.Serialize(ref fdsRemapDacLevels);
+                            }
                             // At version 18 (FamiStudio 4.4.0), we added FDS multi-wave.
                             if (buffer.Version >= 18)
                             {

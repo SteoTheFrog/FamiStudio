@@ -162,7 +162,7 @@ namespace FamiStudio
 
         private Color GetBackgroundColor()
         {
-            var hovered = App.Sequencer.HoverPosition.Y == channelNameIndex;
+            var hovered = App.Sequencer.HoverPosition.Y == App.Sequencer.GetChannelToRowForIndex(channelNameIndex);
             var dim = Settings.DimUnsupportedChannels && !channel.SupportsInstrument(App.SelectedInstrument, false);
 
             return hovered ? Theme.MediumGreyColor1.Transparent(dim ? 192 : 255) : dim ? Theme.DarkGreyColor1 : Theme.DarkGreyColor2;

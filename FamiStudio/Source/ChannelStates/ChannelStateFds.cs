@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using System.Diagnostics;
 
 namespace FamiStudio
@@ -65,17 +65,27 @@ namespace FamiStudio
                 if (wav != null)
                 {
                     // We read the table from end to start to mimic the ASM code (saves cycles).
-                    SkipCycles(2); // LDY
+                    SkipCycles(3); // LDY
                     for (int i = 0x3F; i >= 0; i -= 2)
                     {
+                        var s0 = wav[i];
+                        var s1 = wav[i - 1];
+
+                        // Workaround DAC issue that causes non-monotonic output levels.
+                        if (note.Instrument.FdsRemapDacLevels)
+                        {
+                            s0 = NesApu.FdsDacRemapTable[s0];
+                            s1 = NesApu.FdsDacRemapTable[s1];
+                        }
+
                         // Toggle write every 2 iterations. ASM does this for smooth cycling between
                         // waveforms. We write twice between write toggling and iterate half the times 
                         // to save CPU cycles. 38 skipped cycles to mimic ASM loop (37 if BPL exits loop).
-                        SkipCycles(3); // Read volume.
+                        SkipCycles(2); // Read volume.
                         WriteRegister(NesApu.FDS_VOL, 0x80 | masterVolume, 4);
-                        WriteRegister(NesApu.FDS_WAV_START + i, wav[i] & 0xff, 12);         // +7 for LDA and DEY
-                        WriteRegister(NesApu.FDS_WAV_START + i - 1, wav[i - 1] & 0xff, 10); // +5 for LDA
-                        WriteRegister(NesApu.FDS_VOL, masterVolume, i > 1 ? 9 : 8);         // +5 for DEY and BPL (4 on BPL exit)
+                        WriteRegister(NesApu.FDS_WAV_START + i,     s0 & 0xff, 12); // +7 for LDA and DEY
+                        WriteRegister(NesApu.FDS_WAV_START + i - 1, s1 & 0xff, 10); // +5 for LDA
+                        WriteRegister(NesApu.FDS_VOL, masterVolume, i > 1 ? 9 : 8); // +5 for DEY and BPL (4 on BPL exit)
                     }
 
                     waveIndex = newWaveIndex;
@@ -122,7 +132,11 @@ namespace FamiStudio
 
             if (note.IsStop)
             {
-                WriteRegister(NesApu.FDS_VOL_ENV, 0x80); // Zero volume
+                // Keep last volume if option is checked.
+                if (note.Instrument != null && true) // TODO: Placeholder. Add actual bool and put in sound engine.
+                    WriteRegister(NesApu.FDS_VOL, 0x80 | masterVolume);
+                else
+                    WriteRegister(NesApu.FDS_VOL_ENV, 0x80); // Zero volume
                 ResetModulation();
             }
             else if (note.IsMusical)
@@ -132,13 +146,15 @@ namespace FamiStudio
                 var period = GetPeriod();
                 var volume = GetVolume();
                 var instrument = note.Instrument;
+                var shift = 1;
 
                 var periodHi = (period >> 8) & 0x0f;
                 prevPeriodHi = periodHi;
 
                 WriteRegister(NesApu.FDS_FREQ_HI, periodHi);
                 WriteRegister(NesApu.FDS_FREQ_LO, (period >> 0) & 0xff);
-                WriteRegister(NesApu.FDS_VOL_ENV, 0x80 | (volume << 1));
+                WriteRegister(NesApu.FDS_VOL_ENV, 0x80 | (volume << shift));
+                WriteRegister(NesApu.FDS_VOL, masterVolume); // Ensure we clear this if the last volume was held.
 
                 if (noteTriggered)
                 {

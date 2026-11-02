@@ -40,6 +40,10 @@ namespace FamiStudio
         private int[] groove = new[] { 10 };
         private int   groovePaddingMode = GroovePaddingType.Middle;
 
+        // For sequencer and its child controls
+        private Dictionary<Pattern, int> patternRefCounts = new();
+        private bool patternRefCountsDirty = true;
+
         public int Id => id;
         public Project Project => project;
         public Channel[] Channels => channels;
@@ -879,6 +883,42 @@ namespace FamiStudio
             patternStartNote[0] = 0;
             for (int i = 1; i <= songLength; i++)
                 patternStartNote[i] = patternStartNote[i - 1] + GetPatternLength(i - 1);
+        }
+
+        public void InvalidatePatternRefCounts()
+        {
+            patternRefCountsDirty = true;
+        }
+
+        public bool IsPatternShared(Pattern pattern)
+        {
+            if (pattern == null)
+                return false;
+
+            EnsurePatternRefCounts();
+            return patternRefCounts.TryGetValue(pattern, out var count) && count > 1;
+        }
+
+        private void EnsurePatternRefCounts()
+        {
+            if (!patternRefCountsDirty)
+                return;
+
+            patternRefCounts.Clear();
+
+            foreach (var channel in channels)
+            {
+                foreach (var pattern in channel.PatternInstances)
+                {
+                    if (pattern == null)
+                        continue;
+
+                    patternRefCounts.TryGetValue(pattern, out var count);
+                    patternRefCounts[pattern] = count + 1;
+                }
+            }
+
+            patternRefCountsDirty = false;
         }
 
         public void MergeIdenticalPatterns()

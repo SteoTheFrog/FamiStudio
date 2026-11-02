@@ -545,6 +545,13 @@ namespace FamiStudio
                     for (int i = 0; i < subWaveforms.GetLength(0); i++)
                     {
                         var wav = subWaveforms[i];
+
+                        if (instrument.FdsRemapDacLevels)
+                        {
+                            for (int j = 0; j < wav.Length; j++)
+                                wav[j] = NesApu.FdsDacRemapTable[wav[j]];
+                        }
+
                         var crc = CRC32.Compute(wav);
                         uniqueEnvelopes[crc] = wav;
                         waveforms[i] = crc;

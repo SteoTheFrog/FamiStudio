@@ -279,6 +279,14 @@ namespace FamiStudio
         public const int EpsmCycleDataSkipShort = 10;
         public const int EpsmCycleKeyOnSkip = 36;
 
+        // Table to optionally workaround a hardware bug where FDS DAC levels are incorrect.
+        public readonly static byte[] FdsDacRemapTable = [
+             0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 16,
+            15, 17, 18, 19, 20, 21, 22, 24, 23, 25, 26, 28, 27, 32, 29, 33,
+            30, 34, 36, 35, 31, 37, 38, 40, 41, 39, 42, 44, 43, 48, 45, 46, 
+            49, 50, 47, 52, 51, 53, 54, 56, 57, 55, 58, 60, 59, 61, 62, 63
+        ];
+
         private class NoteTableSet
         {
             public readonly ushort[]   NoteTableNTSC       = new ushort[97];

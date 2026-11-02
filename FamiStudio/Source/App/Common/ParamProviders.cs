@@ -111,7 +111,8 @@ namespace FamiStudio
         static LocalizedString AutoModDenomLabel;
         static LocalizedString ResamplePeriodLabel;
         static LocalizedString ResampleOffsetLabel;
-        static LocalizedString ResampleNormalize;
+        static LocalizedString ResampleNormalizeLabel;
+        static LocalizedString RemapDacLevelsLabel;
 
         // S5B labels
         static LocalizedString EnvelopeShapeLabel;
@@ -242,8 +243,10 @@ namespace FamiStudio
                         { GetValue = () => { return instrument.FdsResampleWavePeriod; }, SetValue = (v) => { instrument.FdsResampleWavePeriod = v; }, IsEnabled = () => { return instrument.FdsResampleWaveData != null && instrument.FdsWavePreset == WavePresetType.Resample; } });
                     paramInfos.Add(new InstrumentParamInfo(instrument, ResampleOffsetLabel, 0, 0, 0)
                         { GetValue = () => { return instrument.FdsResampleWaveOffset; }, SetValue = (v) => { instrument.FdsResampleWaveOffset = v; }, IsEnabled = () => { return instrument.FdsResampleWaveData != null && instrument.FdsWavePreset == WavePresetType.Resample; }, GetMaxValue = () => { return instrument.FdsResampleWaveData != null ? instrument.FdsResampleWaveData.Length - 1 : 100; } });
-                    paramInfos.Add(new InstrumentParamInfo(instrument, ResampleNormalize, 0, 1, 1)
+                    paramInfos.Add(new InstrumentParamInfo(instrument, ResampleNormalizeLabel, 0, 1, 1)
                         { GetValue = () => { return instrument.FdsResampleWavNormalize ? 1 : 0; }, SetValue = (v) => { instrument.FdsResampleWavNormalize = v != 0; }, IsEnabled = () => { return instrument.FdsResampleWaveData != null && instrument.FdsWavePreset == WavePresetType.Resample; } });
+                    paramInfos.Add(new InstrumentParamInfo(instrument, RemapDacLevelsLabel, 0, 1, 0)
+                        { GetValue = () => { return instrument.FdsRemapDacLevels ? 1 : 0; }, SetValue = (v) => { instrument.FdsRemapDacLevels = v != 0; } });
                     break;
 
                 case ExpansionType.N163:
@@ -261,7 +264,7 @@ namespace FamiStudio
                         { GetValue = () => { return instrument.N163ResampleWavePeriod; }, SetValue = (v) => { instrument.N163ResampleWavePeriod = v;}, IsEnabled = () => { return instrument.N163ResampleWaveData != null && instrument.N163WavePreset == WavePresetType.Resample; } });
                     paramInfos.Add(new InstrumentParamInfo(instrument, ResampleOffsetLabel, 0, 0, 0) 
                         { GetValue = () => { return instrument.N163ResampleWaveOffset; }, SetValue = (v) => { instrument.N163ResampleWaveOffset = v;}, IsEnabled = () => { return instrument.N163ResampleWaveData != null && instrument.N163WavePreset == WavePresetType.Resample; }, GetMaxValue = () => { return instrument.N163ResampleWaveData != null ? instrument.N163ResampleWaveData.Length - 1 : 100; } });
-                    paramInfos.Add(new InstrumentParamInfo(instrument, ResampleNormalize, 0, 1, 1) 
+                    paramInfos.Add(new InstrumentParamInfo(instrument, ResampleNormalizeLabel, 0, 1, 1) 
                         { GetValue = () => { return instrument.N163ResampleWavNormalize ? 1 : 0; }, SetValue = (v) => { instrument.N163ResampleWavNormalize = v != 0;}, IsEnabled = () => { return instrument.N163ResampleWaveData != null && instrument.N163WavePreset == WavePresetType.Resample; } });
                     break;
 

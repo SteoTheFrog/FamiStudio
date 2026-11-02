@@ -261,6 +261,7 @@
     <Compile Include="Source\App\Common\Controls\Sequencer\ChannelNameArea.cs" />
     <Compile Include="Source\App\Common\Controls\Sequencer\ChannelNamePanel.cs" />
     <Compile Include="Source\App\Common\Controls\Sequencer\PatternArea.cs" />
+    <Compile Include="Source\App\Common\Controls\Sequencer\PatternPanel.cs" />
     <Compile Include="Source\App\Common\Controls\Sequencer\Sequencer.cs" />
     <Compile Include="Source\App\Common\Controls\Sequencer\SequencerTimeline.cs" />
     <Compile Include="Source\App\Common\Controls\Sequencer\SequencerTimelinePanel.cs" />

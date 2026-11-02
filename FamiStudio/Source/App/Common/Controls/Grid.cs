@@ -1001,7 +1001,7 @@ namespace FamiStudio
                 // Highlighted cell (for keyboard). Full Row Select
                 if (enabled && selectedRow >= 0 && (selectedRow - scroll) >= 0 && (selectedRow - scroll) < numItemRows && selectedRow < data.GetLength(0))
                 {
-                    var highlightColor = Color.FromArgb(70, 0, 128, 255); // Blue
+                    var highlightColor = Color.FromArgb(70, Theme.BlueColor);
 
                     c.FillRectangle(0, (numHeaderRows + selectedRow - scroll) * rowHeight, width, (numHeaderRows + selectedRow - scroll + 1) * rowHeight, highlightColor);
                 }

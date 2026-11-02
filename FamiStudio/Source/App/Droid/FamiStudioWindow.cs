@@ -54,6 +54,7 @@ namespace FamiStudio
         private BaseFileActivity pendingFinishFileActivity;
         private int captureCookie;
         private Control captureControl;
+        private Control longPressControl;
         private ModifierKeys modifiers = new ModifierKeys();
         private Rectangle cachedViewRect;
         private Point glViewPosition;
@@ -852,10 +853,11 @@ namespace FamiStudio
                         {
                             if (captureControl == ctrl)
                                 ReleasePointer();
-                            ctrl.SendPointerUp(new PointerEventArgs(x, y));
+                            ctrl.SendPointerUp(new PointerEventArgs(x, y) { IsLongPress = e.Action == MotionEventActions.Up && ctrl == longPressControl });
                         }
                     }
 
+                    longPressControl = null;
                     doubleTapReceived = false;
                 }
                 else if (e.Action == MotionEventActions.Move && !scaleDetector.IsInProgress)
@@ -934,6 +936,7 @@ namespace FamiStudio
                     {
                         var ctrl = GetCapturedControlAtCoord(px, py, out var x, out var y);
                         ctrl?.SendTouchLongPress(new PointerEventArgs(x, y) { IsDoubleTapLongPress = doubleTapReceived });
+                        longPressControl = ctrl;
                     }
                 }
             }

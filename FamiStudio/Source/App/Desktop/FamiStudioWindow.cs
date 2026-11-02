@@ -557,9 +557,12 @@ namespace FamiStudio
                 if (captureButton != -1 && button != captureButton)
                     return;
 
+                // If the pointer leaves the window on certain OS, the actual pointer release is
+                // delayed until the pointer re-enters the window. See CursorEnterCallback();
                 if (button == ignoreReleaseButton)
                 {
                     ignoreReleaseButton = -1;
+                    captureButton = -1;
                     return;
                 }
 

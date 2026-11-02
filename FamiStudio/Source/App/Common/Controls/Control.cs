@@ -43,6 +43,7 @@ namespace FamiStudio
         public event EventDelegate        ContainerPointerEnterNotify;
         public event EventDelegate        ContainerPointerLeaveNotify;
         public event PointerEventDelegate ContainerTouchClickNotify;
+        public event PointerEventDelegate ContainerTouchLongPressNotify;
         public event PointerEventDelegate ContainerTouchScaleBeginNotify;
         public event PointerEventDelegate ContainerTouchScaleNotify;
         public event PointerEventDelegate ContainerTouchScaleEndNotify;
@@ -141,6 +142,7 @@ namespace FamiStudio
                 if (supportsLongPress)
                 {
                     OnTouchLongPress(e);
+                    SendContainerLongPressNotify(e);
                 }
                 else
                 {
@@ -265,6 +267,19 @@ namespace FamiStudio
             {
                 c.OnContainerTouchClickNotify(this, e);
                 c.ContainerTouchClickNotify?.Invoke(this, e);
+                if (c is Dialog)
+                    break;
+                c = c.ParentContainer;
+            }
+        }
+
+        public void SendContainerLongPressNotify(PointerEventArgs e)
+        {
+            var c = ParentContainer;
+            while (c != null)
+            {
+                c.OnContainerTouchLongPressNotify(this, e);
+                c.ContainerTouchLongPressNotify?.Invoke(this, e);
                 if (c is Dialog)
                     break;
                 c = c.ParentContainer;
@@ -685,6 +700,7 @@ namespace FamiStudio
         private bool delay;
         private bool handled; // Only use for mousewheel right now. Not fully implemented.
         private bool touch;
+        private bool longPress;
         private bool doubleTapLongPress;
 
         private float touchScale;
@@ -703,6 +719,7 @@ namespace FamiStudio
         public float FlingVelocityX => flingVelX;
         public float FlingVelocityY => flingVelY;
         public float TouchScale => touchScale;
+        public bool IsLongPress { get => longPress; init => longPress = value; }
         public bool IsDoubleTapLongPress { get => doubleTapLongPress; init => doubleTapLongPress = value; }
         public bool IsTouchEvent => touch;
         public bool IsRightClickDelayed => delay;

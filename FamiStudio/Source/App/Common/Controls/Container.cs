@@ -48,7 +48,6 @@ namespace FamiStudio
         {
         }
 
-
         public virtual void OnContainerPointerDownNotify(Control control, PointerEventArgs e)
         {
         }
@@ -62,6 +61,10 @@ namespace FamiStudio
         }
 
         public virtual void OnContainerTouchClickNotify(Control control, PointerEventArgs e)
+        {
+        }
+
+        public virtual void OnContainerTouchLongPressNotify(Control control, PointerEventArgs e)
         {
         }
 

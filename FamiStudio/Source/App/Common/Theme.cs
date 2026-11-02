@@ -18,7 +18,8 @@ namespace FamiStudio
         public static Color DarkRedColor      = Color.FromArgb(210,  16,  48);
 
         public static Color BlackColor = Color.FromArgb(  0,   0,   0);
-        public static Color GreenColor = Color.FromArgb(  0,   0, 255);
+        public static Color BlueColor  = Color.FromArgb(  0, 128, 255);
+        public static Color GreenColor = Color.FromArgb(  0, 255,   0);
         public static Color WhiteColor = Color.FromArgb(255, 255, 255);
 
         private static int  nextColorIdx = 39;

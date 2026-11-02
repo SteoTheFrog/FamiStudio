@@ -22,6 +22,7 @@ namespace FamiStudio
             Localization.Localize(this);
             patternIndex = idx;
             clipRegion = false;
+            supportsLongPress = true;
         }
 
         protected override void OnAddedToContainer()
@@ -39,7 +40,7 @@ namespace FamiStudio
                 if (sequencer.SelectedTimelineColumns.Contains(patternIndex))
                     return true;
 
-                if (sequencer.IsColumnSelectionInProgress && sequencer.MarqueeMin.IsValid && sequencer.MarqueeMax.IsValid)
+                if (sequencer.IsColumnSelectionInProgress)
                     return patternIndex >= sequencer.MarqueeMin.PatternIndex && patternIndex <= sequencer.MarqueeMax.PatternIndex;
             }
 

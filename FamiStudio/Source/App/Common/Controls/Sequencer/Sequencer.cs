@@ -138,6 +138,7 @@ namespace FamiStudio
         public PatternLocation SelectionMin => selectionMin;
         public Point MouseLastPosition => mouseLastPos;
         public Point HoverPosition => hoverPos;
+        public bool CaptureThresholdMet => captureThresholdMet;
         public bool HasCaptureOperation => captureOperation != null;
         public bool HasValidTimeOnlySelection => IsValidTimeOnlySelection();
         public bool IsColumnSelectionInProgress => captureOperation == SelectColumn;
@@ -941,7 +942,7 @@ namespace FamiStudio
         private void GetClampedPatternForCoord(int x, int y, out int channelIdx, out int patternIdx)
         {
             patternIdx = Song.PatternIndexFromAbsoluteNoteIndex(Utils.Clamp(GetNoteForPixel(x - channelNameSizeX), 0, Song.GetPatternStartAbsoluteNoteIndex(Song.Length) - 1));
-            channelIdx = Utils.Clamp(GetChannelIndexForCoord(y), 0, Song.Length);
+            channelIdx = Utils.Clamp(GetChannelIndexForCoord(y), 0, Song.Channels.Length);
         }
 
         private void CaptureMouse(Control control, Point p)
@@ -1622,6 +1623,7 @@ namespace FamiStudio
                 }
 
                 panning = false;
+                captureThresholdMet = false;
                 captureOperation = null;
                 ReleasePointer();
                 MarkDirty();

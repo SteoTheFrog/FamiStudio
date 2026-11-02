@@ -10,9 +10,6 @@ namespace FamiStudio
 
         private Sequencer Sequencer => App?.Sequencer;
         private Song Song => App?.SelectedSong;
-        
-        private PatternLocation SelectionMax => Sequencer.SelectionMax;
-        private PatternLocation SelectionMin => Sequencer.SelectionMin;
 
         private int SeekX => Sequencer.SeekX;
 
@@ -224,16 +221,16 @@ namespace FamiStudio
             });
         }
 
-        protected void OnTouchDown(PointerEventArgs e)
+        protected void OnTouchDown(Control control, PointerEventArgs e)
         {
             // See if we are close enough to the yellow triangle.
             if (IsPointOnSeekBar(e.X))
             {
-                DragSeekBar?.Invoke(this, e);
+                DragSeekBar?.Invoke(control, e);
                 return;
             }
 
-            ColumnSelect?.Invoke(this, e);
+            ColumnSelect?.Invoke(control, e);
         }
 
         public override void OnContainerTouchClickNotify(Control control, PointerEventArgs e)
@@ -241,12 +238,12 @@ namespace FamiStudio
             App.SeekSong(GetNoteForPixel(e.X));
         }
 
-        protected override void OnTouchLongPress(PointerEventArgs e)
+        public override void OnContainerTouchLongPressNotify(Control control, PointerEventArgs e)
         {
-            if (!e.IsDoubleTapLongPress)
+            if (!e.IsDoubleTapLongPress && control is SequencerTimelinePanel panel)
             {
                 CancelDragSeekBar?.Invoke();
-                //ShowContextMenu(e); // TODO: Wire this up again.
+                ShowContextMenu(e.Position, panel.PatternIndex);
             }
         }
 
@@ -254,7 +251,7 @@ namespace FamiStudio
         {
             if (e.IsTouchEvent)
             {
-                OnTouchDown(e);
+                OnTouchDown(control, e);
                 return;
             }
 

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 
 namespace FamiStudio
 {
@@ -21,6 +20,7 @@ namespace FamiStudio
         private Sequencer Sequencer => App?.Sequencer;
         private Song Song => App?.SelectedSong;
 
+        private bool CaptureThresholdMet => Sequencer.CaptureThresholdMet;
         private bool IsColumnSelectionInProgress => Sequencer.IsColumnSelectionInProgress;
         private bool IsDragSelectionInProgress => Sequencer.IsDragSelectionInProgress;
         private bool IsRectangleSelectionInProgress => Sequencer.IsRectangleSelectionInProgress;
@@ -498,6 +498,12 @@ namespace FamiStudio
                 tooltip = "";
             }
         }
+
+        private void StartSelection(PointerEventArgs e)
+        {
+            if (GetPatternForCoord(e.X, e.Y, out var location))
+                StartRectangleSelection?.Invoke(this, e, location.PatternIndex);
+        }
         
         protected void OnTouchDown(PointerEventArgs e)
         {
@@ -542,6 +548,7 @@ namespace FamiStudio
                 }
 
                 // CreateNewPattern clears the selection. Ugh, call after.
+                ClearSelection?.Invoke();
                 SetSelection?.Invoke(location);
             }
         }
@@ -553,7 +560,8 @@ namespace FamiStudio
 
         protected override void OnTouchLongPress(PointerEventArgs e)
         {
-            ShowContextMenu(e.Position);
+            Platform.VibrateClick();
+            StartSelection(e);
         }
 
         protected override void OnPointerDown(PointerEventArgs e)
@@ -563,12 +571,6 @@ namespace FamiStudio
                 OnTouchDown(e);
                 return;
             }
-
-/*             if (e.Middle)
-            {
-                StartPanning?.Invoke(this, e);
-                return;
-            } */
 
             if (e.Left)
             {
@@ -594,6 +596,7 @@ namespace FamiStudio
 
                         if (!IsPatternSelected(location))
                         {
+                            ClearSelection?.Invoke();
                             SetSelection?.Invoke(location);
                             SelectionChanged?.Invoke();
                         }
@@ -618,8 +621,7 @@ namespace FamiStudio
         {
             if (e.Right)
             {
-                if (GetPatternForCoord(e.X, e.Y, out var location))
-                    StartRectangleSelection?.Invoke(this, e, location.PatternIndex);
+                StartSelection(e);
             }
         }
 
@@ -639,16 +641,15 @@ namespace FamiStudio
 
         protected override void OnPointerUp(PointerEventArgs e)
         {
-            if (e.IsTouchEvent)
+            if (e.Right || e.IsLongPress)
             {
-                //OnTouchUp(e);
-                return;
-            }
+                if (!CaptureThresholdMet)
+                {
+                    if (!ModifierKeys.IsControlDown && GetPatternForCoord(e.X, e.Y, out var location) && !IsPatternSelected(location))
+                        ClearSelection?.Invoke();
 
-            // If we have a capture operation, we likely had a delayed right click.
-            if (e.Right && !HasCaptureOperation)
-            {
-                ShowContextMenu(e.Position);
+                    ShowContextMenu(e.Position);
+                }
             }
         }
 
@@ -779,6 +780,11 @@ namespace FamiStudio
 
                         if (pattern != null)
                         {
+                            if (Platform.IsMobile && HighlightLocation == location)
+                            {
+                                f.FillAndDrawRectangle(0, py, sx, py + channelSizeY, Color.FromArgb(75, Theme.WhiteColor), Theme.BlueColor, 3, true, true);
+                            }
+
                             var bmp = patternCache.GetOrAddPattern(pattern, patternLen, noteLen, out var u0, out var v0, out var u1, out var v1);
                             var isSelected = IsPatternHighlighted(location);
                             var font = isSelected ? Fonts.FontSmallBold : Fonts.FontSmall;
@@ -814,11 +820,6 @@ namespace FamiStudio
                                 f.DrawTextureAtlas(bmpMenuInstance, iconX, iconY, scale, Theme.WhiteColor);
                                 f.PopTransform();
                             }
-                        }
-
-                        if (Platform.IsMobile && HighlightLocation == location)
-                        {
-                            c.DrawRectangle(0, py, sx, py + channelSizeY, Theme.WhiteColor, 3, true, true);
                         }
 
                         py += channelSizeY;

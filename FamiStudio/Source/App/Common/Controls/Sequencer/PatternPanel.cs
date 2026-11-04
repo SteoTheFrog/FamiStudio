@@ -1,11 +1,19 @@
+using System;
+using System.Diagnostics;
+using System.Text.RegularExpressions;
+
 namespace FamiStudio
 {
     public class PatternPanel : Control
     {
         private PatternBitmapCache bitmapCache;
         private PatternLocation location;
+        private int iconSize;
+        private int iconX;
+        private int iconY;
         private int patternHeaderSizeY;
         private int patternNamePosX;
+        private float bitmapScale = 1.0f;
 
         TextureAtlasRef bmpMenuInstance;
 
@@ -21,6 +29,8 @@ namespace FamiStudio
         {
             bitmapCache = cache;
             location = loc;
+            supportsDoubleClick = true;
+            supportsLongPress = true;
         }
 
         protected override void OnAddedToContainer()
@@ -47,23 +57,26 @@ namespace FamiStudio
             patternHeaderSizeY = headerSizeY;
             height = channelSizeY;
             patternNamePosX = namePosX;
+
+            iconSize = bmpMenuInstance.ElementSize.Width;
+            iconX = width / 2 - iconSize / 2;
+            iconY = (height + patternHeaderSizeY) / 2 - iconSize / 2;
+            
             MarkDirty(); 
         }
 
         protected override void OnRender(Graphics g)
         { 
-            var c = g.DefaultCommandList;
-            var f = g.ForegroundCommandList;
-
-            // Patterns
-            var patternCacheSizeY = height - patternHeaderSizeY - 1;
-            var patternLen = Song.GetPatternLength(location.PatternIndex);
-            var noteLen = Song.UsesFamiTrackerTempo ? 1 : Song.GetPatternNoteLength(location.PatternIndex);
-
             var pattern = Song.GetPatternInstance(location);
-
             if (pattern != null)
             {
+                var c = g.DefaultCommandList;
+                var f = g.ForegroundCommandList;
+
+                var patternCacheSizeY = height - patternHeaderSizeY - 1;
+                var patternLen = Song.GetPatternLength(location.PatternIndex);
+                var noteLen = Song.UsesFamiTrackerTempo ? 1 : Song.GetPatternNoteLength(location.PatternIndex);
+
                 if (Platform.IsMobile && Sequencer.HighlightLocation == location)
                 {
                     f.FillAndDrawRectangle(0, 0, width, height, Color.FromArgb(75, Theme.WhiteColor), Theme.BlueColor, 3, true, true);
@@ -88,16 +101,11 @@ namespace FamiStudio
 
                 c.DrawText(pattern.Name, font, patternNamePosX, 0, isSelected ? Theme.WhiteColor : Theme.BlackColor, TextFlags.Left | TextFlags.Middle | TextFlags.Clip, width - patternNamePosX, patternHeaderSizeY + 1);
 
-                if (Sequencer.IsSelectionValid() && Song.IsPatternShared(Song.GetPatternInstance(location)))
+                if (!Sequencer.HasCaptureOperation && Sequencer.IsPatternSelected(location) && Song.IsPatternShared(Song.GetPatternInstance(location)))
                 {
-                    // TODO: Get the correct icon instead of resizing. This is a placeholder.
-                    var scale = Sequencer.ChannelBitmapScale;
-                    var iconH = bmpMenuInstance.ElementSize.Height * scale;
-                    var iconX = width / 2 - iconH / 2;
-                    var iconY = patternHeaderSizeY / 2 + height / 2 - iconH / 2;
-
-                    f.DrawTextureAtlas(bmpMenuInstance, iconX + 1, iconY + 1, scale, Theme.BlackColor);
-                    f.DrawTextureAtlas(bmpMenuInstance, iconX, iconY, scale, Theme.WhiteColor);
+                    // TODO: The icon seems too big for the smallest channelSizeY.
+                    f.DrawTextureAtlas(bmpMenuInstance, iconX + 1, iconY + 1, bitmapScale, Theme.BlackColor);
+                    f.DrawTextureAtlas(bmpMenuInstance, iconX, iconY, bitmapScale, Theme.WhiteColor);
                 }
             }
         }

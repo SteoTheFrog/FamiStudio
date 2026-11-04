@@ -160,6 +160,11 @@ namespace FamiStudio
         LocalizedString PasteMissingArpeggiosMessage;
         LocalizedString PasteMissingSamplesMessage;
 
+        // Messages
+        LocalizedString MakePatternsUniqueMessage;
+        LocalizedString MergeIdenticalPatternsMessage;
+        LocalizedString MergeIdenticalPatternsErrorMessage;
+
         // Paste special dialog
         LocalizedString PasteSpecialTitle;
         LocalizedString InsertLabel;
@@ -486,7 +491,6 @@ namespace FamiStudio
             marqueeMin = PatternLocation.Invalid;
             marqueeMax = PatternLocation.Invalid;
             SelectionChanged?.Invoke();
-            patternArea?.ClearSelectedPatternRefCounts();
         }
 
         private void SetSelection(PatternLocation location)
@@ -518,9 +522,7 @@ namespace FamiStudio
             }
 
             RecomputeSelectionBounds();
-
             SelectionChanged?.Invoke();
-            //patternArea?.UpdateSelectedPatternRefCounts();
         }
         
         private void RecomputeSelectionBounds()
@@ -621,6 +623,8 @@ namespace FamiStudio
             patternArea.DeleteSelection += () => DeleteSelection(true);
             patternArea.EditPatternProperties += EditPatternProperties;
             patternArea.EnsureSelectionInclude += EnsureSelectionInclude;
+            patternArea.MakeSelectedPatternsUnique += MakeSelectedPatternsUnique;
+            patternArea.MergeIdenticalPatterns += MergeSelectedIdenticalPatterns;
             patternArea.PatternClicked += PatternArea_PatternClicked;
             patternArea.PatternModified += () => PatternModified?.Invoke();
             patternArea.SetHighlightedPattern += SetHighlightedPattern;
@@ -693,7 +697,6 @@ namespace FamiStudio
             return captureOperation == DragSeekBar ? dragSeekPosition : App.CurrentFrame;
         }
 
-        // TODO: All of these min / max things go when everything is a native control.
         private int MinVisibleNoteIdx()
         {
             return Math.Max(GetNoteForPixel(0), 0);
@@ -959,20 +962,23 @@ namespace FamiStudio
         {
             Debug.Assert(captureOperation == null);
 
-            var ctrlPos = ControlToLocal(control, p);
+            if (control != this)
+            {
+                p = ControlToLocal(control, p);
+            }
 
-            CaptureMouse(control, ctrlPos);
+            CaptureMouse(control, p);
 
             canFling = false;
             captureOperation = op;
             captureThresholdMet = !op.NeedsThreshold;
             captureRealTimeUpdate = op.RealTimeUpdate;
-            captureRowIdx = GetRowIndexForCoord(ctrlPos.Y);
-            GetClampedPatternForCoord(ctrlPos.X, ctrlPos.Y, out captureChannelIdx, out capturePatternIdx);
+            captureRowIdx = GetRowIndexForCoord(p.Y);
+            GetClampedPatternForCoord(p.X, p.Y, out captureChannelIdx, out capturePatternIdx);
 
             if (captureOperation == SelectRectangle || captureOperation == SelectColumn)
             {
-                patternArea?.ClearSelectedPatternRefCounts();
+                UpdateSelection(p.X, p.Y, captureOperation == SelectColumn, true);
             }
             else if (captureOperation == DragSeekBar)
             {
@@ -980,7 +986,7 @@ namespace FamiStudio
             }
             else if (captureOperation == MobileZoom)
             {
-                SetMouseLastPos(ctrlPos);
+                SetMouseLastPos(p);
             }
         }
 
@@ -1097,6 +1103,9 @@ namespace FamiStudio
 
         public override void OnContainerPointerUpNotify(Control control, PointerEventArgs e)
         {
+            if (e.Handled)
+                return;
+
             if (captureOperation == SelectRectangle || captureOperation == SelectColumn)
             {
                 SetSelection(marqueeMin, marqueeMax, captureOperation == SelectColumn);
@@ -1104,11 +1113,6 @@ namespace FamiStudio
 
             EndCaptureOperation(control, e.Position);
             UpdateCursor();
-
-/*             if (e.Right)
-            {
-                patternArea?.UpdateSelectedPatternRefCounts();
-            } */
         }
 
         private void CopySelectionToCursor(PatternLocation location, bool copy)
@@ -1149,7 +1153,7 @@ namespace FamiStudio
             EndCaptureOperation(control, e.Position);
         }
 
-        public Pattern[,] GetSelectedPatterns(out Song.PatternCustomSetting[] customSettings)
+        private Pattern[,] GetSelectedPatterns(out Song.PatternCustomSetting[] customSettings)
         {
             customSettings = null;
 
@@ -1447,7 +1451,105 @@ namespace FamiStudio
             return patternIndex;
         }
 
-        public Pattern CreateUniquePatternClone(Pattern pattern, Channel channel)
+        private void MakeSelectedPatternsUnique()
+        {
+            if (!IsSelectionValid())
+                return;
+
+            App.UndoRedoManager.BeginTransaction(TransactionScope.Song, Song.Id);
+
+            var count = 0;
+            foreach (var loc in selectedPatternLocations)
+            {
+                var channel = Song.Channels[loc.ChannelIndex];
+                var pattern = Song.GetPatternInstance(loc);
+
+                if (pattern != null && Song.IsPatternShared(pattern))
+                {
+                    var newPattern = CreateUniquePatternClone(pattern, channel);
+                    channel.PatternInstances[loc.PatternIndex] = newPattern;
+                    count++;
+                }
+            }
+
+            if (count > 0)
+            {
+                Song.InvalidatePatternRefCounts();
+                Song.DeleteNotesPastMaxInstanceLength();
+                Song.InvalidateCumulativePatternCache();
+                MarkDirty();
+                PatternModified?.Invoke();
+            }
+
+            App.UndoRedoManager.AbortOrEndTransaction(count > 0);
+            App.DisplayNotification(MakePatternsUniqueMessage.Format(count), false);
+        }
+
+        private void MergeSelectedIdenticalPatterns()
+        {
+            if (!IsSelectionValid())
+                return;
+
+            App.UndoRedoManager.BeginTransaction(TransactionScope.Song, Song.Id);
+
+            var bestPatterns = new Dictionary<uint, Pattern>();
+            var usageCounts = new Dictionary<Pattern, int>();
+            var selectedPatterns = new HashSet<Pattern>();
+            var mergeCount = 0;
+
+            foreach (var l in selectedPatternLocations)
+            {
+                selectedPatterns.Add(Song.GetPatternInstance(l));
+            }
+
+            // Find best patterns for merging.
+            for (int c = selectionMin.ChannelIndex; c <= selectionMax.ChannelIndex; c++)
+            {
+                foreach (var pattern in Song.Channels[c].PatternInstances)
+                {
+                    if (pattern == null)
+                        continue;
+
+                    usageCounts[pattern] = usageCounts.TryGetValue(pattern, out var count) ? count + 1 : 1;
+                    var crc = pattern.ComputeCRC();
+
+                    if (!bestPatterns.TryGetValue(crc, out var bestPattern) || usageCounts[pattern] > usageCounts[bestPattern] || 
+                        (usageCounts[pattern] == usageCounts[bestPattern] && !selectedPatterns.Contains(pattern)))
+                        bestPatterns[crc] = pattern;
+                }
+            }
+
+            // Replace selected pattern instances.
+            foreach (var loc in selectedPatternLocations)
+            {
+                var channel = Song.Channels[loc.ChannelIndex];
+                var pattern = channel.PatternInstances[loc.PatternIndex];
+
+                if (pattern == null)
+                    continue;
+
+                var crc = pattern.ComputeCRC();
+                if (bestPatterns.TryGetValue(crc, out var bestPattern) && !ReferenceEquals(pattern, bestPattern))
+                {
+                    channel.PatternInstances[loc.PatternIndex] = bestPattern;
+                    channel.InvalidateCumulativePatternCache();
+                    mergeCount++;
+                }
+            }
+
+            Song.InvalidatePatternRefCounts();
+            App.UndoRedoManager.AbortOrEndTransaction(mergeCount > 0);
+
+            App.DisplayNotification(mergeCount > 0 ? MergeIdenticalPatternsMessage.Format(mergeCount) : MergeIdenticalPatternsErrorMessage.Value, false);
+
+            if (mergeCount > 0)
+            {
+                MarkDirty();
+                PatternModified?.Invoke();
+            }
+        }
+        
+        private Pattern CreateUniquePatternClone(Pattern pattern, Channel channel)
         {
             var newName = pattern.Name;
             if (!channel.IsPatternNameUnique(newName))
@@ -1959,7 +2061,9 @@ namespace FamiStudio
             bool middle = e.Middle || (e.Left && ModifierKeys.IsAltDown && Settings.AltLeftForMiddle);
 
             UpdateCursor();
-            UpdateCaptureOperation(null, e.Position);
+
+            var ctrl = GetControlAt(e.X, e.Y, out _, out _);
+            UpdateCaptureOperation(ctrl, e.Position);
 
             if (middle)
                 DoScroll(e.Position - mouseLastPos);

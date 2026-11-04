@@ -77,6 +77,11 @@ namespace FamiStudio
                     panel.Move(sx, 0, px + sx, height);
                     panelList.Add(panel);
                     AddControl(panel);
+
+                    panel.PointerDown        += Panel_PointerDown;
+                    panel.PointerDownDelayed += Panel_PointerDownDelayed;
+                    panel.PointerUp          += Panel_PointerUp;
+                    panel.TouchLongPress     += Panel_TouchLongPress;
                 }
             }
 
@@ -180,7 +185,7 @@ namespace FamiStudio
                     tempoProperties.ApplyAsync(ParentWindow, dlg.Properties.GetPropertyValue<bool>(0), () =>
                     {
                         App.UndoRedoManager.EndTransaction();
-                        UpdatePanelLayouts();
+                        App.Sequencer.LayoutChanged();
                         MarkDirty();
                         PatternModified?.Invoke();
                     });
@@ -221,33 +226,7 @@ namespace FamiStudio
             });
         }
 
-        protected void OnTouchDown(Control control, PointerEventArgs e)
-        {
-            // See if we are close enough to the yellow triangle.
-            if (IsPointOnSeekBar(e.X))
-            {
-                DragSeekBar?.Invoke(control, e);
-                return;
-            }
-
-            ColumnSelect?.Invoke(control, e);
-        }
-
-        public override void OnContainerTouchClickNotify(Control control, PointerEventArgs e)
-        {
-            App.SeekSong(GetNoteForPixel(e.X));
-        }
-
-        public override void OnContainerTouchLongPressNotify(Control control, PointerEventArgs e)
-        {
-            if (!e.IsDoubleTapLongPress && control is SequencerTimelinePanel panel)
-            {
-                CancelDragSeekBar?.Invoke();
-                ShowContextMenu(e.Position, panel.PatternIndex);
-            }
-        }
-
-        public override void OnContainerPointerDownNotify(Control control, PointerEventArgs e)
+        private void Panel_PointerDown(Control control, PointerEventArgs e)
         {
             if (e.IsTouchEvent)
             {
@@ -264,7 +243,7 @@ namespace FamiStudio
                 }
                 else
                 {
-                    DragSeekBar.Invoke(this, e);
+                    DragSeekBar.Invoke(control, e);
                 }
             }
             if (e.Right)
@@ -273,7 +252,7 @@ namespace FamiStudio
                 {   
                     if (GetPatternIndexForCoord(e.X) >= 0)
                     {
-                        StartAltZoom?.Invoke(this, e);
+                        StartAltZoom?.Invoke(control, e);
                         return;
                     }
                 }
@@ -282,18 +261,48 @@ namespace FamiStudio
             }
         }
 
-        public override void OnContainerPointerUpNotify(Control control, PointerEventArgs e)
+        private void Panel_PointerDownDelayed(Control control, PointerEventArgs e)
+        {
+            ColumnSelect?.Invoke(control, e);
+        }
+
+        private void Panel_PointerUp(Control control, PointerEventArgs e)
         {
             if (e.Right && !Sequencer.HasCaptureOperation)
             {
                 if (control is SequencerTimelinePanel panel)
                     ShowContextMenu(e.Position, panel.PatternIndex);
+
+                return;
+            }
+
+            //EndCaptureOperation?.Invoke(control, e.Position);
+        }
+
+        private void Panel_TouchLongPress(Control control, PointerEventArgs e)
+        {
+            if (!e.IsDoubleTapLongPress && control is SequencerTimelinePanel panel)
+            {
+                CancelDragSeekBar?.Invoke();
+                ShowContextMenu(e.Position, panel.PatternIndex);
             }
         }
 
-        public override void OnContainerPointerDownDelayedNotify(Control control, PointerEventArgs e)
+        protected void OnTouchDown(Control control, PointerEventArgs e)
         {
+            // See if we are close enough to the yellow triangle.
+            if (IsPointOnSeekBar(e.X))
+            {
+                DragSeekBar?.Invoke(control, e);
+                return;
+            }
+
             ColumnSelect?.Invoke(control, e);
+        }
+
+        public override void OnContainerTouchClickNotify(Control control, PointerEventArgs e)
+        {
+            App.SeekSong(GetNoteForPixel(e.X));
         }
 
         protected override void OnRender(Graphics g)

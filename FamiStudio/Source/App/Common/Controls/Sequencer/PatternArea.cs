@@ -15,7 +15,6 @@ namespace FamiStudio
         private List<PatternPanel> panels;
 
         private PatternBitmapCache patternCache;
-        private Dictionary<Pattern, int> patternRefCounts = [];
 
         private Sequencer Sequencer => App?.Sequencer;
         private Song Song => App?.SelectedSong;
@@ -37,10 +36,8 @@ namespace FamiStudio
         private PatternLocation MarqueeMin => Sequencer.MarqueeMin;
         private PatternLocation SelectionMax => Sequencer.SelectionMax;
         private PatternLocation SelectionMin => Sequencer.SelectionMin;
-        private bool HasCaptureOperation => Sequencer.HasCaptureOperation;
         private int CaptureRowIdx => Sequencer.CaptureRowIdx;
         private float BitmapScale => Sequencer.BitmapScale;
-        private float ChannelBitmapScale => Sequencer.ChannelBitmapScale;
         
         public PatternBitmapCache PatternCache => patternCache;
 
@@ -50,13 +47,16 @@ namespace FamiStudio
         public delegate void LocationDelegate(PatternLocation l);
         public delegate void PatternClickedDelegate(int channelIdx, int patternIdx, bool setActive);
         public delegate void PointerDelegate(Control c, PointerEventArgs e);
-        public delegate void SelectionDelegate(Control c, Point p, int idx);
+        public delegate void SelectionDelegate(Control c, Point p);
+        public delegate void SelectionDelegatePattern(Control c, Point p, int idx);
         public delegate void TouchDelegate(PointerEventArgs e);
 
         public event EditPatternDelegate EditPatternProperties;
         public event EmptyDelegate ClearHighlightedPattern;
         public event EmptyDelegate ClearSelection;
         public event EmptyDelegate DeleteSelection;
+        public event EmptyDelegate MakeSelectedPatternsUnique;
+        public event EmptyDelegate MergeIdenticalPatterns;
         public event EmptyDelegate PatternModified;
         public event EmptyDelegate SelectionChanged;
         public event MoveCopyDelegate CopySelectionToCursor;
@@ -65,13 +65,12 @@ namespace FamiStudio
         public event LocationDelegate SetSelection;
         public event PatternClickedDelegate PatternClicked;
         public event PointerDelegate StartAltZoom;
-        public event SelectionDelegate StartDragSelection;
-        public event SelectionDelegate StartRectangleSelection;
+        public event SelectionDelegatePattern StartDragSelection;
+        public event SelectionDelegatePattern StartRectangleSelection;
 
         TextureAtlasRef bmpInstantiate;
         TextureAtlasRef bmpDuplicate;
         TextureAtlasRef bmpDuplicateMove;
-        TextureAtlasRef bmpMenuInstance;
 
         // Tooltips
         LocalizedString AddPatternTooltip;
@@ -95,6 +94,7 @@ namespace FamiStudio
         LocalizedString PatternPropertiesLabel;
         LocalizedString DeletePatternLabel;
         LocalizedString MakePatternsUniqueLabel;
+        LocalizedString MergeIdenticalPatternsLabel;
 
         public PatternArea()
         {
@@ -110,7 +110,6 @@ namespace FamiStudio
             bmpInstantiate = g.GetTextureAtlasRef("Instance");
             bmpDuplicate = g.GetTextureAtlasRef("Duplicate");
             bmpDuplicateMove = g.GetTextureAtlasRef("DuplicateMove");
-            bmpMenuInstance = g.GetTextureAtlasRef("MenuInstance");
         }
 
         private void CreateOrRecreatePanels()
@@ -130,6 +129,14 @@ namespace FamiStudio
                     var panel = new PatternPanel(patternCache, new PatternLocation(ci, pi));
                     panels.Add(panel);
                     AddControl(panel);
+
+                    panel.PointerDown        += Panel_PointerDown;
+                    panel.PointerUp          += Panel_PointerUp;
+                    panel.PointerDownDelayed += Panel_PointerDownDelayed;
+                    panel.MouseDoubleClick   += Panel_MouseTouchDoubleClick;
+                    panel.TouchClick         += Panel_TouchClick;
+                    panel.TouchDoubleClick   += Panel_MouseTouchDoubleClick;
+                    panel.TouchLongPress     += Panel_TouchLongPress;
                 }
             }
 
@@ -144,32 +151,18 @@ namespace FamiStudio
             foreach (var p in panels)
             {
                 var loc = p.Location;
-                var row = GetChannelToRowForIndex(loc.ChannelIndex);   // < 0 when channel is hidden
+                var row = GetChannelToRowForIndex(loc.ChannelIndex); // < 0 when channel is hidden
                 var px  = GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(loc.PatternIndex), false);
                 var sx  = GetPixelForNote(Song.GetPatternLength(loc.PatternIndex), false);
 
-                //p.Visible = row >= 0 && sx > 0 && Song.GetPatternInstance(loc) != null;
+                p.Visible = row >= 0;
 
                 if (p.Visible)
                 {
-                    p.UpdateLayout(channelSizeY, patternHeaderSizeY, patternNamePosX);
                     p.Move(px, row * channelSizeY, sx, channelSizeY);
+                    p.UpdateLayout(channelSizeY, patternHeaderSizeY, patternNamePosX);
                 }
             }
-        }
-
-        private void UpdatePanelVisibility(PatternLocation location)
-        {
-            if (panels == null)
-                return;
-
-            int index = location.ChannelIndex * Song.Length + location.PatternIndex;
-            if (index < 0 || index >= panels.Count)
-                return;
-
-            var panel = panels[index];
-
-            panel.Visible = Song.GetPatternInstance(location) != null;
         }
 
         public void UpdateLayout(int channelSizeY, int patternHeaderSizeY, int rowToChannelCount)
@@ -181,7 +174,7 @@ namespace FamiStudio
             virtualSizeY = rowToChannelCount * channelSizeY;
             patternNamePosX = DpiScaling.ScaleForWindow(DefaultPatternNamePosX);
 
-            patternCache.Update(channelSizeY);
+            patternCache.Update(channelSizeY - patternHeaderSizeY - 1);
 
             if (panels == null || panels.Count != Song.Channels.Length * Song.Length)
                 CreateOrRecreatePanels();
@@ -221,20 +214,6 @@ namespace FamiStudio
         private bool IsSelectionValid()
         {
             return Sequencer.IsSelectionValid();
-        }
-
-        private bool IsPatternHighlighted(PatternLocation location)
-        {
-            if (IsPatternSelected(location))
-                return true;
-
-            if (MarqueeMin.IsValid && MarqueeMax.IsValid)
-            {
-                return location.ChannelIndex >= MarqueeMin.ChannelIndex && location.ChannelIndex <= MarqueeMax.ChannelIndex &&
-                       location.PatternIndex >= MarqueeMin.PatternIndex && location.PatternIndex <= MarqueeMax.PatternIndex;
-            }
-
-            return false;
         }
 
         private bool IsPatternSelected(PatternLocation location)
@@ -286,22 +265,7 @@ namespace FamiStudio
         {
             return rowToChannelCount > 0 ? GetRowToChannelForIndex(GetRowIndexForCoord(y)) : -1;
         }
-
-        private Pattern CreateUniquePatternClone(Pattern pattern, Channel channel)
-        {
-            return Sequencer.CreateUniquePatternClone(pattern, channel);
-        }
-
-        private Pattern[,] GetSelectedPatterns(out Song.PatternCustomSetting[] customSettings)
-        {
-            return Sequencer.GetSelectedPatterns(out customSettings);
-        }
         
-        public void ClearSelectedPatternRefCounts()
-        {
-            patternRefCounts?.Clear();
-        }
-
 #if DEBUG
         public void ValidateIntegrity()
         {
@@ -352,77 +316,6 @@ namespace FamiStudio
             MarkDirty();
         }
 
-/*         public bool UpdateSelectedPatternRefCounts()
-        {
-            if (!IsSelectionValid())
-            {
-                patternRefCounts.Clear();
-                return false;
-            }
-
-            var selectedPatterns = new HashSet<Pattern>();
-
-            foreach (var pattern in GetSelectedPatterns(out _))
-            {
-                if (pattern != null)
-                    selectedPatterns.Add(pattern);
-            }
-
-            var counts = new Dictionary<Pattern, int>();
-            bool duplicateFound = false;
-
-            for (int i = 0; i < Song.Channels.Length; i++)
-            {
-                var channel = Song.Channels[i];
-
-                for (int j = 0; j < Song.Length; j++)
-                {
-                    var pattern = channel.PatternInstances[j];
-                    if (pattern == null || !selectedPatterns.Contains(pattern))
-                        continue;
-
-                    var count = counts.TryGetValue(pattern, out var c) ? c + 1 : 1;
-                    counts[pattern] = count;
-
-                    if (count > 1)
-                        duplicateFound = true;
-                }
-            }
-
-            patternRefCounts = counts;
-            return duplicateFound;
-        } */
-
-        private void MakeSelectedPatternsUnique()
-        {
-            if (!IsSelectionValid())
-                return;
-
-            App.UndoRedoManager.BeginTransaction(TransactionScope.Song, Song.Id);
-
-            for (int i = SelectionMin.ChannelIndex; i <= SelectionMax.ChannelIndex; i++)
-            {
-                var channel = Song.Channels[i];
-
-                for (int j = SelectionMin.PatternIndex; j <= SelectionMax.PatternIndex; j++)
-                {
-                    var pattern = channel.PatternInstances[j];
-
-                    if (pattern != null && Song.IsPatternShared(pattern))
-                    {
-                        var newPattern = CreateUniquePatternClone(pattern, channel);
-                        channel.PatternInstances[j] = newPattern;
-                        Song.InvalidatePatternRefCounts();
-                    }
-                }
-            }
-
-            Song.DeleteNotesPastMaxInstanceLength();
-            Song.InvalidateCumulativePatternCache();
-
-            App.UndoRedoManager.EndTransaction();
-        }
-
         private bool GetMinMaxSelectedRow(out int minSelRow, out int maxSelRow)
         {
             var isMarquee = IsRectangleSelectionInProgress || IsColumnSelectionInProgress;
@@ -462,14 +355,23 @@ namespace FamiStudio
             return location.IsChannelInSong(Song);
         }
 
-        private void ShowContextMenu(Point p)
+        private bool SelectionContainsSharedPatterns()
+        {
+            foreach (var p in SelectedPatternLocations)
+            {
+                if (Song.IsPatternShared(Song.GetPatternInstance(p)))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private void ShowContextMenu(Point p, PatternLocation location)
         {
             var x = p.X;
             var y = p.Y;
 
-            GetPatternForCoord(x, y, out var location);
             var pattern = Song.GetPatternInstance(location);
-
             SetHighlightedPattern?.Invoke(location);
 
             var menu = new List<ContextMenuOption>();
@@ -507,7 +409,7 @@ namespace FamiStudio
                 }
                 else
                 {
-                    menu.Add(new ContextMenuOption("MenuProperties", PatternPropertiesLabel, () => { EditPatternProperties(new Point(x, y), pattern, location, false); }, ContextMenuSeparator.Before));
+                    menu.Add(new ContextMenuOption("MenuProperties", PatternPropertiesLabel, () => { EditPatternProperties?.Invoke(new Point(x, y), pattern, location, false); }, ContextMenuSeparator.Before));
                 }
 
                 menu.Insert(0, new ContextMenuOption("MenuDelete", DeletePatternLabel, () => { DeletePattern(location); }));
@@ -515,57 +417,50 @@ namespace FamiStudio
 
             if (IsPatternSelected(location))
             {
-                if (Song.IsPatternShared(Song.GetPatternInstance(location)))
-                    menu.Insert(1, new ContextMenuOption("MenuUnlink", MakePatternsUniqueLabel, () => { MakeSelectedPatternsUnique(); }));
+                if (SelectionContainsSharedPatterns())
+                    menu.Insert(1, new ContextMenuOption("MenuUnlink", MakePatternsUniqueLabel, () => { MakeSelectedPatternsUnique?.Invoke(); }));
+                menu.Insert(1, new ContextMenuOption("MenuInstance", MergeIdenticalPatternsLabel, () => { MergeIdenticalPatterns?.Invoke(); }));
             }
 
             if (menu.Count > 0)
                 App.ShowContextMenuAsync(menu.ToArray());
         }
 
-        private void UpdateTooltip(PointerEventArgs e)
+        private void UpdateTooltip(PatternLocation location)
         {
-            if (GetPatternForCoord(e.X, e.Y, out var location))
+            var pattern = Song.GetPatternInstance(location);
+            var tooltipList = new List<string>();
+
+            if (pattern == null)
+                tooltipList.Add($"<MouseLeft> {AddPatternTooltip}");
+
+            if (Settings.SetLoopPointShortcut.IsShortcutValid(0))
+                tooltipList.Add($"{Settings.SetLoopPointShortcut.TooltipString}<MouseLeft> {SetLoopPointTooltip}");
+
+            tooltipList.Add($"<MouseWheel><Drag> {PanTooltip}");
+            tooltipList.Add($"<MouseRight><Drag> {SelectRectangleTooltip}");
+
+            if (pattern != null)
             {
-                var pattern = Song.GetPatternInstance(location);
+                tooltipList.Add($"<MouseLeft><MouseLeft> {OrTooltip} <Shift><MouseLeft> {DeletePatternTooltip}");
+                tooltipList.Add($"<MouseRight> {MoreOptionsTooltip}");
+            }
 
-                var tooltipList = new List<string>();
+            if (IsPatternSelected(location))
+            {
+                tooltipList.Add($"<Drag> {MovePatternTooltip}");
+                tooltipList.Add($"<Ctrl><Drag> {ClonePatternTooltip}");
+            }
 
-                if (pattern == null)
-                    tooltipList.Add($"<MouseLeft> {AddPatternTooltip}");
-
-                if (Settings.SetLoopPointShortcut.IsShortcutValid(0))
-                    tooltipList.Add($"{Settings.SetLoopPointShortcut.TooltipString}<MouseLeft> {SetLoopPointTooltip}");
-
-                tooltipList.Add($"<MouseWheel><Drag> {PanTooltip}");
-                tooltipList.Add($"<MouseRight><Drag> {SelectRectangleTooltip}");
-
-                if (pattern != null)
-                {
-                    tooltipList.Add($"<MouseLeft><MouseLeft> {OrTooltip} <Shift><MouseLeft> {DeletePatternTooltip}");
-                    tooltipList.Add($"<MouseRight> {MoreOptionsTooltip}");
-                }
-
-                if (IsPatternSelected(location))
-                {
-                    tooltipList.Add($"<Drag> {MovePatternTooltip}");
-                    tooltipList.Add($"<Ctrl><Drag> {ClonePatternTooltip}");
-                }
-
-                if (tooltipList.Count >= 3)
-                {
-                    var array = tooltipList.ToArray();
-                    var numFirstLine = array.Length / 2;
-                    tooltip = string.Join(" - ", array, 0, numFirstLine) + "\n" + string.Join(" - ", array, numFirstLine, array.Length - numFirstLine);
-                }
-                else
-                {
-                    tooltip = string.Join(" - ", tooltipList);
-                }
+            if (tooltipList.Count >= 3)
+            {
+                var array = tooltipList.ToArray();
+                var numFirstLine = array.Length / 2;
+                tooltip = string.Join(" - ", array, 0, numFirstLine) + "\n" + string.Join(" - ", array, numFirstLine, array.Length - numFirstLine);
             }
             else
             {
-                tooltip = "";
+                tooltip = string.Join(" - ", tooltipList);
             }
         }
 
@@ -574,77 +469,9 @@ namespace FamiStudio
             var p = WindowToControl(panel.ControlToWindow(e.Position));
             StartRectangleSelection?.Invoke(this, p, panel.Location.PatternIndex);
         }
-        
-        protected void OnTouchDown(PointerEventArgs e)
+
+        private void HandlePanelPointerDownTouchClick(Control control, PointerEventArgs e)
         {
-            if (GetPatternForCoord(e.X, e.Y, out var location))
-            {
-                if (HighlightLocation == location)
-                {
-                    if (!IsPatternSelected(HighlightLocation))
-                        SetSelection?.Invoke(HighlightLocation);
-
-                    StartDragSelection?.Invoke(this, e.Position, HighlightLocation.PatternIndex);
-                    e.MarkHandled();
-                }
-
-                //StartMobilePanning?.Invoke(this, e);
-            }
-        }
-
-        protected override void OnTouchClick(PointerEventArgs e)
-        {
-            bool inPatternZone = GetPatternForCoord(e.X, e.Y, out var location);
-
-            if (inPatternZone)
-            {
-                var pattern = Song.GetPatternInstance(location);
-
-                if (pattern == null)
-                {
-                    CreateNewPattern(location);
-                    SetHighlightedPattern?.Invoke(location);
-                }
-                else 
-                {
-                    if (HighlightLocation == location)
-                        ClearHighlightedPattern?.Invoke();
-                    else
-                        SetHighlightedPattern?.Invoke(location);
-
-                    // Tapping inside the selection toggles highlight, but doesnt clear selection.
-                    if (IsPatternSelected(location))
-                        return;
-                }
-
-                // CreateNewPattern clears the selection. Ugh, call after.
-                ClearSelection?.Invoke();
-                SetSelection?.Invoke(location);
-            }
-        }
-
-        protected override void OnTouchDoubleClick(PointerEventArgs e)
-        {
-            OnMouseDoubleClick(e);
-        }
-
-        public override void OnContainerTouchLongPressNotify(Control control, PointerEventArgs e)
-        {
-            if (control is PatternPanel panel)
-            {
-                Platform.VibrateClick();
-                StartSelection(panel, e);
-            }
-        }
-
-        public override void OnContainerPointerDownNotify(Control control, PointerEventArgs e)
-        {
-            if (e.IsTouchEvent)
-            {
-                OnTouchDown(e);
-                return;
-            }
-
             if (e.Left)
             {
                 if (control is PatternPanel panel)
@@ -683,7 +510,7 @@ namespace FamiStudio
             {
                 if (ModifierKeys.IsAltDown && Settings.AltZoomAllowed)
                 {   
-                    StartAltZoom?.Invoke(this, e);
+                    StartAltZoom?.Invoke(control, e);
                     return;
                 }
 
@@ -691,11 +518,86 @@ namespace FamiStudio
             }
         }
 
-        public override void OnContainerPointerDownDelayedNotify(Control control, PointerEventArgs e)
+        private void Panel_PointerDown(Control control, PointerEventArgs e)
+        {
+            if (!e.IsTouchEvent)
+                HandlePanelPointerDownTouchClick(control, e);
+        }
+
+        private void Panel_PointerUp(Control control, PointerEventArgs e)
+        {
+            if (e.Left)
+            {
+                //EndSelection?.Invoke(control, e.Position);
+                return;
+            }
+
+            if (e.Right || e.IsLongPress)
+            {
+                if (control is PatternPanel panel)
+                {
+                    if (!CaptureThresholdMet)
+                    {
+                        if (!ModifierKeys.IsControlDown && !IsPatternSelected(panel.Location) && Song.GetPatternInstance(panel.Location) != null)
+                            ClearSelection?.Invoke();
+
+                        ShowContextMenu(e.Position, panel.Location);
+                    }
+                }
+
+                //EndSelection?.Invoke(control, e.Position);
+
+                //e.MarkHandled();
+            }
+        }
+
+        private void Panel_PointerDownDelayed(Control control, PointerEventArgs e)
         {
             if (e.Right && control is PatternPanel panel)
             {
                 StartSelection(panel, e);
+            }
+        }
+
+        private void Panel_TouchClick(Control control, PointerEventArgs e)
+        {
+            HandlePanelPointerDownTouchClick(control, e);
+        }
+
+        private void Panel_MouseTouchDoubleClick(Control control, PointerEventArgs e)
+        {
+            if (control is PatternPanel panel)
+            {
+                var pattern = Song.GetPatternInstance(panel.Location);
+                if (pattern != null)
+                {
+                    DeletePattern(panel.Location);
+                    ClearHighlightedPattern?.Invoke();
+                }
+            }
+        }
+
+        private void Panel_TouchLongPress(Control control, PointerEventArgs e)
+        {
+            if (!e.IsDoubleTapLongPress && control is PatternPanel panel)
+            {
+                Platform.VibrateClick();
+                StartSelection(panel, e);
+            }
+        }
+        
+        protected void OnTouchDown(PointerEventArgs e)
+        {
+            if (GetPatternForCoord(e.X, e.Y, out var location))
+            {
+                if (HighlightLocation == location)
+                {
+                    if (!IsPatternSelected(HighlightLocation))
+                        SetSelection?.Invoke(HighlightLocation);
+
+                    StartDragSelection?.Invoke(this, e.Position, HighlightLocation.PatternIndex);
+                    e.MarkHandled();
+                }
             }
         }
 
@@ -713,23 +615,12 @@ namespace FamiStudio
             }
         }
 
-        public override void OnContainerPointerUpNotify(Control control, PointerEventArgs e)
-        {
-            if (e.Right || e.IsLongPress)
-            {
-                if (!CaptureThresholdMet)
-                {
-                    if (!ModifierKeys.IsControlDown && control is PatternPanel panel && !IsPatternSelected(panel.Location))
-                        ClearSelection?.Invoke();
-
-                    ShowContextMenu(e.Position);
-                }
-            }
-        }
-
         public override void OnContainerPointerMoveNotify(Control control, PointerEventArgs e)
         {
-            UpdateTooltip(e);
+            if (control is PatternPanel panel)
+                UpdateTooltip(panel.Location);
+            else
+                tooltip = "";
         }
 
         public void SetScrollX(int s)

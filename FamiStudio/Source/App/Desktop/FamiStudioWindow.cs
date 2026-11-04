@@ -558,11 +558,10 @@ namespace FamiStudio
                     return;
 
                 // If the pointer leaves the window on certain OS, the actual pointer release is
-                // delayed until the pointer re-enters the window. See CursorEnterCallback();
+                // delayed until the pointer re-enters the window. See CursorEnterCallback.
                 if (button == ignoreReleaseButton)
                 {
-                    ignoreReleaseButton = -1;
-                    captureButton = -1;
+                    // ignoreReleaseButton and captureButton get reset in CursorPosCallback.
                     return;
                 }
 
@@ -602,6 +601,14 @@ namespace FamiStudio
         {
             if (quit || IsOutOfProcessDialogInProgress)
                 return;
+
+            // Ignore position if a mouse button was previously released outside the window.
+            if (ignoreReleaseButton != -1)
+            {
+                captureButton = -1;
+                ignoreReleaseButton = -1;
+                return;
+            }
 
             //Debug.WriteLine($"POS! X={xpos}, Y={ypos}");
 
@@ -664,8 +671,8 @@ namespace FamiStudio
                 // Certain OS refuse to send pointer up when the cursor is outside the window. We send
                 // pointer up manually here and ignore the real release, otherwise we won't get a release 
                 // until the cursor returns to the window. This would cause events such as panning or 
-                // dragging to stop responding and then snap to a delta once the cursor returned.
-                if (captureControl != null)
+                // dragging to never end the capture operation, or snap to a delta once the cursor returned.
+                if ((Platform.IsLinux && isWayland || Platform.IsMacOS) && captureControl != null)
                 {
                     var ctrl   = captureControl;
                     var button = captureButton;

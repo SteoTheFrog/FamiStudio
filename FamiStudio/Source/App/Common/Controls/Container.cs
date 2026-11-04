@@ -52,19 +52,11 @@ namespace FamiStudio
         {
         }
 
-        public virtual void OnContainerPointerDownDelayedNotify(Control control, PointerEventArgs e)
-        {
-        }
-
         public virtual void OnContainerPointerUpNotify(Control control, PointerEventArgs e)
         {
         }
 
         public virtual void OnContainerTouchClickNotify(Control control, PointerEventArgs e)
-        {
-        }
-
-        public virtual void OnContainerTouchLongPressNotify(Control control, PointerEventArgs e)
         {
         }
 
@@ -344,12 +336,15 @@ namespace FamiStudio
                     var ty = c.Top  - containerScrollY;
 
                     // Simple culling for containers, mostly just for the project explorer.
-                    if (container)
-                    {
-                        var containerRect = c.ClientRectangle.Offsetted(tx, ty);
-                        if (!containerRect.Intersects(ClientRectangle))
-                            continue;
-                    }
+                    //if (container)
+                    //{
+
+                    // TOCO: Do we ever need to render any control that's not visible? Culling probably makes sense.
+                    var containerRect = c.ClientRectangle.Offsetted(tx, ty);
+                    if (!containerRect.Intersects(ClientRectangle))
+                        continue;
+
+                    //}
 
                     g.Transform.PushTranslation(tx, ty);
                     c.Render(g);

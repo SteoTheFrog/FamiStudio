@@ -1051,7 +1051,7 @@ namespace FamiStudio
                     RemoveUnusedChannelSettings(audioChannelSettings);
                     exportSettings.Channels = audioChannelSettings;
                     
-                    var success = false;
+                    var success = true;
 
                     AudioExportUtils.Save(song, filename, sampleRate, loopCount, duration, channelMask, separateFiles, separateIntro, stereo, pan, delay, Platform.IsMobile || project.UsesEPSMExpansion, true,
                         (samples, samplesChannels, fn) =>
@@ -1059,13 +1059,13 @@ namespace FamiStudio
                             switch (format)
                             {
                                 case AudioFormatType.Mp3:
-                                    success = Mp3File.Save(samples, fn, sampleRate, bitrate, samplesChannels);
+                                    success &= Mp3File.Save(samples, fn, sampleRate, bitrate, samplesChannels);
                                     break;
                                 case AudioFormatType.Wav:
-                                    success = WaveFile.Save(samples, fn, sampleRate, samplesChannels);
+                                    success &= WaveFile.Save(samples, fn, sampleRate, samplesChannels);
                                     break;
                                 case AudioFormatType.Vorbis:
-                                    success = VorbisFile.Save(samples, fn, sampleRate, bitrate, samplesChannels);
+                                    success &= VorbisFile.Save(samples, fn, sampleRate, bitrate, samplesChannels);
                                     break;
                             }
                         });

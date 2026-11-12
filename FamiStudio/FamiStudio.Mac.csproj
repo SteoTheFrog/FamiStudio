@@ -171,13 +171,10 @@
     <Compile Include="Source\App\Common\Controls\ProjectExplorer\RegisterViewerPanel.cs" />
     <Compile Include="Source\App\Common\Controls\ProjectExplorer\SimpleTab.cs" />
     <Compile Include="Source\App\Common\Controls\ProjectExplorer\ProjectExplorer.cs" />
-    <Compile Include="Source\App\Common\Controls\Sequencer\ChannelNameArea.cs" />
-    <Compile Include="Source\App\Common\Controls\Sequencer\ChannelNamePanel.cs" />
+    <Compile Include="Source\App\Common\Controls\Sequencer\ChannelList.cs" />
     <Compile Include="Source\App\Common\Controls\Sequencer\PatternArea.cs" />
-    <Compile Include="Source\App\Common\Controls\Sequencer\PatternPanel.cs" />
     <Compile Include="Source\App\Common\Controls\Sequencer\Sequencer.cs" />
-    <Compile Include="Source\App\Common\Controls\Sequencer\SequencerTimeline.cs" />
-    <Compile Include="Source\App\Common\Controls\Sequencer\SequencerTimelinePanel.cs" />
+    <Compile Include="Source\App\Common\Controls\Sequencer\Timeline.cs" />
     <Compile Include="Source\App\Common\Controls\Toolbar\Oscilloscope.cs" />
     <Compile Include="Source\App\Common\Controls\Toolbar\Timecode.cs" />
     <Compile Include="Source\App\Common\Controls\Toolbar\Toolbar.cs" />

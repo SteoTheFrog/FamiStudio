@@ -483,8 +483,8 @@ namespace FamiStudio
                 if (captureControl != null)
                     return;
 
-                // Abort delayed right-click if left-clicking, to avoid a double capture.
-                if (button == GLFW_MOUSE_BUTTON_LEFT)
+                // Abort delayed right-click if another button is pressed to avoid a double capture.
+                if (button != GLFW_MOUSE_BUTTON_RIGHT)
                     ClearDelayedRightClick();
 
                 var ctrl = container.GetControlAt(lastCursorX, lastCursorY, out int cx, out int cy);
@@ -557,11 +557,11 @@ namespace FamiStudio
                 if (captureButton != -1 && button != captureButton)
                     return;
 
-                // If the pointer leaves the window on certain OS, the actual pointer release is
-                // delayed until the pointer re-enters the window. See CursorEnterCallback.
+                // Wayland workaround.
                 if (button == ignoreReleaseButton)
                 {
-                    // ignoreReleaseButton and captureButton get reset in CursorPosCallback.
+                    Debug.WriteLine($"BUTTON RELEASE IGNORED! Button={ignoreReleaseButton}");
+                    ignoreReleaseButton = -1;
                     return;
                 }
 
@@ -602,11 +602,10 @@ namespace FamiStudio
             if (quit || IsOutOfProcessDialogInProgress)
                 return;
 
-            // Ignore position if a mouse button was previously released outside the window.
+            // Wayland workaround (this fires before the button callback).
             if (ignoreReleaseButton != -1)
             {
-                captureButton = -1;
-                ignoreReleaseButton = -1;
+                Debug.WriteLine($"MOUSE MOVE IGNORED! Button={ignoreReleaseButton}");
                 return;
             }
 
@@ -668,18 +667,17 @@ namespace FamiStudio
 
             if (entered == 0)
             {
-                // Certain OS refuse to send pointer up when the cursor is outside the window. We send
-                // pointer up manually here and ignore the real release, otherwise we won't get a release 
-                // until the cursor returns to the window. This would cause events such as panning or 
-                // dragging to never end the capture operation, or snap to a delta once the cursor returned.
-                if ((Platform.IsLinux && isWayland || Platform.IsMacOS) && captureControl != null)
+                // HACK: Wayland doesn't notify that the cursor exited the window if the
+                // pointer is currently captured. It notifies once the button is released,
+                // but nothing else takes effect. The other events are ignored until the
+                // cursor returns to the window. Send pointer up and release the pointer
+                // manually, then ignore the "real" release later.
+                if (isWayland && captureControl != null)
                 {
-                    var ctrl   = captureControl;
-                    var button = captureButton;
-
+                    ignoreReleaseButton = captureButton;
+                    captureControl.SendPointerUp(new PointerEventArgs(MakeButtonFlags(captureButton), lastCursorX - captureControl.WindowPosition.X, lastCursorY - captureControl.WindowPosition.Y));
+                    captureButton = -1;
                     ReleasePointer();
-                    ignoreReleaseButton = button;
-                    ctrl.SendPointerUp(new PointerEventArgs(MakeButtonFlags(button), lastCursorX - ctrl.WindowPosition.X, lastCursorY - ctrl.WindowPosition.Y));
                 }
 
                 ClearHoverControl();
@@ -877,7 +875,8 @@ namespace FamiStudio
             var delta = glfwGetTime() - delayedRightClickStartTime;
             var clear = forceClear;
 
-            if (delayedRightClickArgs != null && (delta > DelayedRightClickTime || !checkTime) && (checkCtrl == delayedRightClickControl || checkCtrl == null))
+            if (delayedRightClickArgs != null && (delta > DelayedRightClickTime || !checkTime) && (checkCtrl == delayedRightClickControl || 
+                checkCtrl == null || (checkCtrl.HasParent && delayedRightClickControl.IsInContainer(checkCtrl.ParentContainer))))
             {
                 Debug.WriteLine($"ConditionalEmitDelayedRightClick delayedRightClickControl={delayedRightClickControl} checkTime={checkTime} deltaMs={delta} forceClear={forceClear}");
                 delayedRightClickControl.SendPointerDownDelayed(delayedRightClickArgs);

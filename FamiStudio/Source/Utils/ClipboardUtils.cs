@@ -384,7 +384,6 @@ namespace FamiStudio
                             var instrument = serializer.Project.CreateInstrument(instType, instName);
                             serializer.RemapId(instId, instrument.Id);
                             instrument.Serialize(serializer);
-
                             instrument.Name = instName;
                         }
                         else
@@ -401,7 +400,6 @@ namespace FamiStudio
                 }
             }
 
-            serializer.Project.UnmapUnusedSamples();
             serializer.Project.EnsureAllFoldersExist(FolderType.Instrument);
             serializer.Project.ConditionalSortInstruments();
 

@@ -21,7 +21,8 @@ namespace FamiStudio
         // Version 8    : FamiStudio 4.1.0 (Configurable keys)
         // Version 9-10 : FamiStudio 4.2.0 (Latency improvements, more filtering options)
         // Version 11   : FamiStudio 4.4.0 (Separate bass filter for FDS)
-        public const int SettingsVersion = 11;
+        // Version 12   : FamiStudio 4.6.0 (Resizeable sequencer)
+        public const int SettingsVersion = 12;
         public const int NumRecentFiles  = 10;
 
         // Constants for follow.
@@ -239,6 +240,10 @@ namespace FamiStudio
         public static bool AllowVibration = true;
         public static bool ForceLandscape = false;
         public static int  MobilePianoHeight = 25;
+
+        // Sequencer stuff
+        public const int DefaultSequencerHeight = 242;
+        public static int SequencerHeight = DefaultSequencerHeight;
 
         // Piano roll stuff
         public const int DefaultSnapResolution = Platform.IsMobile ? SnapResolutionType.QuarterBeat : SnapResolutionType.Beat;
@@ -611,6 +616,9 @@ namespace FamiStudio
             ForceLandscape = ini.GetBool("Mobile", "ForceLandscape", false);
             MobilePianoHeight = ini.GetInt("Mobile", "MobilePianoHeight", 25);
 
+            // Sequencer section
+            SequencerHeight = ini.GetInt("Sequencer", "Height", 242);
+
             // Piano roll section
             SnapResolution = Utils.Clamp(ini.GetInt("PianoRoll", "SnapResolution", DefaultSnapResolution), SnapResolutionType.Min, SnapResolutionType.Max);
             SnapEnabled = ini.GetBool("PianoRoll", "SnapEnabled", true);
@@ -752,6 +760,9 @@ namespace FamiStudio
             ini.SetBool("Mobile", "AllowVibration", AllowVibration);
             ini.SetBool("Mobile", "ForceLandscape", ForceLandscape);
             ini.SetInt("Mobile", "MobilePianoHeight", MobilePianoHeight);
+
+            // Sequencer section
+            ini.SetInt("Sequencer", "Height", SequencerHeight);
 
             // Piano roll section
             ini.SetInt("PianoRoll", "SnapResolution", SnapResolution);

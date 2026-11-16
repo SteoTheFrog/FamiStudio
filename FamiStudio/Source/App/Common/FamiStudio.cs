@@ -1316,11 +1316,13 @@ namespace FamiStudio
 
         private void ApplySettings()
         {
+            Sequencer.ApplySettings();
             PianoRoll.ApplySettings();
         }
 
         private void SaveSettings()
         {
+            Sequencer.SaveSettings();
             PianoRoll.SaveSettings();
             Settings.Save();
         }

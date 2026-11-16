@@ -518,9 +518,9 @@ namespace FamiStudio
 
             public void SetScrollX(int s)
             {
-                if (ScrollY != s)
+                if (ScrollX != s)
                 {
-                    ScrollY = s;
+                    ScrollX = s;
                     MarkDirty();
                 }
             }

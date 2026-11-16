@@ -1154,7 +1154,8 @@ namespace FamiStudio
                         {
                             var mapping = new DPCMSampleMapping();
                             mapping.Serialize(buffer);
-                            samplesMapping.Add(mappingNotes[i], mapping);
+                            if (mapping.Sample != null)
+                                samplesMapping.Add(mappingNotes[i], mapping);
                         }
                     }
                     else

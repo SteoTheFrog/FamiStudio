@@ -4,17 +4,16 @@ using System.Diagnostics;
 
 namespace FamiStudio
 {
-    // This and the Piano Roll are the only 2 "Uber-Control" left, where everything is in one class with 
-    // no sub-widgets whatsoever. Both of these need a full rewrite. This is for historical reason, when
-    // the app started, we didnt have a proper widget system, we sort-of do now. Also, all the touch and
-    // mouse input would need to be unified as much as possible.
-    //
-    // The sequencer would need to be broken down into a timeline, a pattern area, the channel names and
-    // associated icons needs to be made into real buttons, etc.
     public partial class Sequencer : Container
     {
         const int DefaultChannelNameSizeX    = Platform.IsMobile ? 68 : 94;
         const int DefaultHeaderSizeY         = 17;
+        const int DefaultScrollableHeight    = Settings.DefaultSequencerHeight;
+        const int DefaultChannelSizeY        = 70;
+        const int MinChannelSizeY            = 21;
+        const int MaxChannelSizeY            = 98;
+        const int ChannelSizeStep            = 7;
+        const int ResizeBarHeight            = 5;
         const int DefaultPatternHeaderSizeY  = 13;
         const int DefaultScrollBarThickness1 = 10;
         const int DefaultScrollBarThickness2 = 16;
@@ -22,11 +21,15 @@ namespace FamiStudio
         const float ScrollSpeedFactor        = Platform.IsMobile ? 2.0f : 1.0f;
         const float DefaultZoom              = Platform.IsMobile ? 0.5f : 2.0f;
 
-        const float MinZoom = 0.25f;
-        const float MaxZoom = 16.0f;
+        // Height is scaled from 0 - 1 (1 being window height).
+        const float MinSequencerHeight = 0.05f;
+        const float MaxSequencerHeight = 0.90f;
+        const float MinZoom            = 0.25f;
+        const float MaxZoom            = 16.0f;
 
         int channelNameSizeX;
         int headerSizeY;
+        int resizeBarSizeY;
         int channelSizeY;
         int patternHeaderSizeY;
         int scrollMargin;
@@ -44,8 +47,11 @@ namespace FamiStudio
         int captureChannelIdx = -1;
         int captureRowIdx = -1;
         int capturePatternIdx = -1;
+        int captureSequencerHeight;
         int dragSeekPosition = -1;
+        int scrollableHeight = -1;
         int selectionDragAnchorPatternIdx = -1;
+        int preferredChannelSizeY = DefaultChannelSizeY;
         float zoom = DefaultZoom;
         float bitmapScale = 1.0f;
         float channelBitmapScale = 1.0f;
@@ -74,8 +80,6 @@ namespace FamiStudio
 
         // Hover tracking
         Point hoverPos = new Point(-1, -1);
-
-        //PatternBitmapCache patternCache;
 
         Color selectedPatternVisibleColor   = Color.FromArgb(64, Theme.LightGreyColor1);
         Color selectedPatternInvisibleColor = Color.FromArgb(16, Theme.LightGreyColor1);
@@ -108,6 +112,7 @@ namespace FamiStudio
         private static readonly CaptureOperation DragSelection   = new CaptureOperation("DragSelection");
         private static readonly CaptureOperation AltZoom         = new CaptureOperation("AltZoom", false, false);
         private static readonly CaptureOperation DragSeekBar     = new CaptureOperation("DragSeekBar", true, false);
+        private static readonly CaptureOperation ResizeSequencer = new CaptureOperation("ResizeSequencer", true, false);
         private static readonly CaptureOperation MobileZoom      = new CaptureOperation("MobileZoom", false, false);
         private static readonly CaptureOperation MobilePan       = new CaptureOperation("MobilePan", false, false);
 
@@ -200,6 +205,7 @@ namespace FamiStudio
             noteSizeX          = DpiScaling.ScaleForWindowFloat(zoom * patternZoom);
             virtualSizeY       = rowToChannel != null ? channelSizeY * rowToChannel.Length : 0;
             scrollMargin       = (width - channelNameSizeX) / 8;
+            resizeBarSizeY     = Settings.AllowSequencerVerticalScroll ? DpiScaling.ScaleForWindow(ResizeBarHeight) : 0;
 
             // Shave a couple pixels when the size is getting too small.
             if (unscaledChannelSizeY < 24)
@@ -207,26 +213,25 @@ namespace FamiStudio
             else
                 patternHeaderSizeY = DpiScaling.ScaleForFont(DefaultPatternHeaderSizeY);
 
-            var patternAreaWidth = width - channelNameSizeX - (verticalScrollBar != null && verticalScrollBar.Visible ? scrollBarThickness - 1 : 0);
-            ConditionalAddOrRemoveScrollbars();
+            UpdateScrollBars();
 
-            channelList?.Resize(channelNameSizeX, height);
+            var patternAreaWidth = width - channelNameSizeX - (verticalScrollBar != null && verticalScrollBar.Visible ? scrollBarThickness - 1 : 0);
+
+            channelList?.Resize(channelNameSizeX, height - (resizeBarSizeY > 0 ? resizeBarSizeY - 1 : 0));
             channelList?.UpdateLayout(headerSizeY, channelSizeY);
             timeline?.Move(channelNameSizeX, 0, width - channelNameSizeX, headerSizeY);
             timeline?.UpdateLayout();
-            patternArea?.Move(channelNameSizeX, headerSizeY, patternAreaWidth, height - headerSizeY - scrollBarThickness + 1);
+            patternArea?.Move(channelNameSizeX, headerSizeY, patternAreaWidth, height - headerSizeY - scrollBarThickness - (resizeBarSizeY > 0 ? resizeBarSizeY - 1 : 0));
             patternArea?.UpdateLayout(channelSizeY, patternHeaderSizeY, rowToChannel?.Length ?? 0);
 
             RebuildChannelMap();
             SetHoverByCoords(mouseLastPos); // For undo / redo.
         }
 
-        private void ConditionalAddOrRemoveScrollbars()
+        private void UpdateScrollBars()
         {
             if (Settings.ScrollBars != 0)
             {
-                UpdateScrollBarCoords();
-
                 if (verticalScrollBar == null)
                 {
                     verticalScrollBar = new ScrollBar();
@@ -242,6 +247,8 @@ namespace FamiStudio
                     horizontalScrollBar.Scrolled += HorizontalScrollBar_Scrolled;
                     AddControl(horizontalScrollBar);
                 }
+
+                UpdateScrollBarCoords();
             }
             else
             {
@@ -273,8 +280,7 @@ namespace FamiStudio
 
                 if (verticalScrollBar.Visible)
                 {
-                    var vSize = height - headerSizeY - scrollBarThickness;
-
+                    var vSize = height - headerSizeY - scrollBarThickness - resizeBarSizeY;
                     verticalScrollBar.Move(width - scrollBarThickness + 1, headerSizeY, scrollBarThickness, vSize);
                     verticalScrollBar.VirtualSize = maxScrollY + vSize;
                     verticalScrollBar.SetScroll(scrollY, false);
@@ -282,11 +288,28 @@ namespace FamiStudio
                 }
 
                 var hSize = width - channelNameSizeX + 1;
-                horizontalScrollBar.Move(channelNameSizeX - 1, height - scrollBarThickness, hSize, scrollBarThickness);
+                horizontalScrollBar.Move(channelNameSizeX - 1, height - scrollBarThickness - resizeBarSizeY, hSize, scrollBarThickness);
                 horizontalScrollBar.VirtualSize = maxScrollX + hSize;
                 horizontalScrollBar.SetScroll(scrollX, false);
                 horizontalScrollBar.UpdateThickness();
             }
+        }
+
+        private void UpdateSequencerResize(Point p)
+        {
+            var newHeight = captureSequencerHeight + (p.Y - captureMousePos.Y);
+
+            var minHeight = (int)Math.Round(ParentWindow.Height * MinSequencerHeight);
+            var maxHeight = (int)Math.Round(ParentWindow.Height * MaxSequencerHeight);
+
+            newHeight = Utils.Clamp(newHeight, minHeight, maxHeight);
+
+            var prevHeight = scrollableHeight;
+            scrollableHeight = (int)Math.Round(newHeight / DpiScaling.Window);
+
+            // Don't spam layout updates if nothing changed.
+            if (scrollableHeight != prevHeight)
+                ParentTopContainer.UpdateLayout();
         }
 
         private int GetPixelForNote(int n, bool scroll = true)
@@ -335,16 +358,17 @@ namespace FamiStudio
             }
         }
 
-        public int ComputeDesiredSizeY(out int channelSizeY, out bool verticalScoll)
+        public int ComputeDesiredSizeY(out int channelSizeY, out bool verticalScroll)
         {
             var channelCount = GetChannelCount(false);
             var visibleChannelCount = GetChannelCount(true);
             var scrollBarSize = Settings.ScrollBars == 1 ? DefaultScrollBarThickness1 : (Settings.ScrollBars == 2 ? DefaultScrollBarThickness2 : 0);
-            var constantSize = DefaultHeaderSizeY + scrollBarSize + 1;
+            var resizeBar     = Settings.AllowSequencerVerticalScroll ? ResizeBarHeight : 0;
+            var constantSize  = DefaultHeaderSizeY + scrollBarSize + resizeBar + 1;
 
             if (Platform.IsMobile)
             {
-                verticalScoll = true;
+                verticalScroll = true;
                 channelSizeY = visibleChannelCount > 0 ? Math.Clamp(((int)Math.Ceiling(height / DpiScaling.Window) - DefaultHeaderSizeY) / visibleChannelCount, 21, 80) : 21;
                 return channelSizeY * channelCount + constantSize;
             }
@@ -354,23 +378,45 @@ namespace FamiStudio
                 var frac = Utils.Frac(DpiScaling.Window);
                 var divider = (frac == 0.25f || frac == 0.75f) ? 4 : (frac == 0.5f) ? 2 : 1;
                 var minChannelSize = Utils.RoundUp(21, divider);
-                var idealSequencerHeight = (int)Math.Round(ParentWindow.Height / DpiScaling.Window * Settings.IdealSequencerSize / 100);
-                        
-                channelSizeY = visibleChannelCount > 0 ? Math.Max(Utils.RoundDown(idealSequencerHeight / visibleChannelCount, divider), minChannelSize) : minChannelSize;
-                
-                var actualSequencerHeight = channelSizeY * visibleChannelCount;
 
-                if (Settings.AllowSequencerVerticalScroll && actualSequencerHeight > idealSequencerHeight)
+                if (!Settings.AllowSequencerVerticalScroll)
                 {
-                    verticalScoll = true;
-                    return idealSequencerHeight + constantSize;
+                    var idealSequencerHeight = (int)Math.Round(ParentWindow.Height / DpiScaling.Window * Settings.IdealSequencerSize / 100);
+
+                    channelSizeY = visibleChannelCount > 0 ? Math.Max(Utils.RoundDown(idealSequencerHeight / visibleChannelCount, divider), minChannelSize) : minChannelSize;
+                    verticalScroll = false;
+
+                    return channelSizeY * visibleChannelCount + constantSize/*+ ConstantSizeY*/;
                 }
-                else
-                {
-                    verticalScoll = false;
-                    return actualSequencerHeight + constantSize;
-                }
+                        
+                channelSizeY = Utils.RoundUp(preferredChannelSizeY, divider);
+
+                var minHeight = (int)Math.Round(ParentWindow.Height / DpiScaling.Window * MinSequencerHeight);
+                var maxHeight = (int)Math.Round(ParentWindow.Height / DpiScaling.Window * MaxSequencerHeight);
+
+                var sequencerHeight = scrollableHeight >= 0 ? scrollableHeight : DefaultScrollableHeight;
+                sequencerHeight = Utils.Clamp(sequencerHeight, minHeight, maxHeight);
+
+                var contentHeight = sequencerHeight - constantSize/*- ConstantSizeY*/;
+                verticalScroll = channelSizeY * visibleChannelCount > contentHeight;
+
+                return sequencerHeight;
             }
+        }
+
+        public void ApplySettings()
+        {
+            scrollableHeight = Settings.SequencerHeight;
+
+            UpdateRenderCoords();
+            //UpdateScrollBarControls();
+            ClearSelection();
+        }
+        
+        public void SaveSettings()
+        {
+            if (Settings.AllowSequencerVerticalScroll)
+                Settings.SequencerHeight = scrollableHeight;
         }
 
         public void LayoutChanged()
@@ -581,6 +627,7 @@ namespace FamiStudio
             UpdateRenderCoords();
 
             channelList = new ChannelList(this);
+            channelList.VerticalZoomChanged += VerticalZoomChanged;
             AddControl(channelList);
 
             patternArea = new PatternArea(this);
@@ -614,6 +661,30 @@ namespace FamiStudio
                 bitmapScale = DpiScaling.ScaleForWindowFloat(0.5f);
                 channelBitmapScale = DpiScaling.ScaleForWindowFloat(0.25f);
             }
+        }
+
+        private void VerticalZoomChanged(float scale)
+        {
+            if (scale == 1.0f)
+                return;
+
+            var delta   = scale > 1.0f ? ChannelSizeStep : -ChannelSizeStep;
+            var newSize = Utils.Clamp(preferredChannelSizeY + delta, MinChannelSizeY, MaxChannelSizeY);
+
+            if (newSize == preferredChannelSizeY)
+                return;
+
+            var pixelY      = Math.Max(mouseLastPos.Y - headerSizeY, 0);
+            var rowUnderPos = (pixelY + scrollY) / (double)channelSizeY;
+
+            preferredChannelSizeY = newSize;
+            UpdateRenderCoords(); // Updates channelSizeY
+
+            if (allowVerticalScrolling)
+                scrollY = (int)Math.Round(rowUnderPos * channelSizeY) - pixelY;
+
+            ClampScroll();
+            SetHoverByCoords(mouseLastPos);
         }
 
         protected override void OnResize(EventArgs e)
@@ -729,12 +800,26 @@ namespace FamiStudio
 #endif
         }
 
+        private void RenderResizeBar(Graphics g)
+        {
+            if (resizeBarSizeY <= 0)
+                return;
+
+            var c = g.DefaultCommandList;
+            var topY = height - resizeBarSizeY;
+
+            c.FillRectangle(0, topY, width, height, Theme.Darken(Theme.DarkGreyColor1, 5));
+            c.DrawLine(0, topY, width, topY, Theme.BlackColor);
+            c.DrawLine(0, height - 1, width, height - 1, Theme.BlackColor);
+        }
+
         protected override void OnRender(Graphics g)
         {
             // Happens when piano roll is maximized.
             if (height <= 1)
                 return;
 
+            RenderResizeBar(g);
             base.OnRender(g);
             RenderDebug(g);
         }
@@ -752,20 +837,17 @@ namespace FamiStudio
                     App.UndoRedoManager.BeginTransaction(TransactionScope.Song, Song.Id);
                     var replacedAnything = false;
 
-                    for (int i = selectionMin.ChannelIndex; i <= selectionMax.ChannelIndex; i++)
+                    foreach (var selected in selectedPatternLocations)
                     {
-                        var channel = Song.Channels[i];
+                        var channel = Song.Channels[selected.ChannelIndex];
                         if (channelValid(channel))
                         {
-                            for (int j = selectionMin.PatternIndex; j <= selectionMax.PatternIndex; j++)
+                            var pattern = channel.PatternInstances[selected.PatternIndex];
+                            if (pattern != null)
                             {
-                                var pattern = channel.PatternInstances[j];
-                                if (pattern != null)
-                                {
-                                    action(pattern);
-                                    NotifyPatternChange(pattern);
-                                    replacedAnything = true;
-                                }
+                                action(pattern);
+                                NotifyPatternChange(pattern);
+                                replacedAnything = true;
                             }
 
                             channel.InvalidateCumulativePatternCache();
@@ -876,7 +958,7 @@ namespace FamiStudio
             minScrollX = 0;
             maxScrollX = Song != null ? Math.Max(GetPixelForNote(Song.GetPatternStartAbsoluteNoteIndex(Song.Length), false) - scrollMargin, 0) : 0;
             minScrollY = 0;
-            maxScrollY = allowVerticalScrolling ? Math.Max(virtualSizeY + headerSizeY - height + scrollBarThickness, 0) : 0;
+            maxScrollY = allowVerticalScrolling ? Math.Max(virtualSizeY + headerSizeY - height + scrollBarThickness + resizeBarSizeY, 0) : 0;
         }
 
         private bool ClampScroll()
@@ -936,18 +1018,32 @@ namespace FamiStudio
 
         private int GetRowIndexForCoord(int y)
         {
-            return y > headerSizeY ? Utils.Clamp(((y - headerSizeY) + scrollY) / channelSizeY, 0, rowToChannel.Length - 1) : -1;
+            if (y > height - resizeBarSizeY && captureOperation == ResizeSequencer)
+                return - 1;
+                
+            return y > headerSizeY && y <= channelSizeY * GetChannelCount() + headerSizeY ? Utils.Clamp(((y - headerSizeY) + scrollY) / channelSizeY, 0, rowToChannel.Length - 1) : -1;
         }
 
         private int GetChannelIndexForCoord(int y)
         {
-            return y > headerSizeY && rowToChannel.Length > 0 ? rowToChannel[GetRowIndexForCoord(y)] : -1;
+            var row = GetRowIndexForCoord(y);
+            return row >= 0 && row < rowToChannel.Length ? rowToChannel[row] : -1;
+        }
+
+        private int GetClampedRowIndexForCoord(int y)
+        {
+            if (rowToChannel.Length == 0)
+                return -1;
+
+            return Utils.Clamp(((y - headerSizeY) + scrollY) / channelSizeY, 0, rowToChannel.Length - 1);
         }
 
         private void GetClampedPatternForCoord(Point p, out int channelIdx, out int patternIdx)
         {
             patternIdx = Song.PatternIndexFromAbsoluteNoteIndex(Utils.Clamp(GetNoteForPixel(p.X - channelNameSizeX), 0, Song.GetPatternStartAbsoluteNoteIndex(Song.Length) - 1));
-            channelIdx = Utils.Clamp(GetChannelIndexForCoord(p.Y), 0, Song.Channels.Length);
+
+            var row = GetClampedRowIndexForCoord(p.Y);
+            channelIdx = row >= 0 ? rowToChannel[row] : -1;
         }
 
         private void CaptureMouse(Control control, Point p)
@@ -993,16 +1089,9 @@ namespace FamiStudio
 
         private void VerticalScrollBar_Scrolled(Control sender, int pos)
         {
-            if (sender == verticalScrollBar)
-            {
-                scrollY = pos;
-                channelList?.SetScrollY(scrollY);
-                patternArea?.SetScrollY(scrollY);
-            }
-            else
-            {
-                scrollX = pos;
-            }
+            scrollY = pos;
+            channelList?.SetScrollY(scrollY);
+            patternArea?.SetScrollY(scrollY);
 
             MarkDirty();
         }
@@ -1010,6 +1099,8 @@ namespace FamiStudio
         private void HorizontalScrollBar_Scrolled(Control sender, int pos)
         {
             scrollX = pos;
+            patternArea?.SetScrollX(scrollX);
+
             MarkDirty();
         }
 
@@ -1086,7 +1177,7 @@ namespace FamiStudio
         public override void OnContainerPointerMoveNotify(Control control, PointerEventArgs e)
         {
             var p = ControlToLocal(control, e.Position);
-            UpdateCaptureOperation(null, p); // Already passing control coords. Pass null instead of calculating twice.
+            UpdateCaptureOperation(control, p);
 
             if (IsCursorInContainer())
             {
@@ -1412,6 +1503,10 @@ namespace FamiStudio
             if (captureOperation == DragSelection)
             {
                 Cursor = Cursors.DragCursor;
+            }
+            else if (IsPointInResizeBar(mouseLastPos.Y) || captureOperation == ResizeSequencer)
+            {
+                Cursor = Cursors.SizeNS;
             }
             else
             {
@@ -2036,6 +2131,10 @@ namespace FamiStudio
                 {
                     UpdateDragSelection(p);
                 }
+                else if (captureOperation == ResizeSequencer)
+                {
+                    UpdateSequencerResize(p);
+                }
                 else if (captureOperation == MobileZoom)
                 {
                     ZoomAtLocation(p.X, scale);
@@ -2047,6 +2146,24 @@ namespace FamiStudio
                     MarkDirty();
                 }
             }
+        }
+
+        protected override void OnPointerDown(PointerEventArgs e)
+        {
+            if (captureOperation != null)
+                return;
+
+            if (e.Left && IsPointInResizeBar(e.Y))
+            {
+                captureSequencerHeight = height;
+                StartCaptureOperation(this, e.Position, ResizeSequencer);
+            }
+        }
+
+        protected override void OnPointerUp(PointerEventArgs e)
+        {
+            EndCaptureOperation(this, e.Position);
+            UpdateCursor();
         }
 
         protected override void OnPointerMove(PointerEventArgs e)
@@ -2061,7 +2178,7 @@ namespace FamiStudio
 
             UpdateCursor();
 
-            var ctrl = GetControlAt(e.X, e.Y, out _, out _);
+            var ctrl = GetControlAt(e.X, e.Y, out _, out _) ?? this;
             UpdateCaptureOperation(ctrl, e.Position);
 
             if (middle)
@@ -2095,6 +2212,11 @@ namespace FamiStudio
                     MarkDirty();
                 }
             }
+        }
+
+        private bool IsPointInResizeBar(int y)
+        {
+            return resizeBarSizeY > 0 && y > height - resizeBarSizeY;
         }
 
         private bool IsCursorInContainer()
@@ -2220,6 +2342,9 @@ namespace FamiStudio
 
         public override void OnContainerMouseWheelNotify(Control control, PointerEventArgs e)
         {
+            if (e.Handled)
+                return;
+
             // TODO: Vertical zooming in the channel name area once sequencer resizing is implemented.
             if (Settings.TrackPadControls && !ModifierKeys.IsControlDown && !ModifierKeys.IsAltDown)
             {
@@ -2317,7 +2442,7 @@ namespace FamiStudio
             if (App == null)
                 return;
 
-            UpdateCaptureOperation(null, mouseLastPos, 1.0f, true);
+            UpdateCaptureOperation(this, mouseLastPos, 1.0f, true);
             UpdateFollowMode();
             TickFling(delta);
         }
@@ -2356,10 +2481,6 @@ namespace FamiStudio
             var patCount = selectedTimelineColumns.Count;
             var locCount = selectedPatternLocations.Count;
 
-/*             buffer.Serialize(ref selectionMin.ChannelIndex);
-            buffer.Serialize(ref selectionMax.ChannelIndex);
-            buffer.Serialize(ref selectionMin.PatternIndex);
-            buffer.Serialize(ref selectionMax.PatternIndex); */
             buffer.Serialize(ref hideEmptyChannels);
             buffer.Serialize(ref timelineSelection);
             buffer.Serialize(ref patCount);

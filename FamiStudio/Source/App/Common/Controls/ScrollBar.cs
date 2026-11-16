@@ -47,11 +47,11 @@ namespace FamiStudio
             GetScrollBarParams(out var scrollBarPos1, out var scrollBarPos2);
             if (coord < scrollBarPos1)
             {
-                SetScroll(scrollValue - height);
+                SetScroll(scrollValue - (horizontal ? width : height));
             }
             else if (coord > scrollBarPos2)
             {
-                SetScroll(scrollValue + height);
+                SetScroll(scrollValue + (horizontal ? width : height));
             }
             else
             {

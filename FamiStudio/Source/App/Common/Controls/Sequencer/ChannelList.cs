@@ -17,6 +17,9 @@ namespace FamiStudio
             private float headerIconScale = Platform.IsMobile ? DpiScaling.ScaleForWindowFloat(0.5f)  : 1.0f;
             private ChannelListPanel[] channelNames;
 
+            public delegate void MouseWheelDelegate(float scale);
+            public MouseWheelDelegate VerticalZoomChanged;
+
             private Song Song => App?.SelectedSong;
 
             LocalizedString ShyModeTooltip;
@@ -141,6 +144,18 @@ namespace FamiStudio
                 SetTickEnabled(hideEmptyChannels && !namesContainer.Visible);
             }
 
+            private void UpdateShyIcon()
+            {
+                if (hideEmptyChannels && !namesContainer.Visible)
+                {
+                    SetAndMarkDirty(ref forceShyOff, Utils.Frac(Platform.TimeSeconds()) < 0.25f);
+                }
+                else
+                {
+                    forceShyOff = false;
+                }
+            }
+
             public void SetScrollY(int scrollY)
             {
                 if (namesContainer.ScrollY != scrollY)
@@ -155,16 +170,10 @@ namespace FamiStudio
                 UpdateShyIcon();
             }
 
-            private void UpdateShyIcon()
+            public override void OnContainerMouseWheelNotify(Control control, PointerEventArgs e)
             {
-                if (hideEmptyChannels && !namesContainer.Visible)
-                {
-                    SetAndMarkDirty(ref forceShyOff, Utils.Frac(Platform.TimeSeconds()) < 0.25f);
-                }
-                else
-                {
-                    forceShyOff = false;
-                }
+                VerticalZoomChanged?.Invoke(e.ScrollY < 0.0f ? 0.8f : 1.25f);
+                e.MarkHandled();
             }
 
             private void HeaderContainer_Rendering(Graphics g)
